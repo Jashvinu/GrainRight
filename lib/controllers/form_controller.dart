@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../controllers/survey_controller.dart';
 import '../models/form_config.dart';
 import '../services/form_config_service.dart';
@@ -13,6 +14,8 @@ class FormController extends GetxController {
   final sections = <FormSectionConfig>[].obs;
   final dropdownOptions = <String, List<String>>{}.obs;
   final isConfigLoaded = false.obs;
+  final hasError = false.obs;
+  final errorMessage = ''.obs;
 
   // Form state
   final currentStep = 0.obs;
@@ -45,14 +48,22 @@ class FormController extends GetxController {
   }
 
   Future<void> loadConfig() async {
-    final results = await Future.wait([
-      _configService.fetchFormConfig(),
-      _configService.fetchDropdownOptions(),
-    ]);
-    sections.value = results[0] as List<FormSectionConfig>;
-    dropdownOptions.value = results[1] as Map<String, List<String>>;
-    _initializeFieldControllers();
-    isConfigLoaded.value = true;
+    hasError.value = false;
+    isConfigLoaded.value = false;
+    try {
+      final results = await Future.wait([
+        _configService.fetchFormConfig(),
+        _configService.fetchDropdownOptions(),
+      ]);
+      sections.value = results[0] as List<FormSectionConfig>;
+      dropdownOptions.value = results[1] as Map<String, List<String>>;
+      _initializeFieldControllers();
+      isConfigLoaded.value = true;
+    } catch (e, st) {
+      debugPrint('[FormController.loadConfig] $e\n$st');
+      hasError.value = true;
+      errorMessage.value = _friendlyError(e);
+    }
   }
 
   void _initializeFieldControllers() {
@@ -170,11 +181,16 @@ class FormController extends GetxController {
   // --- Edit mode ---
 
   Future<void> loadSurvey(String id) async {
-    editId = id;
-    final data = await _surveyService.fetchById(id);
-    _populateFromJson(data.toJson());
-    // In edit mode add the id back and mark all steps visited
-    visitedSteps.addAll(List.generate(totalSteps, (i) => i).toSet());
+    try {
+      editId = id;
+      final data = await _surveyService.fetchById(id);
+      _populateFromJson(data.toJson());
+      // In edit mode add the id back and mark all steps visited
+      visitedSteps.addAll(List.generate(totalSteps, (i) => i).toSet());
+    } catch (e, st) {
+      debugPrint('[FormController.loadSurvey] $e\n$st');
+      Get.snackbar('Error', _friendlyError(e));
+    }
   }
 
   void _populateFromJson(Map<String, dynamic> json) {
@@ -277,6 +293,7 @@ class FormController extends GetxController {
       Get.snackbar('Success', isEditMode ? 'Survey updated' : 'Survey submitted');
     } catch (e) {
       isSubmitting.value = false;
+      debugPrint('[FormController.submit] $e');
       Get.snackbar('Error', 'Failed to submit: $e');
     }
   }
@@ -300,6 +317,13 @@ class FormController extends GetxController {
     if (value is int) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
+  }
+
+  static String _friendlyError(Object e) {
+    if (e is PostgrestException && e.code == '525') {
+      return 'Server is temporarily unavailable. Please try again in a moment.';
+    }
+    return 'Something went wrong. Please check your connection and try again.';
   }
 
   @override

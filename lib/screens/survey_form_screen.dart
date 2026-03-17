@@ -23,22 +23,23 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
   void initState() {
     super.initState();
     c = Get.put(FormController());
-    _init();
+    ever(c.currentStep, (step) {
+      _isForward = step >= _previousStep;
+      _previousStep = step;
+      _scrollToActiveChip();
+    });
+    _loadData();
   }
 
-  Future<void> _init() async {
+  Future<void> _loadData() async {
     await c.loadConfig();
+    if (!c.isConfigLoaded.value) return;
     _chipKeys = List.generate(c.totalSteps, (_) => GlobalKey());
     final surveyId = Get.arguments as String?;
     if (surveyId != null) {
       await c.loadSurvey(surveyId);
     }
     if (mounted) setState(() {});
-    ever(c.currentStep, (step) {
-      _isForward = step >= _previousStep;
-      _previousStep = step;
-      _scrollToActiveChip();
-    });
   }
 
   @override
@@ -82,6 +83,36 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      if (c.hasError.value) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Error')),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off_rounded,
+                      size: 56, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    c.errorMessage.value,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: _loadData,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
       if (!c.isConfigLoaded.value) {
         return Scaffold(
           appBar: AppBar(title: const Text('Loading...')),

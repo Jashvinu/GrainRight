@@ -42,6 +42,32 @@ class HomeScreen extends StatelessWidget {
             child: CircularProgressIndicator(color: AppTheme.green),
           );
         }
+        if (controller.hasError.value) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.cloud_off_rounded,
+                      size: 56, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  Text(
+                    controller.errorMessage.value,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 15),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: controller.loadSurveys,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         if (controller.surveys.isEmpty) {
           // Auto-navigate to form when no surveys exist
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -146,7 +172,14 @@ class HomeScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      onDismissed: (_) => controller.deleteSurvey(survey.id!),
+                      onDismissed: (_) async {
+                        final index = controller.surveys.indexOf(survey);
+                        controller.surveys.remove(survey);
+                        final ok = await controller.deleteSurvey(survey.id!);
+                        if (!ok && index >= 0) {
+                          controller.surveys.insert(index, survey);
+                        }
+                      },
                       child: SurveyListTile(
                         survey: survey,
                         onTap: () => Get.toNamed('/form', arguments: survey.id),
