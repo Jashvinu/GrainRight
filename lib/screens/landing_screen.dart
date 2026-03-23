@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../config/theme.dart';
+import '../controllers/auth_controller.dart';
+import '../widgets/brand_text.dart';
+
+class LandingScreen extends StatelessWidget {
+  const LandingScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Image.asset('assets/logo.jpeg', width: 40, height: 40),
+                  const SizedBox(width: 10),
+                  const BrandText(fontSize: 22),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Precision Agriculture Platform',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppTheme.textMuted,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+              const SizedBox(height: 48),
+              Text(
+                'Choose a module',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textDark,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 16),
+              _ModuleCard(
+                icon: Icons.assignment_outlined,
+                title: 'Survey Form',
+                subtitle: 'Collect farmer baseline data',
+                color: AppTheme.green,
+                onTap: () => Get.toNamed('/surveys'),
+              ),
+              const SizedBox(height: 14),
+              _ModuleCard(
+                icon: Icons.satellite_alt_outlined,
+                title: 'Satellite Monitoring',
+                subtitle:
+                    'Live crop health maps, soil indices & trend analysis',
+                color: AppTheme.greenDark,
+                onTap: () {
+                  final auth = Get.find<AuthController>();
+                  if (auth.isAuthenticated) {
+                    Get.toNamed('/satellite/shell');
+                  } else {
+                    Get.toNamed('/satellite/login');
+                  }
+                },
+              ),
+              const Spacer(),
+              Center(
+                child: Text(
+                  'MilletsNow · wrkFarm',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ModuleCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ModuleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Row(
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: Colors.white, size: 30),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white54, size: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
