@@ -9,6 +9,9 @@ import 'acre_input.dart';
 import 'custom_dropdown.dart';
 import 'custom_text_field.dart';
 import 'yes_no_toggle.dart';
+import 'polygon_map_field.dart';
+import 'multi_select_chip_field.dart';
+import 'millet_land_picker_field.dart';
 
 class DynamicField extends StatelessWidget {
   final FormFieldConfig config;
@@ -55,7 +58,18 @@ class DynamicField extends StatelessWidget {
       'date' => _buildDatePicker(context, c),
       'mobile' => _buildMobileField(c),
       'aadhar' => _buildAadharField(c),
+      'polygon' => PolygonMapField(
+          label: config.label,
+          hasError: config.isRequired && c.polygonValue(config.fieldKey).value == null, // simplistic error check
+          polygonState: c.polygonValue(config.fieldKey),
+        ),
       'auto_calc' => _buildAutoCalcDisplay(c),
+      'multiselect' => MultiSelectChipField(
+          label: _label,
+          options: c.dropdownOptions[config.dropdownOptionsKey] ?? [],
+          selected: c.multiSelectValue(config.fieldKey),
+        ),
+      'millet_land_picker' => MilletLandPickerField(label: config.label),
       _ => const SizedBox.shrink(),
     };
   }

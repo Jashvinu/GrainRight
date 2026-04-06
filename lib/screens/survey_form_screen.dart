@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../config/icon_map.dart';
 import '../config/theme.dart';
 import '../controllers/form_controller.dart';
+import '../services/location_service.dart';
 import '../widgets/dynamic_step.dart';
 
 class SurveyFormScreen extends StatefulWidget {
@@ -232,6 +233,62 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
               }),
             ),
             Divider(height: 1, color: Colors.grey.shade200),
+            // Location status pill
+            Obx(() {
+              final status = c.locationStatus.value;
+              if (status == LocationStatus.idle) return const SizedBox.shrink();
+              final isAcquired = status == LocationStatus.acquired;
+              final isError = status == LocationStatus.denied ||
+                  status == LocationStatus.unavailable;
+              return Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                color: isAcquired
+                    ? AppTheme.greenPale
+                    : isError
+                        ? const Color(0xFFFFF3CD)
+                        : Colors.grey.shade50,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (status == LocationStatus.fetching)
+                      const SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 1.5, color: AppTheme.green),
+                      )
+                    else
+                      Icon(
+                        isAcquired
+                            ? Icons.location_on_rounded
+                            : Icons.location_off_rounded,
+                        size: 14,
+                        color: isAcquired
+                            ? AppTheme.green
+                            : const Color(0xFFB8860B),
+                      ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        c.locationSummary,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isAcquired
+                              ? AppTheme.greenDark
+                              : isError
+                                  ? const Color(0xFF856404)
+                                  : Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
             // Form content
             Expanded(
               child: Form(

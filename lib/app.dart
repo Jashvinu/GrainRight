@@ -3,12 +3,14 @@ import 'package:get/get.dart';
 import 'config/theme.dart';
 import 'controllers/survey_controller.dart';
 import 'controllers/auth_controller.dart';
+import 'controllers/main_auth_controller.dart';
 import 'controllers/farm_controller.dart';
 import 'controllers/satellite_controller.dart';
 import 'screens/splash_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/survey_form_screen.dart';
+import 'screens/main_login_screen.dart';
 import 'screens/satellite/login_screen.dart';
 import 'screens/satellite/signup_screen.dart';
 import 'screens/satellite/draw_polygon_screen.dart';
@@ -25,11 +27,13 @@ class MilletsNowApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       initialBinding: BindingsBuilder(() {
         Get.put(SurveyController());
+        Get.put(MainAuthController());
         Get.put(AuthController());
       }),
       initialRoute: '/',
       getPages: [
         GetPage(name: '/', page: () => const SplashScreen()),
+        GetPage(name: '/login', page: () => const MainLoginScreen()),
         GetPage(name: '/home', page: () => const LandingScreen()),
         GetPage(name: '/surveys', page: () => const HomeScreen()),
         GetPage(name: '/form', page: () => const SurveyFormScreen()),

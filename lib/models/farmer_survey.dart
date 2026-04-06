@@ -25,7 +25,7 @@ class FarmerSurvey {
   final double? landUnderOtherCrops;
   final double? croppingIntensity;
   final String? majorCropsGrown;
-  final String? milletSeedType;
+  final List<String>? milletSeedType;
   final String? milletSeedVariety;
 
   // Input Usage
@@ -144,7 +144,7 @@ class FarmerSurvey {
       landUnderOtherCrops: _toDouble(json['land_under_other_crops']),
       croppingIntensity: _toDouble(json['cropping_intensity']),
       majorCropsGrown: json['major_crops_grown'] as String?,
-      milletSeedType: json['millet_seed_type'] as String?,
+      milletSeedType: (json['millet_seed_type'] as List?)?.map((e) => e.toString()).toList(),
       milletSeedVariety: json['millet_seed_variety'] as String?,
       seedUsedKgPerAcre: _toDouble(json['seed_used_kg_per_acre']),
       fertilizerUsedKgPerAcre: _toDouble(json['fertilizer_used_kg_per_acre']),
