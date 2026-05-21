@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
-import '../controllers/auth_controller.dart';
 import '../widgets/brand_text.dart';
 
 class LandingScreen extends StatelessWidget {
@@ -52,22 +51,13 @@ class LandingScreen extends StatelessWidget {
                 color: AppTheme.green,
                 onTap: () => Get.toNamed('/surveys'),
               ),
-              const SizedBox(height: 14),
-              _ModuleCard(
-                icon: Icons.satellite_alt_outlined,
-                title: 'Satellite Monitoring',
-                subtitle:
-                    'Live crop health maps, soil indices & trend analysis',
-                color: AppTheme.greenDark,
-                onTap: () {
-                  final auth = Get.find<AuthController>();
-                  if (auth.isAuthenticated) {
-                    Get.toNamed('/satellite/shell');
-                  } else {
-                    Get.toNamed('/satellite/login');
-                  }
-                },
-              ),
+              // Satellite module disabled for now
+              // const SizedBox(height: 14),
+              // _ModuleCard(
+              //   icon: Icons.satellite_alt_outlined,
+              //   title: 'Satellite Monitoring',
+              //   ...
+              // ),
               const Spacer(),
               Center(
                 child: Text(

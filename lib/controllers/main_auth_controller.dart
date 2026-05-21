@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'survey_controller.dart';
 
 class MainAuthController extends GetxController {
   final _auth = Supabase.instance.client.auth;
@@ -18,7 +19,7 @@ class MainAuthController extends GetxController {
   }
 
   bool get isAuthenticated => _auth.currentSession != null;
-
+  bool get isAnonymous => _auth.currentUser?.isAnonymous ?? false;
   String? get userEmail => _auth.currentUser?.email;
 
   Future<void> login(String email, String password) async {
@@ -26,7 +27,7 @@ class MainAuthController extends GetxController {
     errorMessage.value = '';
     try {
       await _auth.signInWithPassword(email: email, password: password);
-      Get.offAllNamed('/home');
+      await _afterSignIn();
     } on AuthException catch (e) {
       errorMessage.value = e.message;
     } catch (_) {
@@ -42,12 +43,14 @@ class MainAuthController extends GetxController {
     try {
       final res = await _auth.signUp(email: email, password: password);
       if (res.session != null) {
-        Get.offAllNamed('/home');
+        await _afterSignIn();
       } else {
+        errorMessage.value = '';
         Get.snackbar(
           'Check your email',
-          'We sent a confirmation link to $email',
+          'A confirmation link has been sent to $email',
           snackPosition: SnackPosition.BOTTOM,
+          duration: const Duration(seconds: 5),
         );
       }
     } on AuthException catch (e) {
@@ -57,6 +60,28 @@ class MainAuthController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  Future<void> continueAsGuest() async {
+    isLoading.value = true;
+    errorMessage.value = '';
+    try {
+      await _auth.signInAnonymously();
+      await _afterSignIn();
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
+    } catch (_) {
+      errorMessage.value = 'Could not continue as guest.';
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> _afterSignIn() async {
+    if (Get.isRegistered<SurveyController>()) {
+      await Get.find<SurveyController>().loadSurveys();
+    }
+    Get.offAllNamed('/home');
   }
 
   Future<void> logout() async {

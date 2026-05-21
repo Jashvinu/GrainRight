@@ -133,8 +133,32 @@ class HomeScreen extends StatelessWidget {
                 onRefresh: controller.loadSurveys,
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  itemCount: controller.surveys.length,
+                  itemCount: controller.surveys.length + 1,
                   itemBuilder: (_, i) {
+                    if (i == 0) {
+                      final hasDiagnostics = controller.surveys.any(
+                        (survey) => survey.farmPolygon != null,
+                      );
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (hasDiagnostics)
+                              OutlinedButton.icon(
+                                onPressed: () => Get.toNamed('/diagnostics'),
+                                icon: const Icon(Icons.satellite_alt_outlined),
+                                label: const Text('View Diagnostics'),
+                              ),
+                            TextButton(
+                              onPressed: () => Get.toNamed('/form/classic'),
+                              child: const Text('Use classic form'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                    i -= 1;
                     final survey = controller.surveys[i];
                     return Dismissible(
                       key: Key(survey.id!),
@@ -155,7 +179,7 @@ class HomeScreen extends StatelessWidget {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           title: const Text('Delete Survey'),
                           content: Text(
-                            'Remove survey for "${survey.farmerName ?? 'Unnamed'}"?',
+                            'Remove survey for "${survey.farmerName ?? 'Unnamed'}" from the app and Google Sheet? Data will be kept in the database.',
                           ),
                           actions: [
                             TextButton(
@@ -175,7 +199,7 @@ class HomeScreen extends StatelessWidget {
                       onDismissed: (_) async {
                         final index = controller.surveys.indexOf(survey);
                         controller.surveys.remove(survey);
-                        final ok = await controller.deleteSurvey(survey.id!);
+                        final ok = await controller.deleteSurvey(survey);
                         if (!ok && index >= 0) {
                           controller.surveys.insert(index, survey);
                         }

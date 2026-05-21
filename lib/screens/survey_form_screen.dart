@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/icon_map.dart';
 import '../config/theme.dart';
+import '../config/translations.dart';
 import '../controllers/form_controller.dart';
+import '../controllers/language_controller.dart';
 import '../services/location_service.dart';
 import '../widgets/dynamic_step.dart';
 
@@ -13,8 +15,10 @@ class SurveyFormScreen extends StatefulWidget {
   State<SurveyFormScreen> createState() => _SurveyFormScreenState();
 }
 
-class _SurveyFormScreenState extends State<SurveyFormScreen> {
+class _SurveyFormScreenState extends State<SurveyFormScreen>
+    with WidgetsBindingObserver {
   late final FormController c;
+  late final LanguageController lang;
   final _scrollController = ScrollController();
   List<GlobalKey> _chipKeys = [];
   int _previousStep = 0;
@@ -23,7 +27,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     c = Get.put(FormController());
+    lang = Get.find<LanguageController>();
     ever(c.currentStep, (step) {
       _isForward = step >= _previousStep;
       _previousStep = step;
@@ -39,12 +45,68 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
     final surveyId = Get.arguments as String?;
     if (surveyId != null) {
       await c.loadSurvey(surveyId);
+    } else {
+      // Check for saved draft and ask user
+      final hasDraft = await c.hasDraft();
+      if (hasDraft && mounted) {
+        final restore = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            icon: const Icon(
+              Icons.restore_rounded,
+              color: AppTheme.green,
+              size: 40,
+            ),
+            title: Text(_tr('Resume Last Form?')),
+            content: Text(
+              _tr(
+                'You have an unfinished form from last time. Would you like to continue where you left off?',
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(
+                  _tr('Start Fresh'),
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(_tr('Resume')),
+              ),
+            ],
+          ),
+        );
+        if (restore == true) {
+          await c.loadDraft();
+        } else {
+          await c.clearDraft();
+        }
+      }
     }
     if (mounted) setState(() {});
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save draft when app goes to background or is about to be killed
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      c.saveDraft();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Save draft one final time when leaving the screen
+    c.saveDraft();
     _scrollController.dispose();
     Get.delete<FormController>();
     super.dispose();
@@ -74,27 +136,42 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
     if (visited.contains(i)) return _ChipState.skipped;
 
     // Not visited, but between filled/visited steps = skipped
-    final maxVisited =
-        visited.isEmpty ? 0 : visited.reduce((a, b) => a > b ? a : b);
+    final maxVisited = visited.isEmpty
+        ? 0
+        : visited.reduce((a, b) => a > b ? a : b);
     if (i < maxVisited) return _ChipState.skipped;
 
     return _ChipState.upcoming;
   }
 
+  String _tr(String text) {
+    if (!lang.isMarathi) return text;
+    return AppTranslations.translate(text);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      // Subscribe to language changes
+      final _ = lang.language.value;
+
       if (c.hasError.value) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Error')),
+          appBar: AppBar(
+            title: Text(_tr('Error')),
+            actions: [_buildLanguageToggle()],
+          ),
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.cloud_off_rounded,
-                      size: 56, color: Colors.grey),
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 56,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     c.errorMessage.value,
@@ -105,7 +182,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                   ElevatedButton.icon(
                     onPressed: _loadData,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
+                    label: Text(_tr('Retry')),
                   ),
                 ],
               ),
@@ -116,7 +193,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
 
       if (!c.isConfigLoaded.value) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Loading...')),
+          appBar: AppBar(
+            title: Text(_tr('Loading...')),
+            actions: [_buildLanguageToggle()],
+          ),
           body: const Center(
             child: CircularProgressIndicator(color: AppTheme.green),
           ),
@@ -126,14 +206,18 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
       final totalSteps = c.totalSteps;
       if (totalSteps == 0) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Error')),
-          body: const Center(child: Text('No form configuration found.')),
+          appBar: AppBar(
+            title: Text(_tr('Error')),
+            actions: [_buildLanguageToggle()],
+          ),
+          body: Center(child: Text(_tr('No form configuration found.'))),
         );
       }
 
       return Scaffold(
         appBar: AppBar(
-          title: Text(c.isEditMode ? 'Edit Survey' : 'New Survey'),
+          title: Text(c.isEditMode ? _tr('Edit Survey') : _tr('New Survey')),
+          actions: [_buildLanguageToggle()],
         ),
         body: Column(
           children: [
@@ -154,6 +238,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                       final state = _chipState(i, current, visited);
                       final section = c.sections[i];
                       final icon = resolveIcon(section.iconName);
+                      final title = section.localizedTitle(context);
                       return GestureDetector(
                         key: i < _chipKeys.length ? _chipKeys[i] : null,
                         onTap: () => c.currentStep.value = i,
@@ -175,7 +260,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                             borderRadius: BorderRadius.circular(20),
                             border: state == _ChipState.skipped
                                 ? Border.all(
-                                    color: const Color(0xFFE2A613), width: 1.2)
+                                    color: const Color(0xFFE2A613),
+                                    width: 1.2,
+                                  )
                                 : null,
                           ),
                           child: Row(
@@ -185,30 +272,30 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                                 duration: const Duration(milliseconds: 200),
                                 child: switch (state) {
                                   _ChipState.visited => const Icon(
-                                      Icons.check_rounded,
-                                      size: 16,
-                                      color: AppTheme.green,
-                                      key: ValueKey('check'),
-                                    ),
+                                    Icons.check_rounded,
+                                    size: 16,
+                                    color: AppTheme.green,
+                                    key: ValueKey('check'),
+                                  ),
                                   _ChipState.skipped => const Icon(
-                                      Icons.warning_amber_rounded,
-                                      size: 16,
-                                      color: Color(0xFFE2A613),
-                                      key: ValueKey('warn'),
-                                    ),
+                                    Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: Color(0xFFE2A613),
+                                    key: ValueKey('warn'),
+                                  ),
                                   _ => Icon(
-                                      icon,
-                                      size: 16,
-                                      color: state == _ChipState.active
-                                          ? Colors.white
-                                          : AppTheme.textMuted,
-                                      key: ValueKey('icon$i'),
-                                    ),
+                                    icon,
+                                    size: 16,
+                                    color: state == _ChipState.active
+                                        ? Colors.white
+                                        : AppTheme.textMuted,
+                                    key: ValueKey('icon$i'),
+                                  ),
                                 },
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                section.title,
+                                title,
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: state == _ChipState.active
@@ -217,8 +304,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                                   color: switch (state) {
                                     _ChipState.active => Colors.white,
                                     _ChipState.visited => AppTheme.green,
-                                    _ChipState.skipped =>
-                                      const Color(0xFFB8860B),
+                                    _ChipState.skipped => const Color(
+                                      0xFFB8860B,
+                                    ),
                                     _ChipState.upcoming => AppTheme.textMuted,
                                   },
                                 ),
@@ -238,17 +326,20 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
               final status = c.locationStatus.value;
               if (status == LocationStatus.idle) return const SizedBox.shrink();
               final isAcquired = status == LocationStatus.acquired;
-              final isError = status == LocationStatus.denied ||
+              final isError =
+                  status == LocationStatus.denied ||
                   status == LocationStatus.unavailable;
               return Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 color: isAcquired
                     ? AppTheme.greenPale
                     : isError
-                        ? const Color(0xFFFFF3CD)
-                        : Colors.grey.shade50,
+                    ? const Color(0xFFFFF3CD)
+                    : Colors.grey.shade50,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -257,7 +348,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                         width: 12,
                         height: 12,
                         child: CircularProgressIndicator(
-                            strokeWidth: 1.5, color: AppTheme.green),
+                          strokeWidth: 1.5,
+                          color: AppTheme.green,
+                        ),
                       )
                     else
                       Icon(
@@ -272,14 +365,14 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        c.locationSummary,
+                        _tr(c.locationSummary),
                         style: TextStyle(
                           fontSize: 11,
                           color: isAcquired
                               ? AppTheme.greenDark
                               : isError
-                                  ? const Color(0xFF856404)
-                                  : Colors.grey[600],
+                              ? const Color(0xFF856404)
+                              : Colors.grey[600],
                           fontWeight: FontWeight.w500,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -298,6 +391,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                   final section = c.sections[step];
                   final icon = resolveIcon(section.iconName);
                   final forward = _isForward;
+                  final sectionTitle = section.localizedTitle(context);
 
                   return AnimatedSwitcher(
                     duration: const Duration(milliseconds: 250),
@@ -311,27 +405,20 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                           ? const Offset(-1.0, 0.0)
                           : const Offset(1.0, 0.0);
                       // Determine if this is the incoming or outgoing child
-                      final isIncoming =
-                          (child.key as ValueKey).value == step;
+                      final isIncoming = (child.key as ValueKey).value == step;
                       final tween = Tween<Offset>(
                         begin: isIncoming ? offsetIn : offsetOut,
                         end: Offset.zero,
                       );
                       return SlideTransition(
                         position: tween.animate(animation),
-                        child: FadeTransition(
-                          opacity: animation,
-                          child: child,
-                        ),
+                        child: FadeTransition(opacity: animation, child: child),
                       );
                     },
                     layoutBuilder: (currentChild, previousChildren) {
                       return Stack(
                         alignment: Alignment.topCenter,
-                        children: [
-                          ...previousChildren,
-                          ?currentChild,
-                        ],
+                        children: [...previousChildren, ?currentChild],
                       );
                     },
                     child: SingleChildScrollView(
@@ -348,15 +435,18 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                                   color: AppTheme.greenPale,
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child:
-                                    Icon(icon, color: AppTheme.green, size: 22),
+                                child: Icon(
+                                  icon,
+                                  color: AppTheme.green,
+                                  size: 22,
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Step ${step + 1} of $totalSteps',
+                                    '${_tr('Step')} ${step + 1} ${_tr('of')} $totalSteps',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: Colors.grey[500],
@@ -364,7 +454,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                                     ),
                                   ),
                                   Text(
-                                    section.title,
+                                    sectionTitle,
                                     style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
@@ -377,8 +467,10 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                           ),
                           const SizedBox(height: 6),
                           TweenAnimationBuilder<double>(
-                            tween:
-                                Tween(begin: 0, end: (step + 1) / totalSteps),
+                            tween: Tween(
+                              begin: 0,
+                              end: (step + 1) / totalSteps,
+                            ),
                             duration: const Duration(milliseconds: 500),
                             curve: Curves.easeOutCubic,
                             builder: (context, value, child) => ClipRRect(
@@ -418,14 +510,15 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () => c.currentStep.value--,
-                            icon: const Icon(Icons.arrow_back_rounded,
-                                size: 18),
-                            label: const Text('Back'),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              size: 18,
+                            ),
+                            label: Text(_tr('Back')),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.green,
                               side: const BorderSide(color: AppTheme.green),
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
@@ -446,22 +539,26 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
                                 },
                           icon: isLast
                               ? (c.isSubmitting.value
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Icon(Icons.check_rounded, size: 18))
-                              : const Icon(Icons.arrow_forward_rounded,
-                                  size: 18),
-                          label: Text(isLast
-                              ? (c.isSubmitting.value
-                                  ? 'Submitting...'
-                                  : 'Submit')
-                              : 'Continue'),
+                                    ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : const Icon(Icons.check_rounded, size: 18))
+                              : const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 18,
+                                ),
+                          label: Text(
+                            isLast
+                                ? (c.isSubmitting.value
+                                      ? _tr('Submitting...')
+                                      : _tr('Submit'))
+                                : _tr('Continue'),
+                          ),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
@@ -473,6 +570,45 @@ class _SurveyFormScreenState extends State<SurveyFormScreen> {
               }),
             ),
           ],
+        ),
+      );
+    });
+  }
+
+  Widget _buildLanguageToggle() {
+    return Obx(() {
+      final isMr = lang.isMarathi;
+      return Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: GestureDetector(
+          onTap: lang.toggle,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.greenPale,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppTheme.green.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.translate_rounded,
+                  size: 16,
+                  color: AppTheme.green,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isMr ? 'EN' : 'मर',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.greenDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       );
     });

@@ -6,6 +6,8 @@ import '../../config/theme.dart';
 
 class SatelliteMapView extends StatelessWidget {
   final String? tileUrl;
+  final String? rasterUrl;
+  final LatLngBounds? rasterBounds;
   final bool isLoading;
   final List<LatLng>? farmPolygon;
   final List<CircleMarker>? heatCircles;
@@ -14,6 +16,8 @@ class SatelliteMapView extends StatelessWidget {
   const SatelliteMapView({
     super.key,
     this.tileUrl,
+    this.rasterUrl,
+    this.rasterBounds,
     this.isLoading = false,
     this.farmPolygon,
     this.heatCircles,
@@ -22,6 +26,7 @@ class SatelliteMapView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final center = _initialCenter;
     return SizedBox(
       height: height,
       child: ClipRRect(
@@ -30,17 +35,30 @@ class SatelliteMapView extends StatelessWidget {
           children: [
             FlutterMap(
               options: MapOptions(
-                initialCenter: SatelliteConfig.defaultCenter,
-                initialZoom: SatelliteConfig.defaultZoom,
+                initialCenter: center,
+                initialZoom: farmPolygon?.isNotEmpty == true
+                    ? 17
+                    : SatelliteConfig.defaultZoom,
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.wrkfarm.milletsnow',
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'grainright.wrkfarm',
                 ),
                 if (tileUrl != null && tileUrl!.isNotEmpty)
                   TileLayer(urlTemplate: tileUrl!),
+                if (rasterUrl != null &&
+                    rasterUrl!.isNotEmpty &&
+                    rasterBounds != null)
+                  OverlayImageLayer(
+                    overlayImages: [
+                      OverlayImage(
+                        bounds: rasterBounds!,
+                        imageProvider: NetworkImage(rasterUrl!),
+                        opacity: 0.72,
+                      ),
+                    ],
+                  ),
                 if (farmPolygon != null && farmPolygon!.length >= 3)
                   PolygonLayer(
                     polygons: [
@@ -68,9 +86,13 @@ class SatelliteMapView extends StatelessWidget {
                         strokeWidth: 2.5,
                       ),
                       SizedBox(height: 10),
-                      Text('Loading satellite data…',
-                          style: TextStyle(
-                              fontSize: 12, color: AppTheme.textMuted)),
+                      Text(
+                        'Loading satellite data…',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textMuted,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -79,5 +101,19 @@ class SatelliteMapView extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  LatLng get _initialCenter {
+    if (farmPolygon != null && farmPolygon!.isNotEmpty) {
+      final lat =
+          farmPolygon!.map((point) => point.latitude).reduce((a, b) => a + b) /
+          farmPolygon!.length;
+      final lng =
+          farmPolygon!.map((point) => point.longitude).reduce((a, b) => a + b) /
+          farmPolygon!.length;
+      return LatLng(lat, lng);
+    }
+    if (rasterBounds != null) return rasterBounds!.center;
+    return SatelliteConfig.defaultCenter;
   }
 }

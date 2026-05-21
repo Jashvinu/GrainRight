@@ -3,8 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import '../config/theme.dart';
+import '../config/translations.dart';
 import '../controllers/form_controller.dart';
+import '../controllers/language_controller.dart';
 import '../models/form_config.dart';
+import '../screens/pencil_polygon_screen.dart';
 import 'acre_input.dart';
 import 'custom_dropdown.dart';
 import 'custom_text_field.dart';
@@ -30,64 +33,107 @@ class DynamicField extends StatelessWidget {
     return _buildField(context, c);
   }
 
+  String _trLabel(String label) {
+    final lang = Get.find<LanguageController>();
+    if (!lang.isMarathi) return label;
+    return AppTranslations.translate(label);
+  }
+
+  String _label(BuildContext context) => config.localizedLabel(context);
+
   Widget _buildField(BuildContext context, FormController c) {
-    return switch (config.inputType) {
-      'text' => CustomTextField(
-          label: _label,
+    return Obx(() {
+      // Subscribe to language changes so field rebuilds on toggle
+      final _ = Get.find<LanguageController>().language.value;
+
+      return switch (config.inputType) {
+        'text' => CustomTextField(
+          label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
           suffixText: config.suffixText,
           validator: _buildValidator(),
         ),
-      'numeric' => CustomTextField(
-          label: _label,
+        'numeric' => CustomTextField(
+          label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
           numeric: true,
           suffixText: config.suffixText,
           validator: _buildValidator(),
         ),
-      'currency' => _buildCurrencyField(c),
-      'acre' => AcreInput(
-          label: config.label,
+        'currency' => _buildCurrencyField(context, c),
+        'acre' => AcreInput(
+          label: _label(context),
           controller: c.textController(config.fieldKey),
         ),
-      'boolean' => YesNoToggle(
-          label: config.label,
+        'boolean' => YesNoToggle(
+          label: _label(context),
           value: c.boolValue(config.fieldKey),
         ),
-      'dropdown' => _buildDropdown(c),
-      'date' => _buildDatePicker(context, c),
-      'mobile' => _buildMobileField(c),
-      'aadhar' => _buildAadharField(c),
-      'polygon' => PolygonMapField(
-          label: config.label,
-          hasError: config.isRequired && c.polygonValue(config.fieldKey).value == null, // simplistic error check
+        'dropdown' => _buildDropdown(context, c),
+        'date' => _buildDatePicker(context, c),
+        'mobile' => _buildMobileField(context, c),
+        'aadhar' => _buildAadharField(context, c),
+        'polygon' => PolygonMapField(
+          label: _label(context),
+          hasError:
+              config.isRequired &&
+              c.polygonValue(config.fieldKey).value == null,
           polygonState: c.polygonValue(config.fieldKey),
         ),
-      'auto_calc' => _buildAutoCalcDisplay(c),
-      'multiselect' => MultiSelectChipField(
-          label: _label,
+        'polygon_pencil' => _buildPencilPolygonField(c),
+        'auto_calc' => _buildAutoCalcDisplay(context, c),
+        'multiselect' => MultiSelectChipField(
+          label: _translatedLabel(context),
           options: c.dropdownOptions[config.dropdownOptionsKey] ?? [],
           selected: c.multiSelectValue(config.fieldKey),
+          optionKey: config.dropdownOptionsKey,
         ),
-      'millet_land_picker' => MilletLandPickerField(label: config.label),
-      _ => const SizedBox.shrink(),
-    };
+        'millet_land_picker' => MilletLandPickerField(label: _label(context)),
+        _ => const SizedBox.shrink(),
+      };
+    });
   }
 
-  String get _label =>
-      config.isRequired ? '${config.label} *' : config.label;
+  Widget _buildPencilPolygonField(FormController c) {
+    final state = c.polygonValue(config.fieldKey);
+    return Obx(() {
+      final points = state.value;
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: OutlinedButton.icon(
+          onPressed: () async {
+            final result = await Get.to<List<List<double>>>(
+              () => PencilPolygonScreen(initialPolygon: points),
+            );
+            if (result != null) {
+              c.setPolygon(config.fieldKey, result);
+            }
+          },
+          icon: const Icon(Icons.edit_location_alt_rounded),
+          label: Text(
+            points == null || points.isEmpty
+                ? _trLabel('Draw your farm boundary')
+                : _trLabel('Farm boundary saved'),
+          ),
+        ),
+      );
+    });
+  }
 
-  Widget _buildCurrencyField(FormController c) {
+  String _translatedLabel(BuildContext context) {
+    final label = _label(context);
+    return config.isRequired ? '$label *' : label;
+  }
+
+  Widget _buildCurrencyField(BuildContext context, FormController c) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
         controller: c.textController(config.fieldKey),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
-        ],
+        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
         decoration: InputDecoration(
-          labelText: _label,
+          labelText: _translatedLabel(context),
           prefixText: 'Rs  ',
           suffixText: config.suffixText,
           suffixStyle: TextStyle(
@@ -101,27 +147,33 @@ class DynamicField extends StatelessWidget {
     );
   }
 
-  Widget _buildDropdown(FormController c) {
+  Widget _buildDropdown(BuildContext context, FormController c) {
     final items = c.dropdownOptions[config.dropdownOptionsKey] ?? [];
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: InputDecorator(
-          decoration: InputDecoration(labelText: config.label),
-          child: Text('No options', style: TextStyle(color: Colors.grey[400])),
+          decoration: InputDecoration(labelText: _label(context)),
+          child: Text(
+            _trLabel('No options'),
+            style: TextStyle(color: Colors.grey[400]),
+          ),
         ),
       );
     }
     return CustomDropdown(
-      label: config.label,
+      label: _label(context),
       items: items,
       selected: c.dropdownValue(config.fieldKey),
+      optionKey: config.dropdownOptionsKey,
     );
   }
 
   Widget _buildDatePicker(BuildContext context, FormController c) {
     final rxDate = c.dateValue(config.fieldKey);
-    DateTime firstDate = DateTime(2020);
+    // Default range starts in 1940 so date-of-birth years are selectable;
+    // a `date_min` validation rule can still narrow it per field.
+    DateTime firstDate = DateTime(1940);
     DateTime lastDate = DateTime.now();
 
     final validation = config.validation;
@@ -140,38 +192,45 @@ class DynamicField extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Obx(() => InkWell(
-            onTap: () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: rxDate.value ??
-                    (lastDate.isBefore(DateTime.now()) ? lastDate : DateTime.now()),
-                firstDate: firstDate,
-                lastDate: lastDate,
-              );
-              if (d != null) rxDate.value = d;
-            },
-            borderRadius: BorderRadius.circular(10),
-            child: InputDecorator(
-              decoration: InputDecoration(
-                labelText: config.label,
-                suffixIcon: const Icon(Icons.calendar_today, size: 20),
-              ),
-              child: Text(
-                rxDate.value != null
-                    ? DateFormat('dd MMM yyyy').format(rxDate.value!)
-                    : 'Select date',
-                style: TextStyle(
-                  color: rxDate.value != null ? AppTheme.textDark : Colors.grey[400],
-                  fontSize: 14,
-                ),
+      child: Obx(
+        () => InkWell(
+          onTap: () async {
+            final d = await showDatePicker(
+              context: context,
+              initialDate:
+                  rxDate.value ??
+                  (lastDate.isBefore(DateTime.now())
+                      ? lastDate
+                      : DateTime.now()),
+              firstDate: firstDate,
+              lastDate: lastDate,
+            );
+            if (d != null) rxDate.value = d;
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: _label(context),
+              suffixIcon: const Icon(Icons.calendar_today, size: 20),
+            ),
+            child: Text(
+              rxDate.value != null
+                  ? DateFormat('dd MMM yyyy').format(rxDate.value!)
+                  : _trLabel('Select date'),
+              style: TextStyle(
+                color: rxDate.value != null
+                    ? AppTheme.textDark
+                    : Colors.grey[400],
+                fontSize: 14,
               ),
             ),
-          )),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildMobileField(FormController c) {
+  Widget _buildMobileField(BuildContext context, FormController c) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
@@ -181,22 +240,24 @@ class DynamicField extends StatelessWidget {
           FilteringTextInputFormatter.digitsOnly,
           LengthLimitingTextInputFormatter(10),
         ],
-        decoration: const InputDecoration(
-          labelText: 'Mobile No.',
+        decoration: InputDecoration(
+          labelText: _label(context),
           prefixText: '+91  ',
         ),
         validator: (v) {
           if (v != null && v.isNotEmpty && v.length != 10) {
-            return '10 digits required';
+            return _trLabel('10 digits required');
           }
-          if (config.isRequired && (v == null || v.isEmpty)) return 'Required';
+          if (config.isRequired && (v == null || v.isEmpty)) {
+            return _trLabel('Required');
+          }
           return null;
         },
       ),
     );
   }
 
-  Widget _buildAadharField(FormController c) {
+  Widget _buildAadharField(BuildContext context, FormController c) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: TextFormField(
@@ -207,59 +268,64 @@ class DynamicField extends StatelessWidget {
           _AadharFormatter(),
         ],
         decoration: InputDecoration(
-          labelText: config.label,
-          hintText: config.hintText ?? 'XXXX XXXX XXXX',
+          labelText: _label(context),
+          hintText: config.localizedHint(context) ?? 'XXXX XXXX XXXX',
         ),
         validator: (v) {
           if (v != null && v.isNotEmpty) {
             final digits = v.replaceAll(' ', '');
-            if (digits.length != 12) return '12 digits required';
+            if (digits.length != 12) return _trLabel('12 digits required');
           }
-          if (config.isRequired && (v == null || v.isEmpty)) return 'Required';
+          if (config.isRequired && (v == null || v.isEmpty)) {
+            return _trLabel('Required');
+          }
           return null;
         },
       ),
     );
   }
 
-  Widget _buildAutoCalcDisplay(FormController c) {
+  Widget _buildAutoCalcDisplay(BuildContext context, FormController c) {
     final rx = c.autoCalcValue(config.fieldKey);
-    return Obx(() => Container(
-          margin: const EdgeInsets.only(bottom: 14, top: 4),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.greenPale,
-            borderRadius: BorderRadius.circular(10),
-            border:
-                Border.all(color: AppTheme.greenLight.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                config.label,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.greenDark,
-                ),
+    return Obx(
+      () => Container(
+        margin: const EdgeInsets.only(bottom: 14, top: 4),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.greenPale,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.greenLight.withValues(alpha: 0.5)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              _label(context),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.greenDark,
               ),
-              Text(
-                'Rs ${rx.value.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.green,
-                ),
+            ),
+            Text(
+              'Rs ${rx.value.toStringAsFixed(2)}',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.green,
               ),
-            ],
-          ),
-        ));
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String? Function(String?)? _buildValidator() {
     return (String? v) {
-      if (config.isRequired && (v == null || v.isEmpty)) return 'Required';
+      if (config.isRequired && (v == null || v.isEmpty)) {
+        return _trLabel('Required');
+      }
       if (v == null || v.isEmpty) return null;
 
       final rules = config.validation;

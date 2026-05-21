@@ -46,8 +46,7 @@ class SatelliteController extends GetxController {
   // Advanced monitoring
   final advancedResult = Rxn<AdvancedMonitoringResult>();
   final advancedIsLoading = false.obs;
-  final selectedAlgorithms =
-      <String>['optram_moisture', 'nitrogen_gndvi'].obs;
+  final selectedAlgorithms = <String>['optram_moisture', 'nitrogen_gndvi'].obs;
   final advancedStartDate = ''.obs;
   final advancedEndDate = ''.obs;
   final advancedError = ''.obs;
@@ -92,11 +91,18 @@ class SatelliteController extends GetxController {
   Future<void> loadAvailableDates(String farmId) async {
     datesLoading.value = true;
     try {
-      final dates = await _service.getAvailableDates(farmId, _jwt.isEmpty ? null : _jwt);
+      final dates = await _service.getAvailableDates(
+        farmId,
+        _jwt.isEmpty ? null : _jwt,
+      );
       availableDates.assignAll(dates);
       if (dates.isNotEmpty && selectedDate.value == null) {
         selectedDate.value = dates.first;
-        await loadTile(farmId: farmId, index: selectedIndex.value, date: dates.first);
+        await loadTile(
+          farmId: farmId,
+          index: selectedIndex.value,
+          date: dates.first,
+        );
       }
     } catch (_) {
       // Silent fail for dates — show empty state
@@ -148,7 +154,10 @@ class SatelliteController extends GetxController {
   Future<void> loadTimeline(String farmId) async {
     timelineIsLoading.value = true;
     try {
-      final entries = await _service.getFarmTimeline(farmId, _jwt.isEmpty ? null : _jwt);
+      final entries = await _service.getFarmTimeline(
+        farmId,
+        _jwt.isEmpty ? null : _jwt,
+      );
       timeline.assignAll(entries);
     } catch (_) {
       // Silent fail
@@ -157,29 +166,42 @@ class SatelliteController extends GetxController {
     }
   }
 
-  Future<void> loadDiagnostics(String farmId, Map<String, dynamic> polygon) async {
+  Future<void> loadDiagnostics(
+    String farmId,
+    Map<String, dynamic> polygon,
+  ) async {
     diagnosticsIsLoading.value = true;
     diagnosticsResult.value = null;
     try {
       final polygonJson = jsonEncode(polygon);
       final result = await _service.getDiagnostics(
         polygonJson: polygonJson,
-        indices: ['nitrogen', 'moisture', 'ndvi', 'phosphorus'],
+        farmId: farmId,
+        indices: ['nitrogen', 'phosphorus', 'potassium', 'moisture', 'ndvi'],
         jwt: _jwt.isEmpty ? null : _jwt,
       );
       diagnosticsResult.value = result;
     } catch (e) {
-      Get.snackbar('Error', 'Diagnostics failed: $e',
-          snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Error',
+        'Diagnostics failed: $e',
+        snackPosition: SnackPosition.BOTTOM,
+      );
     } finally {
       diagnosticsIsLoading.value = false;
     }
   }
 
-  Future<void> runAdvancedMonitoring(String farmId, Map<String, dynamic> polygon) async {
+  Future<void> runAdvancedMonitoring(
+    String farmId,
+    Map<String, dynamic> polygon,
+  ) async {
     if (selectedAlgorithms.isEmpty) {
-      Get.snackbar('Select algorithms', 'Choose at least one algorithm',
-          snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Select algorithms',
+        'Choose at least one algorithm',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
     advancedIsLoading.value = true;
@@ -196,10 +218,16 @@ class SatelliteController extends GetxController {
         'aggregationLevel': 'grid',
         'windowSizeDays': 10,
       };
-      final result = await _service.postAdvancedMonitoring(body: body, jwt: _jwt);
+      final result = await _service.postAdvancedMonitoring(
+        body: body,
+        jwt: _jwt,
+      );
       advancedResult.value = result;
     } catch (e) {
-      advancedError.value = e.toString().replaceFirst('SatelliteApiException: ', '');
+      advancedError.value = e.toString().replaceFirst(
+        'SatelliteApiException: ',
+        '',
+      );
     } finally {
       advancedIsLoading.value = false;
     }
@@ -211,7 +239,9 @@ class SatelliteController extends GetxController {
       final lastSync = prefs.getInt('last_sync_$farmId') ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - lastSync < 3600000) return;
-      unawaited(_service.syncSatelliteDates(farmId, _jwt.isEmpty ? null : _jwt));
+      unawaited(
+        _service.syncSatelliteDates(farmId, _jwt.isEmpty ? null : _jwt),
+      );
       await prefs.setInt('last_sync_$farmId', now);
     } catch (_) {}
   }

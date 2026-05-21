@@ -1,0 +1,20 @@
+{
+  "@@locale": "en",
+  "surveyAssistantWelcome": "Welcome, I'm your survey assistant",
+  "continueLabel": "Continue",
+  "back": "Back",
+  "skip": "Skip",
+  "saveDraft": "Save draft",
+  "submit": "Submit",
+  "drawFarmBoundary": "Draw your farm boundary",
+  "tapAndDragToDraw": "Tap and drag to draw",
+  "clear": "Clear",
+  "done": "Done",
+  "locatingYou": "Locating you...",
+  "permissionDenied": "Permission denied",
+  "tryAgain": "Try again",
+  "required": "Required",
+  "invalidMobile": "10 digits required",
+  "invalidAadhaar": "12 digits required",
+  "surveySubmittedDiagnostics": "Survey submitted. Diagnostics now available."
+}

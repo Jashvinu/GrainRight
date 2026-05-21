@@ -43,9 +43,11 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
 
   Future<void> _onSave() async {
     if (_points.length < 3) {
-      Get.snackbar('Too few points',
-          'Draw at least 3 points to define your farm boundary.',
-          snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        'Too few points',
+        'Draw at least 3 points to define your farm boundary.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
 
@@ -67,11 +69,14 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Name your farm',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textDark)),
+            Text(
+              'Name your farm',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.textDark,
+              ),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: nameCtrl,
@@ -97,7 +102,9 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
     );
 
     if (confirmed != true) return;
-    final name = nameCtrl.text.trim().isEmpty ? 'My Farm' : nameCtrl.text.trim();
+    final name = nameCtrl.text.trim().isEmpty
+        ? 'My Farm'
+        : nameCtrl.text.trim();
 
     setState(() => _isSaving = true);
     final farmCtrl = Get.find<FarmController>();
@@ -126,15 +133,19 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
                 ? const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
                     child: Center(
-                        child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
                   )
                 : TextButton(
                     onPressed: _onSave,
-                    child: const Text('Save',
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Save',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
         ],
       ),
@@ -148,9 +159,8 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.wrkfarm.milletsnow',
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'grainright.wrkfarm',
               ),
               if (_points.length >= 3)
                 PolygonLayer(
@@ -165,14 +175,16 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
                 ),
               CircleLayer(
                 circles: _points
-                    .map((p) => CircleMarker(
-                          point: p,
-                          radius: 7,
-                          color: AppTheme.greenDark,
-                          borderColor: Colors.white,
-                          borderStrokeWidth: 1.5,
-                          useRadiusInMeter: false,
-                        ))
+                    .map(
+                      (p) => CircleMarker(
+                        point: p,
+                        radius: 7,
+                        color: AppTheme.greenDark,
+                        borderColor: Colors.white,
+                        borderStrokeWidth: 1.5,
+                        useRadiusInMeter: false,
+                      ),
+                    )
                     .toList(),
               ),
             ],
@@ -186,12 +198,17 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
             child: Card(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.touch_app_outlined,
-                        color: AppTheme.green, size: 22),
+                    Icon(
+                      Icons.touch_app_outlined,
+                      color: AppTheme.green,
+                      size: 22,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -202,11 +219,12 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
                             _points.isEmpty
                                 ? 'Tap the map to add boundary points'
                                 : '${_points.length} point${_points.length == 1 ? '' : 's'} added'
-                                    '${_points.length >= 3 ? ' · Tap "Save" when done' : ' · Add ${3 - _points.length} more'}',
+                                      '${_points.length >= 3 ? ' · Tap "Save" when done' : ' · Add ${3 - _points.length} more'}',
                             style: TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.textDark,
-                                fontWeight: FontWeight.w500),
+                              fontSize: 13,
+                              color: AppTheme.textDark,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -215,11 +233,16 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
                       TextButton(
                         onPressed: _clearPoints,
                         style: TextButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(40, 32)),
-                        child: Text('Clear',
-                            style: TextStyle(
-                                color: AppTheme.textMuted, fontSize: 13)),
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(40, 32),
+                        ),
+                        child: Text(
+                          'Clear',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
                   ],
                 ),

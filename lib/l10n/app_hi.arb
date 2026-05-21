@@ -1,0 +1,20 @@
+{
+  "@@locale": "hi",
+  "surveyAssistantWelcome": "नमस्ते, मैं आपका सर्वे सहायक हूं",
+  "continueLabel": "जारी रखें",
+  "back": "वापस",
+  "skip": "छोड़ें",
+  "saveDraft": "ड्राफ्ट सेव करें",
+  "submit": "सबमिट",
+  "drawFarmBoundary": "अपने खेत की सीमा बनाएं",
+  "tapAndDragToDraw": "बनाने के लिए टैप करके खींचें",
+  "clear": "साफ करें",
+  "done": "पूर्ण",
+  "locatingYou": "आपका स्थान ढूंढ रहे हैं...",
+  "permissionDenied": "अनुमति अस्वीकार की गई",
+  "tryAgain": "फिर कोशिश करें",
+  "required": "आवश्यक",
+  "invalidMobile": "10 अंक आवश्यक",
+  "invalidAadhaar": "12 अंक आवश्यक",
+  "surveySubmittedDiagnostics": "सर्वे सबमिट हो गया। डायग्नोस्टिक्स अब उपलब्ध है।"
+}

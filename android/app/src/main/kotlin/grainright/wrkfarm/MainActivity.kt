@@ -1,4 +1,4 @@
-package com.wrkfarm.millets_now
+package grainright.wrkfarm
 
 import io.flutter.embedding.android.FlutterActivity
 

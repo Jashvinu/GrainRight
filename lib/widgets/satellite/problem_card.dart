@@ -11,14 +11,21 @@ class ProblemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isThreshold = problem.type == 'threshold';
-    final bgColor =
-        isThreshold ? const Color(0xFFFFF3CD) : const Color(0xFFFEE2E2);
-    final borderColor =
-        isThreshold ? const Color(0xFFFFD700) : Colors.red.shade200;
-    final icon = isThreshold ? Icons.warning_amber_outlined : Icons.trending_down;
-    final iconColor = isThreshold ? Colors.orange.shade700 : Colors.red.shade600;
+    final bgColor = isThreshold
+        ? const Color(0xFFFFF3CD)
+        : const Color(0xFFFEE2E2);
+    final borderColor = isThreshold
+        ? const Color(0xFFFFD700)
+        : Colors.red.shade200;
+    final icon = isThreshold
+        ? Icons.warning_amber_outlined
+        : Icons.trending_down;
+    final iconColor = isThreshold
+        ? Colors.orange.shade700
+        : Colors.red.shade600;
 
-    final indexLabel = SatelliteConfig.indexLabels[problem.index] ??
+    final indexLabel =
+        SatelliteConfig.indexLabels[problem.index] ??
         problem.index.toUpperCase();
 
     String description;
@@ -26,8 +33,9 @@ class ProblemCard extends StatelessWidget {
       description =
           'Value ${problem.avgValue!.toStringAsFixed(1)} is below threshold of ${problem.threshold!.toStringAsFixed(1)}';
     } else if (problem.avgDecline != null) {
+      final unit = problem.trendUnit == 'points' ? ' points' : '%';
       description =
-          'Declining trend: ${problem.avgDecline!.toStringAsFixed(2)}/day';
+          'Declining trend: ${problem.avgDecline!.toStringAsFixed(1)}$unit';
     } else {
       description = problem.type.replaceAll('_', ' ');
     }
@@ -49,15 +57,33 @@ class ProblemCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(indexLabel,
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppTheme.textDark)),
+                Text(
+                  indexLabel,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AppTheme.textDark,
+                  ),
+                ),
                 const SizedBox(height: 3),
-                Text(description,
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+                if (problem.confidence != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${problem.confidence!.toUpperCase()} confidence',
                     style: const TextStyle(
-                        fontSize: 13, color: AppTheme.textMuted)),
+                      fontSize: 11,
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

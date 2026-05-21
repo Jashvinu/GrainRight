@@ -16,10 +16,10 @@ class FormConfigService {
         .toList()
       ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
 
-    // Filter out inactive fields
-    for (final section in sections) {
-      section.fields.removeWhere((f) => false); // all fields from query are active by default
-    }
+    // "Other Crops" duplicates the "Kharif Crops" editor — the "Other" choice
+    // now lives inside the Kharif crop-name dropdown, so drop the standalone
+    // section here. (Ideally also deactivated in Supabase form_sections.)
+    sections.removeWhere((s) => s.title == 'Other Crops');
 
     return sections;
   }
@@ -38,5 +38,15 @@ class FormConfigService {
       map.putIfAbsent(key, () => []).add(value);
     }
     return map;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDropdownOptionRows() async {
+    final data = await _client
+        .from('dropdown_options')
+        .select('option_key,value,label,label_hi,label_mr,sort_order')
+        .eq('is_active', true)
+        .order('sort_order');
+
+    return (data as List).cast<Map<String, dynamic>>();
   }
 }

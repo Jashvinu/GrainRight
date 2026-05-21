@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../widgets/brand_text.dart';
 
@@ -18,10 +19,16 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(vsync: this, duration: const Duration(milliseconds: 800));
+    _anim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
     _anim.forward();
-    Future.delayed(const Duration(seconds: 2), () => Get.offNamed('/home'));
+    Future.delayed(const Duration(seconds: 2), () {
+      final session = Supabase.instance.client.auth.currentSession;
+      Get.offNamed(session == null ? '/login' : '/home');
+    });
   }
 
   @override

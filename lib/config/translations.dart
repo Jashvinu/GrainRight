@@ -1,0 +1,333 @@
+/// Marathi translations for UI strings and form labels.
+/// Keys are the English text; values are Marathi equivalents.
+class AppTranslations {
+  AppTranslations._();
+
+  // ─── UI strings ───────────────────────────────────────────────
+  static const Map<String, String> ui = {
+    'New Survey': 'नवीन सर्वेक्षण',
+    'Edit Survey': 'सर्वेक्षण संपादित करा',
+    'Loading...': 'लोड होत आहे...',
+    'Error': 'त्रुटी',
+    'Retry': 'पुन्हा प्रयत्न करा',
+    'No form configuration found.': 'फॉर्म कॉन्फिगरेशन सापडले नाही.',
+    'Step': 'पायरी',
+    'of': 'पैकी',
+    'Back': 'मागे',
+    'Continue': 'पुढे',
+    'Submit': 'सबमिट करा',
+    'Submitting...': 'सबमिट होत आहे...',
+    'Success': 'यशस्वी',
+    'Survey submitted': 'सर्वेक्षण सबमिट झाले',
+    'Survey updated': 'सर्वेक्षण अपडेट झाले',
+    'Validation': 'प्रमाणीकरण',
+    'Please fill in the required fields on this step':
+        'कृपया या पायरीवरील आवश्यक फील्ड भरा',
+    'Required': 'आवश्यक',
+    'Getting location...': 'स्थान मिळवत आहे...',
+    'Location permission denied': 'स्थान परवानगी नाकारली',
+    'GPS unavailable': 'GPS उपलब्ध नाही',
+    'Select date': 'तारीख निवडा',
+    'No options': 'पर्याय नाहीत',
+    'Yes': 'होय',
+    'No': 'नाही',
+    'Draft restored': 'मसुदा पुनर्संचयित',
+    'Your previous progress has been restored.':
+        'तुमची मागील प्रगती पुनर्संचयित केली आहे.',
+    'Mobile No.': 'मोबाईल क्र.',
+    '10 digits required': '१० अंक आवश्यक',
+    '12 digits required': '१२ अंक आवश्यक',
+    'Resume Last Form?': 'मागील फॉर्म पुन्हा सुरू करायचा?',
+    'You have an unfinished form from last time. Would you like to continue where you left off?':
+        'तुमचा मागील वेळचा अपूर्ण फॉर्म आहे. तुम्हाला जिथे सोडलेत तिथून पुढे सुरू ठेवायचे आहे का?',
+    'Resume': 'पुन्हा सुरू करा',
+    'Start Fresh': 'नवीन सुरू करा',
+    'Surveys': 'सर्वेक्षणे',
+    'English': 'English',
+    'मराठी': 'मराठी',
+  };
+
+  // ─── Form section titles ──────────────────────────────────────
+  static const Map<String, String> sections = {
+    'Personal Information': 'वैयक्तिक माहिती',
+    'Landholding Details': 'जमीन धारणा तपशील',
+    'Cropping Pattern': 'पीक पद्धती',
+    'Input Usage': 'निविष्ट वापर',
+    'Production & Productivity': 'उत्पादन आणि उत्पादकता',
+    'Post-Harvest & Marketing': 'कापणीनंतर आणि विपणन',
+    'Cost & Income': 'खर्च आणि उत्पन्न',
+    'Farm Boundary': 'शेताची सीमा',
+    'Family Information': 'कौटुंबिक माहिती',
+    'Land / Farming': 'जमीन / शेती',
+    'Forest Patta': 'वन हक्क पट्टा',
+    'Main Crop': 'मुख्य पीक',
+    'Kharif Crops': 'खरीप पिके',
+    'Other Crops': 'इतर पिके',
+    'Main Crop Agronomy': 'मुख्य पिकाच्या कृषी पद्धती',
+    'Other Crop Agronomy': 'इतर पिकाच्या कृषी पद्धती',
+    'Main Crop 3-Year Production': 'मुख्य पिकाचे ३ वर्षांचे उत्पादन',
+    'Income & Food Products': 'उत्पन्न आणि खाद्य उत्पादने',
+  };
+
+  // ─── Crop practices / repeat-group form ───────────────────────
+  static const Map<String, String> cropPractice = {
+    // Step + section headers
+    'Location and training': 'ठिकाण आणि प्रशिक्षण',
+    'Seed and land preparation': 'बियाणे आणि जमीन तयारी',
+    'Transplanting and crop care': 'पेरणी / पुनर्लागवड आणि पीक काळजी',
+    'Pest, growth, harvest': 'कीड, वाढ आणि कापणी',
+    'Crop': 'पीक',
+    'Add another crop': 'आणखी एक पीक जोडा',
+    'Next': 'पुढे',
+
+    // Kharif / other crop rows
+    'Crop name': 'पिकाचे नाव',
+    'Other crop name': 'इतर पिकाचे नाव',
+    'Other crop details': 'इतर पिकाचा तपशील',
+    'Cultivated area (acre)': 'लागवड क्षेत्र (एकर)',
+    'Variety': 'वाण',
+    'Production quantity': 'उत्पादन प्रमाण',
+    'Average estimated cost (Rupees ₹)': 'सरासरी अंदाजित खर्च (रुपये ₹)',
+
+    // Yearly rows
+    'Area (acre)': 'क्षेत्र (एकर)',
+    'Total production': 'एकूण उत्पादन',
+    'Home consumption': 'घरगुती वापर',
+    'Quantity sold': 'विकलेले प्रमाण',
+    'Sold where': 'कुठे विकले',
+    'Selling price (Rupees ₹)': 'विक्री किंमत (रुपये ₹)',
+
+    // Step 1 — location and training
+    'Grown on': 'कुठे पिकवले',
+    'Own land': 'स्वतःची जमीन',
+    'Forest patta': 'वन हक्क पट्टा',
+    'Leased land': 'भाडेपट्ट्याची जमीन',
+    'Same land every year?': 'दरवर्षी तीच जमीन वापरता का?',
+    'Land topology': 'जमिनीची रचना',
+    'Flat': 'सपाट',
+    'Sloped': 'उताराची',
+    'Terraced': 'पायऱ्यांची',
+    'Hilly': 'डोंगराळ',
+    'Other details': 'इतर तपशील',
+    'Seed sources': 'बियाण्याचे स्रोत',
+    'Own saved': 'स्वतः साठवलेले',
+    'Local market': 'स्थानिक बाजार',
+    'Government source': 'शासकीय स्रोत',
+    'Neighbour': 'शेजारी',
+    'Co-op society': 'सहकारी संस्था',
+    'Other source details': 'इतर स्रोत तपशील',
+    'Package of Practice training received?':
+        'पॅकेज ऑफ प्रॅक्टिस (शिफारस केलेली पीक पद्धत) प्रशिक्षण मिळाले का?',
+    'Training source': 'प्रशिक्षण स्रोत',
+    'Farming method': 'शेती पद्धत',
+    'Organic': 'सेंद्रिय',
+    'Mixed': 'मिश्र',
+    'Natural': 'नैसर्गिक',
+
+    // Step 2 — seed and land preparation
+    'Treats seeds?': 'बियाण्यांवर प्रक्रिया करता का?',
+    'Seed treatment materials': 'बीज प्रक्रिया साहित्य',
+    'Cow dung': 'शेण',
+    'Cow urine': 'गोमूत्र',
+    'Neem': 'कडुनिंब',
+    'Jeevamrut': 'जीवामृत',
+    'Chemical': 'रासायनिक',
+    'Seedling method': 'रोप / पेरणी पद्धत',
+    'Direct sowing': 'थेट पेरणी',
+    'Nursery transplant': 'रोपवाटिकेतून पुनर्लागवड',
+    'Broadcasting': 'फेकून पेरणी',
+    'Seedling ready (days)': 'रोपे तयार होण्यास लागणारे दिवस',
+    'Difference noticed': 'जाणवलेला फरक',
+    'Tractor days': 'ट्रॅक्टर दिवस',
+    'Tractor cost (Rupees ₹)': 'ट्रॅक्टर खर्च (रुपये ₹)',
+    'Bullock days': 'बैल दिवस',
+    'Bullock cost (Rupees ₹)': 'बैल खर्च (रुपये ₹)',
+    'Land prepared by hand?': 'जमीन हाताने तयार केली का?',
+
+    // Step 3 — transplanting and crop care
+    'Transplant method': 'पेरणी / पुनर्लागवड पद्धत',
+    'By hand': 'हाताने',
+    'Machine': 'यंत्राने',
+    'Direct seed': 'थेट पेरणी',
+    'Dip in Jeevamrut?': 'रोपे जीवामृतात बुडवता का?',
+    'Plant spacing (centimetres cm)': 'रोपांमधील अंतर (सेंटीमीटर cm)',
+    'Transplant days': 'पुनर्लागवडीचे दिवस',
+    'Needs transplant labour?': 'पुनर्लागवडीसाठी मजूर लागतात का?',
+    'How many labourers': 'मजुरांची संख्या',
+    'Daily wage (Rupees ₹)': 'रोजंदारी (रुपये ₹)',
+    'Does weeding?': 'खुरपणी करता का?',
+    'Weeding after (days)': 'खुरपणी किती दिवसांनी',
+
+    // Step 4 — pest, growth, harvest
+    'Sprays for pest?': 'कीड नियंत्रणासाठी फवारणी करता का?',
+    'Spray methods': 'फवारणी पद्धती',
+    'Matka': 'मटका',
+    'Pesticide': 'कीटकनाशक',
+    'Matka per acre': 'मटका प्रमाण प्रति एकर',
+    'Neem per acre': 'कडुनिंब प्रमाण प्रति एकर',
+    'Jeevamrut per acre': 'जीवामृत प्रमाण प्रति एकर',
+    'Pesticide per acre': 'कीटकनाशक प्रमाण प्रति एकर',
+    'Other spray details': 'इतर फवारणी तपशील',
+    'Does organic fertilizer help in disease control?':
+        'सेंद्रिय खतामुळे रोग नियंत्रणास मदत होते का?',
+    'Planting to flowering (days)': 'लागवडीपासून फुलोऱ्यापर्यंत दिवस',
+    'Uses fertilizer?': 'खत वापरता का?',
+    'Fertilizer names': 'खतांची नावे',
+    'Quantity per acre': 'प्रति एकर प्रमाण',
+    'Flowering pest problem?': 'फुलोऱ्यात किडीची समस्या?',
+    'Pest type': 'किडीचा प्रकार',
+    'Sprays used': 'वापरलेली फवारणी',
+    'Maturity (days)': 'परिपक्वता दिवस',
+    'Monitors crop?': 'पिकावर लक्ष ठेवता का?',
+    'Monitoring methods': 'देखरेख पद्धती',
+    'Daily walk': 'रोज शेतफेरी',
+    'Photos': 'फोटो',
+    'Notes': 'नोंदी',
+    'Mobile app': 'मोबाईल अ‍ॅप',
+    'Harvest method': 'कापणी पद्धत',
+    'Harvest labour type': 'कापणी मजूर प्रकार',
+    'Family': 'कुटुंब',
+    'Hired': 'भाड्याने मजूर',
+    'Harvest daily wage (Rupees ₹)': 'कापणी रोजंदारी (रुपये ₹)',
+    'Harvest labourers': 'कापणी मजुरांची संख्या',
+    'Harvest days': 'कापणी दिवस',
+    'Ready to eat/sell (days)': 'खाण्यास/विक्रीस तयार होण्यास लागणारे दिवस',
+    'Sells this crop?': 'हे पीक विकता का?',
+    'When sold': 'कधी विकले',
+    'Right after harvest': 'कापणीनंतर लगेच',
+    'Within 3 months': '३ महिन्यांच्या आत',
+    'Within 6 months': '६ महिन्यांच्या आत',
+    'Hold for better price': 'चांगल्या किमतीसाठी ठेवले',
+  };
+
+  // ─── Form field labels ────────────────────────────────────────
+  static const Map<String, String> fields = {
+    // Personal Info
+    'Survey Date': 'सर्वेक्षण तारीख',
+    'Season': 'हंगाम',
+    'Farmer Name': 'शेतकऱ्याचे नाव',
+    'Gender': 'लिंग',
+    'Date of Birth': 'जन्म तारीख',
+    'Category': 'वर्ग',
+    'Education Level': 'शिक्षण पातळी',
+    'Village / GP': 'गाव / ग्रामपंचायत',
+    'Block': 'ब्लॉक',
+    'District': 'जिल्हा',
+    'FPC Name': 'एफपीसी नाव',
+    'Aadhar No.': 'आधार क्र.',
+    'Mobile No.': 'मोबाईल क्र.',
+
+    // Landholding
+    'Land Owned (acres)': 'स्वतःची जमीन (एकर)',
+    'Land Leased (acres)': 'भाडेपट्ट्याची जमीन (एकर)',
+    'Total Rainfed Land (acres)': 'एकूण पावसावर अवलंबून जमीन (एकर)',
+    'Total Irrigated Land (acres)': 'एकूण सिंचित जमीन (एकर)',
+    'Land Owned': 'स्वतःची जमीन',
+    'Land Leased': 'भाडेपट्ट्याची जमीन',
+    'Total Rainfed Land': 'एकूण पावसावर अवलंबून जमीन',
+    'Total Irrigated Land': 'एकूण सिंचित जमीन',
+
+    // Cropping Pattern
+    'Land Under Millet': 'बाजरी अंतर्गत जमीन',
+    'Land Under Millet (acres)': 'बाजरी अंतर्गत जमीन (एकर)',
+    'Land Under Other Crops': 'इतर पिकांखालील जमीन',
+    'Land Under Other Crops (acres)': 'इतर पिकांखालील जमीन (एकर)',
+    'Cropping Intensity (%)': 'पीक तीव्रता (%)',
+    'Cropping Intensity': 'पीक तीव्रता',
+    'Major Crops Grown': 'प्रमुख पिके',
+    'Millet Seed Type': 'बाजरी बियाणे प्रकार',
+    'Millet Seed Variety': 'बाजरी बियाणे वाण',
+
+    // Input Usage
+    'Seed Used (Kg/Acre)': 'बियाणे वापर (किलो/एकर)',
+    'Fertilizer Used (Kg/Acre)': 'खत वापर (किलो/एकर)',
+    'Pesticide Used (Litres/Acre)': 'कीटकनाशक वापर (लिटर/एकर)',
+    'Use Bio-Fertilizer?': 'जैविक खत वापरता का?',
+    'Access to Credit?': 'कर्ज उपलब्ध आहे का?',
+    'Access to Extension Services?': 'विस्तार सेवा उपलब्ध आहेत का?',
+    'Mechanization Access': 'यांत्रिकीकरण उपलब्धता',
+
+    // Production & Productivity
+    'Millet Productivity (Kg/Acre)': 'बाजरी उत्पादकता (किलो/एकर)',
+    'Other Crops Productivity (Kg/Acre)': 'इतर पिके उत्पादकता (किलो/एकर)',
+    'Total Millet Production (Kg)': 'एकूण बाजरी उत्पादन (किलो)',
+    'Quantity Millet Sold (Kg)': 'विकलेली बाजरी (किलो)',
+    'Quantity Home Consumption (Kg)': 'घरगुती वापर (किलो)',
+    'Quantity Used as Seed (Kg)': 'बियाणे म्हणून वापर (किलो)',
+    'Avg. Millet Selling Price': 'सरासरी बाजरी विक्री किंमत',
+    'Millet Productivity': 'बाजरी उत्पादकता',
+    'Other Crops Productivity': 'इतर पिके उत्पादकता',
+    'Total Millet Production': 'एकूण बाजरी उत्पादन',
+    'Quantity Millet Sold': 'विकलेली बाजरी',
+    'Quantity Home Consumption': 'घरगुती वापर',
+    'Quantity Used as Seed': 'बियाणे म्हणून वापर',
+
+    // Post-Harvest
+    'Post Harvest Practices': 'कापणीनंतरच्या पद्धती',
+    'Where Produce Sold': 'उत्पादन कुठे विकले',
+    'Training Received?': 'प्रशिक्षण मिळाले का?',
+    'Training Source': 'प्रशिक्षण स्रोत',
+
+    // Cost & Income
+    'Avg. Cost of Cultivation - Millets': 'सरासरी लागवड खर्च - बाजरी',
+    'Net Income - Millets': 'निव्वळ उत्पन्न - बाजरी',
+    'Avg. Cost of Cultivation - Other': 'सरासरी लागवड खर्च - इतर',
+    'Net Income - Other Crops': 'निव्वळ उत्पन्न - इतर पिके',
+    'Sources of Income': 'उत्पन्नाचे स्रोत',
+    'Annual Agricultural Income': 'वार्षिक कृषी उत्पन्न',
+    'Annual Non-Agricultural Income': 'वार्षिक बिगर-कृषी उत्पन्न',
+    'Total Annual Income': 'एकूण वार्षिक उत्पन्न',
+
+    // Farm Boundary
+    'Farm Boundary Polygon': 'शेत सीमा बहुभुज',
+  };
+
+  // ─── Dropdown option values ───────────────────────────────────
+  static const Map<String, String> options = {
+    'Male': 'पुरुष',
+    'Female': 'स्त्री',
+    'Other': 'इतर',
+    'Kharif': 'खरीप',
+    'Rabi': 'रबी',
+    'Summer': 'उन्हाळी',
+    'General': 'सामान्य',
+    'SC': 'अनुसूचित जाती',
+    'ST': 'अनुसूचित जमाती',
+    'OBC': 'इतर मागासवर्ग',
+    'Illiterate': 'निरक्षर',
+    'Primary': 'प्राथमिक',
+    'Secondary': 'माध्यमिक',
+    'Higher Secondary': 'उच्च माध्यमिक',
+    'Graduate': 'पदवीधर',
+    'Post Graduate': 'पदव्युत्तर',
+    'Certified Seed': 'प्रमाणित बियाणे',
+    'Farm Saved Seed': 'शेत बचत बियाणे',
+    'Hybrid': 'संकरित',
+    'Local': 'स्थानिक',
+    'Full': 'पूर्ण',
+    'Partial': 'अंशतः',
+    'None': 'काहीही नाही',
+    'Mandi': 'मंडी',
+    'Local Market': 'स्थानिक बाजार',
+    'Direct Sale': 'थेट विक्री',
+    'FPC': 'एफपीसी',
+    'Government': 'सरकार',
+    'NGO': 'एनजीओ',
+    'KVK': 'कृषी विज्ञान केंद्र',
+    'Private': 'खाजगी',
+    'Agriculture': 'शेती',
+    'Livestock': 'पशुसंवर्धन',
+    'Labour': 'मजुरी',
+    'Business': 'व्यवसाय',
+  };
+
+  /// Combined lookup: checks fields → sections → ui → options → cropPractice.
+  static String translate(String text) {
+    return fields[text] ??
+        sections[text] ??
+        ui[text] ??
+        options[text] ??
+        cropPractice[text] ??
+        text;
+  }
+}

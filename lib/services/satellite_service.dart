@@ -34,10 +34,10 @@ class AuthResult {
 
 class SatelliteService {
   Map<String, String> _headers(String? jwt) => {
-        'Content-Type': 'application/json',
-        'apikey': SatelliteConfig.anonKey,
-        'Authorization': 'Bearer ${jwt ?? SatelliteConfig.anonKey}',
-      };
+    'Content-Type': 'application/json',
+    'apikey': SatelliteConfig.anonKey,
+    'Authorization': 'Bearer ${jwt ?? SatelliteConfig.anonKey}',
+  };
 
   // ─── Retry wrappers ────────────────────────────────────────────────────────
 
@@ -60,13 +60,19 @@ class SatelliteService {
   }
 
   Future<Map<String, dynamic>> _post(
-      String url, Map<String, dynamic> body, String? jwt) async {
+    String url,
+    Map<String, dynamic> body,
+    String? jwt,
+  ) async {
     Exception? last;
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
         final response = await http
-            .post(Uri.parse(url),
-                headers: _headers(jwt), body: jsonEncode(body))
+            .post(
+              Uri.parse(url),
+              headers: _headers(jwt),
+              body: jsonEncode(body),
+            )
             .timeout(const Duration(seconds: 60));
         return _parse(response);
       } on Exception catch (e) {
@@ -93,27 +99,36 @@ class SatelliteService {
       }
       return {'data': body};
     }
-    final msg = body is Map ? (body['error'] ?? body['message'] ?? 'HTTP ${response.statusCode}') : 'HTTP ${response.statusCode}';
-    throw SatelliteApiException(msg.toString(), statusCode: response.statusCode);
+    final msg = body is Map
+        ? (body['error'] ?? body['message'] ?? 'HTTP ${response.statusCode}')
+        : 'HTTP ${response.statusCode}';
+    throw SatelliteApiException(
+      msg.toString(),
+      statusCode: response.statusCode,
+    );
   }
 
   // ─── Auth ──────────────────────────────────────────────────────────────────
 
   Future<AuthResult> signIn(String email, String password) async {
     final url = '${SatelliteConfig.authBase}/token?grant_type=password';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SatelliteConfig.anonKey,
-      },
-      body: jsonEncode({'email': email, 'password': password}),
-    ).timeout(const Duration(seconds: 20));
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SatelliteConfig.anonKey,
+          },
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
       final body = jsonDecode(response.body);
       throw SatelliteApiException(
-        body['error_description'] as String? ?? body['msg'] as String? ?? 'Login failed',
+        body['error_description'] as String? ??
+            body['msg'] as String? ??
+            'Login failed',
         statusCode: response.statusCode,
       );
     }
@@ -130,19 +145,23 @@ class SatelliteService {
 
   Future<AuthResult> signUp(String email, String password) async {
     final url = '${SatelliteConfig.authBase}/signup';
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SatelliteConfig.anonKey,
-      },
-      body: jsonEncode({'email': email, 'password': password}),
-    ).timeout(const Duration(seconds: 20));
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SatelliteConfig.anonKey,
+          },
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       final body = jsonDecode(response.body);
       throw SatelliteApiException(
-        body['error_description'] as String? ?? body['msg'] as String? ?? 'Signup failed',
+        body['error_description'] as String? ??
+            body['msg'] as String? ??
+            'Signup failed',
         statusCode: response.statusCode,
       );
     }
@@ -170,14 +189,16 @@ class SatelliteService {
   Future<AuthResult?> refreshToken(String refreshToken) async {
     final url = '${SatelliteConfig.authBase}/token?grant_type=refresh_token';
     try {
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SatelliteConfig.anonKey,
-        },
-        body: jsonEncode({'refresh_token': refreshToken}),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SatelliteConfig.anonKey,
+            },
+            body: jsonEncode({'refresh_token': refreshToken}),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (response.statusCode != 200) return null;
       final data = jsonDecode(response.body) as Map<String, dynamic>;
@@ -196,16 +217,20 @@ class SatelliteService {
   // ─── Farms ─────────────────────────────────────────────────────────────────
 
   Future<List<Farm>> getFarms(String jwt) async {
-    final url = '${SatelliteConfig.restBase}/farms?select=id,name,geometry,bounds,area_hectares,user_id,created_at&order=created_at.desc';
+    final url =
+        '${SatelliteConfig.restBase}/farms?select=id,name,geometry,bounds,area_hectares,user_id,created_at&order=created_at.desc';
     final response = await http
-        .get(Uri.parse(url), headers: {
-          ..._headers(jwt),
-          'Prefer': 'return=representation',
-        })
+        .get(
+          Uri.parse(url),
+          headers: {..._headers(jwt), 'Prefer': 'return=representation'},
+        )
         .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 200) {
-      throw SatelliteApiException('Failed to load farms', statusCode: response.statusCode);
+      throw SatelliteApiException(
+        'Failed to load farms',
+        statusCode: response.statusCode,
+      );
     }
     final list = jsonDecode(response.body) as List;
     return list.map((e) => Farm.fromJson(e as Map<String, dynamic>)).toList();
@@ -216,16 +241,16 @@ class SatelliteService {
     final response = await http
         .post(
           Uri.parse(url),
-          headers: {
-            ..._headers(jwt),
-            'Prefer': 'return=representation',
-          },
+          headers: {..._headers(jwt), 'Prefer': 'return=representation'},
           body: jsonEncode(farmJson),
         )
         .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 201 && response.statusCode != 200) {
-      throw SatelliteApiException('Failed to save farm', statusCode: response.statusCode);
+      throw SatelliteApiException(
+        'Failed to save farm',
+        statusCode: response.statusCode,
+      );
     }
     final list = jsonDecode(response.body) as List;
     return Farm.fromJson(list.first as Map<String, dynamic>);
@@ -233,11 +258,17 @@ class SatelliteService {
 
   // ─── Edge Functions ─────────────────────────────────────────────────────────
 
-  Future<List<SatelliteDate>> getAvailableDates(String farmId, String? jwt) async {
-    final url = '${SatelliteConfig.edgeFunctionsBase}/get-available-dates?farm_id=$farmId&months=6';
+  Future<List<SatelliteDate>> getAvailableDates(
+    String farmId,
+    String? jwt,
+  ) async {
+    final url =
+        '${SatelliteConfig.edgeFunctionsBase}/get-available-dates?farm_id=$farmId&months=6';
     final data = await _get(url, jwt);
     final list = data['available_dates'] as List? ?? [];
-    return list.map((e) => SatelliteDate.fromJson(e as Map<String, dynamic>)).toList();
+    return list
+        .map((e) => SatelliteDate.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<IndexTileResult>> getAgriculturalIndex({
@@ -247,7 +278,8 @@ class SatelliteService {
     required String farmId,
     String? jwt,
   }) async {
-    final url = '${SatelliteConfig.edgeFunctionsBase}/agricultural-indices'
+    final url =
+        '${SatelliteConfig.edgeFunctionsBase}/agricultural-indices'
         '?index=$index&start=$start&end=$end&farm_id=$farmId';
     final data = await _get(url, jwt);
     final satellites = data['satellites'] as List? ?? [];
@@ -257,8 +289,12 @@ class SatelliteService {
         .toList();
   }
 
-  Future<List<TimelineEntry>> getFarmTimeline(String farmId, String? jwt) async {
-    final url = '${SatelliteConfig.edgeFunctionsBase}/farm-timeline?farm_id=$farmId';
+  Future<List<TimelineEntry>> getFarmTimeline(
+    String farmId,
+    String? jwt,
+  ) async {
+    final url =
+        '${SatelliteConfig.edgeFunctionsBase}/farm-timeline?farm_id=$farmId';
     final data = await _get(url, jwt);
     final timeline = data['timeline'] as Map<String, dynamic>? ?? {};
     final entries = <TimelineEntry>[];
@@ -266,7 +302,9 @@ class SatelliteService {
       if (indexList is List) {
         for (final item in indexList) {
           if (item is Map<String, dynamic>) {
-            entries.add(TimelineEntry.fromJson({...item, 'observation_date': date}));
+            entries.add(
+              TimelineEntry.fromJson({...item, 'observation_date': date}),
+            );
           }
         }
       }
@@ -277,14 +315,20 @@ class SatelliteService {
 
   Future<DiagnosticsResult> getDiagnostics({
     required String polygonJson,
+    String? farmId,
     required List<String> indices,
     int days = 14,
+    int cloud = 50,
     String? jwt,
   }) async {
     final encoded = Uri.encodeComponent(polygonJson);
     final indicesParam = indices.join(',');
-    final url = '${SatelliteConfig.edgeFunctionsBase}/diagnostics'
-        '?polygon=$encoded&indices=$indicesParam&days=$days';
+    final farmParam = farmId == null || farmId.isEmpty
+        ? ''
+        : '&farm_id=${Uri.encodeComponent(farmId)}';
+    final url =
+        '${SatelliteConfig.edgeFunctionsBase}/diagnostics'
+        '?polygon=$encoded$farmParam&indices=$indicesParam&days=$days&cloud=$cloud';
     final data = await _get(url, jwt);
     return DiagnosticsResult.fromJson(data);
   }
@@ -300,7 +344,8 @@ class SatelliteService {
 
   Future<void> syncSatelliteDates(String farmId, String? jwt) async {
     try {
-      final url = '${SatelliteConfig.edgeFunctionsBase}/sync-satellite-dates?farm_id=$farmId';
+      final url =
+          '${SatelliteConfig.edgeFunctionsBase}/sync-satellite-dates?farm_id=$farmId';
       await http
           .get(Uri.parse(url), headers: _headers(jwt))
           .timeout(const Duration(seconds: 30));

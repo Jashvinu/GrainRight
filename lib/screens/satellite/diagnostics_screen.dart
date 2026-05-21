@@ -34,8 +34,7 @@ class DiagnosticsScreen extends StatelessWidget {
     return Color.lerp(Colors.red, AppTheme.greenLight, t)!;
   }
 
-  List<CircleMarker> _buildHeatCircles(
-      DiagnosticsResult result, String index) {
+  List<CircleMarker> _buildHeatCircles(DiagnosticsResult result, String index) {
     final analysis = result.analysis[index];
     if (analysis == null) return [];
 
@@ -72,8 +71,11 @@ class DiagnosticsScreen extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: SatelliteMapView(
-              tileUrl: result?.analysis[satCtrl.diagnosticsIndex.value]
+              tileUrl: result
+                  ?.analysis[satCtrl.diagnosticsIndex.value]
                   ?.tileUrlFormat,
+              rasterUrl: result?.rasterUrls[satCtrl.diagnosticsIndex.value],
+              rasterBounds: _rasterBounds(result),
               isLoading: satCtrl.diagnosticsIsLoading.value,
               farmPolygon: polygonPts,
               heatCircles: heatCircles,
@@ -90,67 +92,84 @@ class DiagnosticsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Index selector for heatmap
-                Obx(() => SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: ['ndvi', 'nitrogen', 'moisture', 'phosphorus']
-                            .map((idx) {
-                          final isSelected =
-                              satCtrl.diagnosticsIndex.value == idx;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(
-                                SatelliteConfig.indexLabels[idx] ?? idx,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isSelected
-                                      ? AppTheme.greenDark
-                                      : AppTheme.textMuted,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
+                Obx(
+                  () => SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children:
+                          [
+                            'ndvi',
+                            'nitrogen',
+                            'phosphorus',
+                            'potassium',
+                            'moisture',
+                          ].map((idx) {
+                            final isSelected =
+                                satCtrl.diagnosticsIndex.value == idx;
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: Text(
+                                  SatelliteConfig.indexLabels[idx] ?? idx,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isSelected
+                                        ? AppTheme.greenDark
+                                        : AppTheme.textMuted,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                  ),
                                 ),
+                                selected: isSelected,
+                                selectedColor: AppTheme.greenPale,
+                                onSelected: (_) =>
+                                    satCtrl.diagnosticsIndex.value = idx,
                               ),
-                              selected: isSelected,
-                              selectedColor: AppTheme.greenPale,
-                              onSelected: (_) =>
-                                  satCtrl.diagnosticsIndex.value = idx,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    )),
+                            );
+                          }).toList(),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 14),
 
                 // Run diagnostics button
-                Obx(() => SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: satCtrl.diagnosticsIsLoading.value
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.biotech_outlined),
-                        label: Text(satCtrl.diagnosticsIsLoading.value
+                Obx(
+                  () => SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      icon: satCtrl.diagnosticsIsLoading.value
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.biotech_outlined),
+                      label: Text(
+                        satCtrl.diagnosticsIsLoading.value
                             ? 'Analysing…'
-                            : 'Run Diagnostics'),
-                        onPressed: satCtrl.diagnosticsIsLoading.value
-                            ? null
-                            : () {
-                                final farm = farmCtrl.selectedFarm.value;
-                                if (farm == null) {
-                                  Get.snackbar('No farm', 'Select a farm first',
-                                      snackPosition: SnackPosition.BOTTOM);
-                                  return;
-                                }
-                                satCtrl.loadDiagnostics(
-                                    farm.id, farm.geometry);
-                              },
+                            : 'Run Diagnostics',
                       ),
-                    )),
+                      onPressed: satCtrl.diagnosticsIsLoading.value
+                          ? null
+                          : () {
+                              final farm = farmCtrl.selectedFarm.value;
+                              if (farm == null) {
+                                Get.snackbar(
+                                  'No farm',
+                                  'Select a farm first',
+                                  snackPosition: SnackPosition.BOTTOM,
+                                );
+                                return;
+                              }
+                              satCtrl.loadDiagnostics(farm.id, farm.geometry);
+                            },
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 16),
 
                 // Results
@@ -164,35 +183,42 @@ class DiagnosticsScreen extends StatelessWidget {
                       // Season + metadata
                       if (result.metadata.season.isNotEmpty)
                         _MetaBadge(
-                            label:
-                                'Season: ${result.metadata.season.toUpperCase()}'),
+                          label:
+                              'Season: ${result.metadata.season.toUpperCase()}',
+                        ),
                       const SizedBox(height: 14),
 
                       // Problems
                       if (result.problems.isNotEmpty) ...[
-                        const Text('Issues Detected',
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppTheme.textDark)),
+                        const Text(
+                          'Issues Detected',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.textDark,
+                          ),
+                        ),
                         const SizedBox(height: 10),
-                        ...result.problems.map(
-                            (p) => ProblemCard(problem: p)),
+                        ...result.problems.map((p) => ProblemCard(problem: p)),
                         const SizedBox(height: 16),
                       ],
 
                       // Per-index stats
-                      const Text('Index Statistics',
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textDark)),
+                      const Text(
+                        'Index Statistics',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textDark,
+                        ),
+                      ),
                       const SizedBox(height: 10),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: result.analysis.entries.map((entry) {
-                            final label = SatelliteConfig.indexLabels[entry.key] ??
+                            final label =
+                                SatelliteConfig.indexLabels[entry.key] ??
                                 entry.key.toUpperCase();
                             return Padding(
                               padding: const EdgeInsets.only(right: 10),
@@ -215,6 +241,14 @@ class DiagnosticsScreen extends StatelessWidget {
       ],
     );
   }
+
+  LatLngBounds? _rasterBounds(DiagnosticsResult? result) {
+    final bounds = result?.rasterBounds;
+    if (bounds == null || bounds.length < 2) return null;
+    final sw = bounds[0];
+    final ne = bounds[1];
+    return LatLngBounds(LatLng(sw[0], sw[1]), LatLng(ne[0], ne[1]));
+  }
 }
 
 class _MetaBadge extends StatelessWidget {
@@ -229,11 +263,14 @@ class _MetaBadge extends StatelessWidget {
         color: AppTheme.greenPale,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label,
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.greenDark)),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.greenDark,
+        ),
+      ),
     );
   }
 }
@@ -253,18 +290,22 @@ class _StatCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-            color: analysis.belowThreshold
-                ? Colors.orange.shade200
-                : Colors.grey.shade200),
+          color: analysis.belowThreshold
+              ? Colors.orange.shade200
+              : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: AppTheme.textDark)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: AppTheme.textDark,
+            ),
+          ),
           const Divider(height: 12),
           _StatRow(label: 'Mean', value: analysis.mean.toStringAsFixed(2)),
           _StatRow(label: 'Min', value: analysis.min.toStringAsFixed(2)),
@@ -273,11 +314,14 @@ class _StatCard extends StatelessWidget {
           if (analysis.belowThreshold)
             const Padding(
               padding: EdgeInsets.only(top: 6),
-              child: Text('⚠ Below threshold',
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.orange,
-                      fontWeight: FontWeight.w600)),
+              child: Text(
+                '⚠ Below threshold',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.orange,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
         ],
       ),
@@ -297,14 +341,18 @@ class _StatRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 11, color: AppTheme.textMuted)),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textDark)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textDark,
+            ),
+          ),
         ],
       ),
     );

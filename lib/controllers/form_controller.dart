@@ -3,20 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../controllers/language_controller.dart';
 import '../controllers/survey_controller.dart';
 import '../models/form_config.dart';
 import '../services/form_config_service.dart';
 import '../services/location_service.dart';
+import '../services/sheets_sync_service.dart';
 import '../services/survey_service.dart';
 
 class FormController extends GetxController {
   final _surveyService = SurveyService();
   final _configService = FormConfigService();
+  final _sheetsSyncService = SheetsSyncService();
   final _locationService = LocationService();
 
   // Config state
   final sections = <FormSectionConfig>[].obs;
   final dropdownOptions = <String, List<String>>{}.obs;
+  final dropdownOptionLabels = <String, Map<String, Map<String, String>>>{}.obs;
   final isConfigLoaded = false.obs;
   final hasError = false.obs;
   final errorMessage = ''.obs;
@@ -61,6 +65,11 @@ class FormController extends GetxController {
       _multiSelectValues[key] ?? <String>[].obs;
 
   LocationResult? get capturedLocation => _capturedLocation;
+  Map<String, dynamic> toFlatJson() => _buildJson();
+
+  final kharifRows = <Map<String, dynamic>>[].obs;
+  final yearlyRows = <Map<String, dynamic>>[].obs;
+  final practiceRows = <Map<String, dynamic>>[].obs;
 
   String get locationSummary {
     switch (locationStatus.value) {
@@ -91,8 +100,9 @@ class FormController extends GetxController {
     final total = _milletLandControllers.values
         .map((c) => double.tryParse(c.text) ?? 0.0)
         .fold(0.0, (a, b) => a + b);
-    _textControllers['land_under_millet']?.text =
-        total > 0 ? total.toString() : '';
+    _textControllers['land_under_millet']?.text = total > 0
+        ? total.toString()
+        : '';
     milletLandTotal.value = total;
   }
 
@@ -101,6 +111,81 @@ class FormController extends GetxController {
       c.text = '';
     }
     milletLandTotal.value = 0.0;
+  }
+
+  dynamic valueFor(String key) {
+    if (_boolValues.containsKey(key)) return _boolValues[key]!.value;
+    if (_stringValues.containsKey(key)) return _stringValues[key]!.value;
+    if (_textControllers.containsKey(key)) return _textControllers[key]!.text;
+    if (_dateValues.containsKey(key)) return _dateValues[key]!.value;
+    if (_polygonValues.containsKey(key)) return _polygonValues[key]!.value;
+    if (_multiSelectValues.containsKey(key)) {
+      return _multiSelectValues[key]!.toList();
+    }
+    if (_autoCalcValues.containsKey(key)) return _autoCalcValues[key]!.value;
+    return null;
+  }
+
+  void setValue(String key, dynamic value) {
+    if (_boolValues.containsKey(key)) {
+      setBool(key, value == true || value.toString() == 'true');
+    } else if (_stringValues.containsKey(key)) {
+      setDropdown(key, value?.toString());
+    } else if (_textControllers.containsKey(key)) {
+      setText(key, value?.toString() ?? '');
+    } else if (_dateValues.containsKey(key)) {
+      if (value is DateTime) {
+        setDate(key, value);
+      } else {
+        setDate(key, DateTime.tryParse(value?.toString() ?? ''));
+      }
+    } else if (_polygonValues.containsKey(key)) {
+      if (value is List<List<double>>) setPolygon(key, value);
+    } else if (_multiSelectValues.containsKey(key)) {
+      if (value is List) {
+        setMultiSelect(key, value.map((e) => e.toString()).toList());
+      }
+    }
+    saveDraft();
+  }
+
+  void setText(String key, String value) {
+    _textControllers[key]?.text = value;
+  }
+
+  void setBool(String key, bool? value) {
+    _boolValues[key]?.value = value;
+  }
+
+  void setDropdown(String key, String? value) {
+    _stringValues[key]?.value = value;
+  }
+
+  void setDate(String key, DateTime? value) {
+    _dateValues[key]?.value = value;
+  }
+
+  void setPolygon(String key, List<List<double>>? value) {
+    _polygonValues[key]?.value = value;
+  }
+
+  void setMultiSelect(String key, List<String> values) {
+    _multiSelectValues[key]?.assignAll(values);
+  }
+
+  void setKharifRows(List<Map<String, dynamic>> rows) {
+    kharifRows.assignAll(rows);
+    saveDraft();
+  }
+
+  void setYearlyRows(List<Map<String, dynamic>> rows) {
+    yearlyRows.assignAll(rows);
+    saveDraft();
+  }
+
+  void setPracticeRows(List<Map<String, dynamic>> rows) {
+    practiceRows.assignAll(rows);
+    saveDraft();
   }
 
   @override
@@ -124,12 +209,15 @@ class FormController extends GetxController {
       final results = await Future.wait([
         _configService.fetchFormConfig(),
         _configService.fetchDropdownOptions(),
+        _configService.fetchDropdownOptionRows(),
       ]);
       sections.value = results[0] as List<FormSectionConfig>;
       dropdownOptions.value = results[1] as Map<String, List<String>>;
+      dropdownOptionLabels.value = _buildOptionLabelMap(
+        results[2] as List<Map<String, dynamic>>,
+      );
       _initializeFieldControllers();
       isConfigLoaded.value = true;
-      if (!isEditMode) await loadDraft();
     } catch (e, st) {
       debugPrint('[FormController.loadConfig] $e\n$st');
       hasError.value = true;
@@ -171,6 +259,7 @@ class FormController extends GetxController {
           case 'date':
             _dateValues[field.fieldKey] = Rxn<DateTime>();
           case 'polygon':
+          case 'polygon_pencil':
             _polygonValues[field.fieldKey] = Rxn<List<List<double>>>();
           case 'auto_calc':
             _autoCalcValues[field.fieldKey] = 0.0.obs;
@@ -231,12 +320,19 @@ class FormController extends GetxController {
       currentValue = _textControllers[dependsOn]!.text;
     } else if (_dateValues.containsKey(dependsOn)) {
       currentValue = _dateValues[dependsOn]!.value;
+    } else if (_multiSelectValues.containsKey(dependsOn)) {
+      currentValue = _multiSelectValues[dependsOn]!.toList();
     }
 
     return switch (operator) {
       'equals' => currentValue == expectedValue,
       'not_equals' => currentValue != expectedValue,
       'not_null' => currentValue != null,
+      'contains_any' =>
+        expectedValue is List &&
+            ((currentValue is List &&
+                    currentValue.any((v) => expectedValue.contains(v))) ||
+                (currentValue != null && expectedValue.contains(currentValue))),
       _ => true,
     };
   }
@@ -263,6 +359,7 @@ class FormController extends GetxController {
         case 'date':
           if (_dateValues[key]!.value != null) return true;
         case 'polygon':
+        case 'polygon_pencil':
           final poly = _polygonValues[key]!.value;
           if (poly != null && poly.isNotEmpty) return true;
         case 'auto_calc':
@@ -308,6 +405,7 @@ class FormController extends GetxController {
             case 'auto_calc':
               break;
             case 'polygon':
+            case 'polygon_pencil':
               break;
           }
         }
@@ -321,12 +419,31 @@ class FormController extends GetxController {
         });
         if (areas.isNotEmpty) draft['__millet_land_areas'] = areas;
       }
+      if (kharifRows.isNotEmpty) draft['__kharif_rows'] = kharifRows.toList();
+      if (yearlyRows.isNotEmpty) draft['__yearly_rows'] = yearlyRows.toList();
+      if (practiceRows.isNotEmpty) {
+        draft['__practice_rows'] = practiceRows.toList();
+      }
       draft['__current_step'] = currentStep.value;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('form_draft', jsonEncode(draft));
     } catch (e) {
       debugPrint('[FormController.saveDraft] $e');
+    }
+  }
+
+  Future<bool> hasDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('form_draft');
+      if (raw == null) return false;
+      final draft = jsonDecode(raw) as Map<String, dynamic>;
+      // Check if there's any real data (not just metadata keys)
+      final dataKeys = draft.keys.where((k) => !k.startsWith('__')).toList();
+      return dataKeys.isNotEmpty;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -347,6 +464,25 @@ class FormController extends GetxController {
           milletLandController(k.toString()).text = v.toString();
         });
         _updateMilletLandTotal();
+      }
+
+      final kharif = draft['__kharif_rows'];
+      if (kharif is List) {
+        kharifRows.assignAll(
+          kharif.cast<Map>().map((row) => row.cast<String, dynamic>()),
+        );
+      }
+      final yearly = draft['__yearly_rows'];
+      if (yearly is List) {
+        yearlyRows.assignAll(
+          yearly.cast<Map>().map((row) => row.cast<String, dynamic>()),
+        );
+      }
+      final practices = draft['__practice_rows'];
+      if (practices is List) {
+        practiceRows.assignAll(
+          practices.cast<Map>().map((row) => row.cast<String, dynamic>()),
+        );
       }
 
       final step = draft['__current_step'] as int?;
@@ -381,10 +517,17 @@ class FormController extends GetxController {
   }
 
   void _populateFromJson(Map<String, dynamic> json) {
+    final source = Map<String, dynamic>.from(json);
+    final extra = json['extra_details'];
+    if (extra is Map) {
+      extra.forEach(
+        (key, value) => source.putIfAbsent(key.toString(), () => value),
+      );
+    }
     for (final section in sections) {
       for (final field in section.fields) {
         final key = field.fieldKey;
-        final raw = json[key];
+        final raw = source[key];
         if (raw == null) continue;
 
         switch (field.inputType) {
@@ -402,7 +545,7 @@ class FormController extends GetxController {
             final v = _toDouble(raw);
             _textControllers[key]!.text = v != null ? v.toString() : '';
             // Restore per-type areas if present
-            final areas = json['millet_land_areas'];
+            final areas = source['millet_land_areas'];
             if (areas is Map && areas.isNotEmpty) {
               areas.forEach((milletType, landVal) {
                 final c = milletLandController(milletType.toString());
@@ -419,15 +562,13 @@ class FormController extends GetxController {
           case 'boolean':
             if (raw is bool) _boolValues[key]!.value = raw;
           case 'polygon':
+          case 'polygon_pencil':
             if (raw is Map && raw['type'] == 'Polygon') {
               final coords = raw['coordinates'] as List?;
               if (coords != null && coords.isNotEmpty) {
                 final ring = coords[0] as List;
                 _polygonValues[key]!.value = ring.map((pt) {
-                  return [
-                    (pt[0] as num).toDouble(),
-                    (pt[1] as num).toDouble()
-                  ];
+                  return [(pt[0] as num).toDouble(), (pt[1] as num).toDouble()];
                 }).toList();
               }
             }
@@ -436,8 +577,9 @@ class FormController extends GetxController {
             if (v != null) _autoCalcValues[key]!.value = v;
           case 'multiselect':
             if (raw is List) {
-              _multiSelectValues[key]!.value =
-                  raw.map((e) => e.toString()).toList();
+              _multiSelectValues[key]!.value = raw
+                  .map((e) => e.toString())
+                  .toList();
             }
         }
       }
@@ -448,8 +590,10 @@ class FormController extends GetxController {
 
   Map<String, dynamic> _buildJson() {
     final map = <String, dynamic>{};
+    final extraDetails = <String, dynamic>{};
     for (final section in sections) {
       for (final field in section.fields) {
+        if (!isFieldVisible(field)) continue;
         final key = field.fieldKey;
         dynamic value;
 
@@ -477,11 +621,12 @@ class FormController extends GetxController {
           case 'boolean':
             value = _boolValues[key]!.value;
           case 'polygon':
+          case 'polygon_pencil':
             final points = _polygonValues[key]!.value;
             if (points != null && points.isNotEmpty) {
               value = {
                 'type': 'Polygon',
-                'coordinates': [points]
+                'coordinates': [points],
               };
             }
           case 'auto_calc':
@@ -504,30 +649,66 @@ class FormController extends GetxController {
             }
         }
 
-        if (value != null) map[key] = value;
+        if (value != null) {
+          if (_parentExtraDetailKeys.contains(key)) {
+            extraDetails[key] = value;
+          } else {
+            map[key] = value;
+          }
+        }
       }
     }
+    if (extraDetails.isNotEmpty) map['extra_details'] = extraDetails;
     // Attach location + start time (only on new submissions)
     if (!isEditMode) {
+      final currentUser = Supabase.instance.client.auth.currentUser;
+      if (currentUser != null) {
+        map['user_id'] = currentUser.id;
+      }
+      if (Get.isRegistered<LanguageController>()) {
+        map['language'] = Get.find<LanguageController>().language.value;
+      }
       if (_capturedLocation != null) {
-        map['form_latitude'] = _capturedLocation!.latitude;
-        map['form_longitude'] = _capturedLocation!.longitude;
-        map['form_location_accuracy'] = _capturedLocation!.accuracy;
+        map['location_lat'] = _capturedLocation!.latitude;
+        map['location_lng'] = _capturedLocation!.longitude;
+        map['location_accuracy_m'] = _capturedLocation!.accuracy;
       }
       if (_formStartedAt != null) {
-        map['form_started_at'] = _formStartedAt!.toIso8601String();
+        map['started_at'] = _formStartedAt!.toIso8601String();
       }
+      map['submitted_at'] = DateTime.now().toUtc().toIso8601String();
     }
 
     return map;
   }
 
-  Future<void> submit() async {
+  Future<bool> submit({bool popOnSuccess = true}) async {
     final formState = formKey.currentState;
     if (formState != null && !formState.validate()) {
       Get.snackbar(
-          'Validation', 'Please fill in the required fields on this step');
-      return;
+        'Validation',
+        'Please fill in the required fields on this step',
+      );
+      return false;
+    }
+
+    final invalidStep = _firstInvalidStep();
+    if (invalidStep != null) {
+      currentStep.value = invalidStep;
+      Get.snackbar(
+        'Validation',
+        'Please fill in all required fields before submitting',
+      );
+      return false;
+    }
+
+    if (!isEditMode && Supabase.instance.client.auth.currentUser == null) {
+      Get.snackbar(
+        'Sign in required',
+        'Please sign in before submitting a survey',
+      );
+      Get.toNamed('/login');
+      return false;
     }
 
     isSubmitting.value = true;
@@ -536,24 +717,139 @@ class FormController extends GetxController {
       if (isEditMode) {
         await _surveyService.update(editId!, json);
       } else {
-        await _surveyService.insert(json);
+        if (kharifRows.isNotEmpty ||
+            yearlyRows.isNotEmpty ||
+            practiceRows.isNotEmpty) {
+          await _surveyService.insertWithChildren(
+            json,
+            kharifRows.toList(),
+            yearlyRows.toList(),
+            practiceRows.toList(),
+          );
+        } else {
+          await _surveyService.insert(json);
+        }
       }
       await clearDraft();
       if (Get.isRegistered<SurveyController>()) {
         Get.find<SurveyController>().loadSurveys();
       }
+
+      // Sync to Google Sheets in background (fire-and-forget)
+      // Pass the id on edits so the edge function updates the existing row
+      if (isEditMode) json['_id'] = editId;
+      _sheetsSyncService.syncToSheet(json);
+
       isSubmitting.value = false;
-      Get.back();
+      if (popOnSuccess) {
+        Get.back();
+      }
       Get.snackbar(
-          'Success', isEditMode ? 'Survey updated' : 'Survey submitted');
+        'Success',
+        isEditMode ? 'Survey updated' : 'Survey submitted',
+      );
+      return true;
     } catch (e) {
       isSubmitting.value = false;
       debugPrint('[FormController.submit] $e');
       Get.snackbar('Error', 'Failed to submit: $e');
+      return false;
     }
   }
 
   // --- Helpers ---
+
+  int? _firstInvalidStep() {
+    for (var i = 0; i < sections.length; i++) {
+      for (final field in sections[i].fields) {
+        if (!isFieldVisible(field)) continue;
+        if (field.isRequired && !_hasFieldValue(field)) return i;
+        if (_fieldValidationError(field) != null) return i;
+      }
+    }
+    return null;
+  }
+
+  bool _hasFieldValue(FormFieldConfig field) {
+    final key = field.fieldKey;
+    return switch (field.inputType) {
+      'text' ||
+      'numeric' ||
+      'mobile' ||
+      'aadhar' ||
+      'currency' ||
+      'acre' ||
+      'millet_land_picker' =>
+        (_textControllers[key]?.text.trim().isNotEmpty ?? false),
+      'dropdown' => _stringValues[key]?.value?.isNotEmpty ?? false,
+      'boolean' => _boolValues[key]?.value != null,
+      'date' => _dateValues[key]?.value != null,
+      'polygon' ||
+      'polygon_pencil' => _polygonValues[key]?.value?.isNotEmpty ?? false,
+      'auto_calc' => _autoCalcValues[key]?.value != 0,
+      'multiselect' => _multiSelectValues[key]?.isNotEmpty ?? false,
+      _ => true,
+    };
+  }
+
+  String localizedOptionLabel(String? optionKey, String value) {
+    final labels = dropdownOptionLabels[optionKey]?[value];
+    if (labels == null) return value;
+
+    var languageCode = 'en';
+    if (Get.isRegistered<LanguageController>()) {
+      languageCode = Get.find<LanguageController>().language.value;
+    }
+
+    return switch (languageCode) {
+      'hi' =>
+        labels['hi']?.isNotEmpty == true
+            ? labels['hi']!
+            : labels['en'] ?? value,
+      'mr' =>
+        labels['mr']?.isNotEmpty == true
+            ? labels['mr']!
+            : labels['en'] ?? value,
+      _ => labels['en']?.isNotEmpty == true ? labels['en']! : value,
+    };
+  }
+
+  Map<String, Map<String, Map<String, String>>> _buildOptionLabelMap(
+    List<Map<String, dynamic>> rows,
+  ) {
+    final map = <String, Map<String, Map<String, String>>>{};
+    for (final row in rows) {
+      final key = row['option_key']?.toString();
+      final value = row['value']?.toString();
+      if (key == null || value == null) continue;
+      map.putIfAbsent(key, () => {})[value] = {
+        'en': row['label']?.toString() ?? value,
+        'hi': row['label_hi']?.toString() ?? '',
+        'mr': row['label_mr']?.toString() ?? '',
+      };
+    }
+    return map;
+  }
+
+  String? _fieldValidationError(FormFieldConfig field) {
+    final value = valueFor(field.fieldKey);
+    if (value == null) return null;
+
+    final text = switch (field.inputType) {
+      'mobile' => value.toString().trim(),
+      'aadhar' => value.toString().replaceAll(' ', '').trim(),
+      _ => '',
+    };
+    if (text.isEmpty) return null;
+
+    if (field.inputType == 'mobile' && !RegExp(r'^[0-9]{10}$').hasMatch(text)) {
+      return 'Enter a 10 digit mobile number';
+    }
+    if (field.inputType == 'aadhar' && !RegExp(r'^[0-9]{12}$').hasMatch(text)) {
+      return 'Enter a 12 digit Aadhaar number';
+    }
+    return null;
+  }
 
   String _formatAadhar(String raw) {
     final digits = raw.replaceAll(' ', '');
@@ -592,3 +888,5 @@ class FormController extends GetxController {
     super.onClose();
   }
 }
+
+const _parentExtraDetailKeys = {'other_crop_details'};

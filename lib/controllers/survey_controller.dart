@@ -3,9 +3,11 @@ import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/farmer_survey.dart';
 import '../services/survey_service.dart';
+import '../services/sheets_sync_service.dart';
 
 class SurveyController extends GetxController {
   final _service = SurveyService();
+  final _sheetsService = SheetsSyncService();
   final surveys = <FarmerSurvey>[].obs;
   final isLoading = false.obs;
   final hasError = false.obs;
@@ -31,10 +33,17 @@ class SurveyController extends GetxController {
     }
   }
 
-  Future<bool> deleteSurvey(String id) async {
+  /// Removes the survey from the app list and deletes it from Google Sheets.
+  /// Does NOT delete from the Supabase database.
+  Future<bool> deleteSurvey(FarmerSurvey survey) async {
     try {
-      await _service.delete(id);
-      Get.snackbar('Deleted', 'Survey removed');
+      // Delete from Google Sheets in the background
+      _sheetsService.deleteFromSheet(
+        farmerName: survey.farmerName ?? '',
+        surveyDate: survey.surveyDate,
+        mobileNo: survey.mobileNo,
+      );
+      Get.snackbar('Deleted', 'Survey removed from app');
       return true;
     } catch (e, st) {
       debugPrint('[SurveyController.deleteSurvey] $e\n$st');

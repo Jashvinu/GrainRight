@@ -28,12 +28,10 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
     final auth = Get.find<MainAuthController>();
-    final email = _emailCtrl.text.trim();
-    final pass = _passCtrl.text;
     if (_isSignup) {
-      auth.signup(email, pass);
+      auth.signup(_emailCtrl.text.trim(), _passCtrl.text);
     } else {
-      auth.login(email, pass);
+      auth.login(_emailCtrl.text.trim(), _passCtrl.text);
     }
   }
 
@@ -90,7 +88,8 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
               child: Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                 child: SingleChildScrollView(
@@ -116,8 +115,9 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                             labelText: 'Email',
                             prefixIcon: Icon(Icons.email_outlined),
                           ),
-                          validator: (v) =>
-                              (v?.contains('@') ?? false) ? null : 'Enter a valid email',
+                          validator: (v) => (v?.contains('@') ?? false)
+                              ? null
+                              : 'Enter a valid email',
                         ),
                         const SizedBox(height: 14),
                         TextFormField(
@@ -140,10 +140,9 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                               ? null
                               : 'Minimum 6 characters',
                         ),
-                        const SizedBox(height: 8),
                         Obx(() => auth.errorMessage.isNotEmpty
                             ? Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.only(top: 8),
                                 child: Text(
                                   auth.errorMessage.value,
                                   style: const TextStyle(
@@ -151,30 +150,27 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                                 ),
                               )
                             : const SizedBox.shrink()),
-                        const SizedBox(height: 8),
-                        Obx(() => SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: auth.isLoading.value ? null : _submit,
-                                child: auth.isLoading.value
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            color: Colors.white),
-                                      )
-                                    : Text(_isSignup ? 'Create Account' : 'Sign In'),
-                              ),
+                        const SizedBox(height: 16),
+                        Obx(() => ElevatedButton(
+                              onPressed: auth.isLoading.value ? null : _submit,
+                              child: auth.isLoading.value
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white),
+                                    )
+                                  : Text(_isSignup
+                                      ? 'Create Account'
+                                      : 'Sign In'),
                             )),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _isSignup = !_isSignup;
-                              auth.errorMessage.value = '';
-                            });
-                          },
+                          onPressed: () => setState(() {
+                            _isSignup = !_isSignup;
+                            auth.errorMessage.value = '';
+                          }),
                           child: Text(
                             _isSignup
                                 ? 'Already have an account? Sign In'
@@ -182,6 +178,36 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                             style: TextStyle(color: AppTheme.green),
                           ),
                         ),
+
+                        // Divider
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('or',
+                                  style: TextStyle(
+                                      color: AppTheme.textMuted,
+                                      fontSize: 13)),
+                            ),
+                            const Expanded(child: Divider()),
+                          ]),
+                        ),
+
+                        // Guest access
+                        Obx(() => OutlinedButton(
+                              onPressed: auth.isLoading.value
+                                  ? null
+                                  : auth.continueAsGuest,
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                    color: AppTheme.green.withValues(
+                                        alpha: 0.4)),
+                              ),
+                              child: const Text('Continue without signing in'),
+                            )),
                       ],
                     ),
                   ),
