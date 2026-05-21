@@ -46,3 +46,4 @@ app.*.map.json
 
 # Environment secrets
 .env
+wrkfarm-415118-f4e4c633fc0a.json
