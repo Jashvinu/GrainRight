@@ -171,9 +171,9 @@ class DynamicField extends StatelessWidget {
 
   Widget _buildDatePicker(BuildContext context, FormController c) {
     final rxDate = c.dateValue(config.fieldKey);
-    // Default range starts in 1940 so date-of-birth years are selectable;
+    // Default range starts in 1930 so date-of-birth years are selectable;
     // a `date_min` validation rule can still narrow it per field.
-    DateTime firstDate = DateTime(1940);
+    DateTime firstDate = DateTime(1930);
     DateTime lastDate = DateTime.now();
 
     final validation = config.validation;

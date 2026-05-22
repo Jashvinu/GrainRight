@@ -234,6 +234,7 @@ class _TextAnswerInput extends StatelessWidget {
 
   TextInputType get _keyboardType {
     return switch (field.inputType) {
+      'text' => TextInputType.multiline,
       'mobile' => TextInputType.phone,
       'aadhar' => TextInputType.number,
       'numeric' || 'millet_land_picker' => TextInputType.number,
@@ -472,7 +473,7 @@ class _DateAnswerInput extends StatelessWidget {
 
   Future<void> _pickDate(BuildContext context) async {
     final rxDate = formController.dateValue(field.fieldKey);
-    var firstDate = DateTime(2020);
+    var firstDate = DateTime(1930);
     var lastDate = DateTime.now();
 
     final validation = field.validation;

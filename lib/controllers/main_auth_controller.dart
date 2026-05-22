@@ -37,31 +37,6 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<void> signup(String email, String password) async {
-    isLoading.value = true;
-    errorMessage.value = '';
-    try {
-      final res = await _auth.signUp(email: email, password: password);
-      if (res.session != null) {
-        await _afterSignIn();
-      } else {
-        errorMessage.value = '';
-        Get.snackbar(
-          'Check your email',
-          'A confirmation link has been sent to $email',
-          snackPosition: SnackPosition.BOTTOM,
-          duration: const Duration(seconds: 5),
-        );
-      }
-    } on AuthException catch (e) {
-      errorMessage.value = e.message;
-    } catch (_) {
-      errorMessage.value = 'Signup failed. Check your connection.';
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
   Future<void> continueAsGuest() async {
     isLoading.value = true;
     errorMessage.value = '';

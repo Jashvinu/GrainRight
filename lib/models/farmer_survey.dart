@@ -1,5 +1,6 @@
 class FarmerSurvey {
   final String? id;
+  final String? userId;
   final String? surveyDate;
   final String? season;
   final String? farmerName;
@@ -68,6 +69,7 @@ class FarmerSurvey {
 
   FarmerSurvey({
     this.id,
+    this.userId,
     this.surveyDate,
     this.season,
     this.farmerName,
@@ -125,6 +127,7 @@ class FarmerSurvey {
   factory FarmerSurvey.fromJson(Map<String, dynamic> json) {
     return FarmerSurvey(
       id: json['id'] as String?,
+      userId: json['user_id'] as String?,
       surveyDate: json['survey_date'] as String?,
       season: json['season'] as String?,
       farmerName: json['farmer_name'] as String?,

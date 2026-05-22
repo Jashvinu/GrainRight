@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:latlong2/latlong.dart';
+import '../config/theme.dart';
 
 class PolygonMapField extends StatefulWidget {
   final String label;
@@ -29,28 +31,30 @@ class _Prediction {
 }
 
 class _PolygonMapFieldState extends State<PolygonMapField> {
-  final Completer<GoogleMapController> _controller = Completer();
+  final _controller = MapController();
   late final String _apiKey;
-  
+
   final _searchController = TextEditingController();
   List<_Prediction> _predictions = [];
 
-  final Set<Polygon> _polygons = {};
   List<LatLng> _currentPoints = [];
 
-  static const CameraPosition _initialPosition = CameraPosition(
-    target: LatLng(20.5937, 78.9629),
-    zoom: 5.0,
-  );
+  static const _initialCenter = LatLng(20.5937, 78.9629);
+  static const _initialZoom = 5.0;
 
   @override
   void initState() {
     super.initState();
-    _apiKey = dotenv.env['VITE_GOOGLE_MAPS_API_KEY'] ?? dotenv.env['GOOGLE_MAPS_API_KEY'] ?? '';
+    _apiKey =
+        dotenv.env['VITE_GOOGLE_MAPS_API_KEY'] ??
+        dotenv.env['GOOGLE_MAPS_API_KEY'] ??
+        '';
 
-    if (widget.polygonState.value != null && widget.polygonState.value!.isNotEmpty) {
-      _currentPoints = widget.polygonState.value!.map((pt) => LatLng(pt[1], pt[0])).toList();
-      _updatePolygons();
+    if (widget.polygonState.value != null &&
+        widget.polygonState.value!.isNotEmpty) {
+      _currentPoints = widget.polygonState.value!
+          .map((pt) => LatLng(pt[1], pt[0]))
+          .toList();
     }
   }
 
@@ -63,31 +67,15 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   void _onMapTap(LatLng position) {
     setState(() {
       _currentPoints.add(position);
-      _updatePolygons();
+      _updateState();
     });
-  }
-
-  void _updatePolygons() {
-    _polygons.clear();
-    if (_currentPoints.isNotEmpty) {
-      _polygons.add(
-        Polygon(
-          polygonId: const PolygonId('farm_polygon'),
-          points: _currentPoints,
-          strokeWidth: 3,
-          strokeColor: Colors.blue,
-          fillColor: Colors.blue.withValues(alpha: 0.2),
-        ),
-      );
-    }
-    _updateState();
   }
 
   void _undoLastPoint() {
     if (_currentPoints.isNotEmpty) {
       setState(() {
         _currentPoints.removeLast();
-        _updatePolygons();
+        _updateState();
       });
     }
   }
@@ -95,7 +83,7 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   void _clearPolygon() {
     setState(() {
       _currentPoints.clear();
-      _updatePolygons();
+      _updateState();
     });
   }
 
@@ -103,7 +91,9 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
     if (_currentPoints.isEmpty) {
       widget.polygonState.value = null;
     } else {
-      widget.polygonState.value = _currentPoints.map((pt) => [pt.longitude, pt.latitude]).toList();
+      widget.polygonState.value = _currentPoints
+          .map((pt) => [pt.longitude, pt.latitude])
+          .toList();
     }
   }
 
@@ -115,13 +105,17 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
     if (_apiKey.isEmpty) return;
 
     try {
-      final url = Uri.parse('https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(input)}&key=$_apiKey');
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${Uri.encodeComponent(input)}&key=$_apiKey',
+      );
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK' && data['predictions'] != null) {
           setState(() {
-            _predictions = (data['predictions'] as List).map((p) => _Prediction(p['place_id'], p['description'])).toList();
+            _predictions = (data['predictions'] as List)
+                .map((p) => _Prediction(p['place_id'], p['description']))
+                .toList();
           });
         } else {
           setState(() => _predictions = []);
@@ -140,24 +134,29 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
     FocusScope.of(context).unfocus();
 
     try {
-      final url = Uri.parse('https://maps.googleapis.com/maps/api/place/details/json?place_id=${p.placeId}&key=$_apiKey');
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/details/json?place_id=${p.placeId}&key=$_apiKey',
+      );
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['status'] == 'OK' && data['result'] != null) {
           final loc = data['result']['geometry']['location'];
-          final lat = loc['lat'];
-          final lng = loc['lng'];
-          
-          final GoogleMapController controller = await _controller.future;
-          controller.animateCamera(CameraUpdate.newCameraPosition(
-            CameraPosition(target: LatLng(lat, lng), zoom: 16),
-          ));
+          final lat = (loc['lat'] as num).toDouble();
+          final lng = (loc['lng'] as num).toDouble();
+          _controller.move(LatLng(lat, lng), 16);
         }
       }
     } catch (e) {
       debugPrint('Details error: $e');
     }
+  }
+
+  void _zoomBy(double delta) {
+    try {
+      final camera = _controller.camera;
+      _controller.move(camera.center, (camera.zoom + delta).clamp(3.0, 20.0));
+    } catch (_) {}
   }
 
   @override
@@ -184,26 +183,54 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
             borderRadius: BorderRadius.circular(12),
             child: Stack(
               children: [
-                GoogleMap(
-                  mapType: MapType.satellite,
-                  initialCameraPosition: _initialPosition,
-                  polygons: _polygons,
-                  onMapCreated: (GoogleMapController controller) {
-                    _controller.complete(controller);
-                    // If we already have points, center the camera around them
-                    if (_currentPoints.isNotEmpty) {
-                      Future.delayed(const Duration(milliseconds: 500), () {
-                        controller.animateCamera(CameraUpdate.newLatLngBounds(
-                          _getBounds(_currentPoints), 50,
-                        ));
-                      });
-                    }
-                  },
-                  onTap: _onMapTap,
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: true,
+                FlutterMap(
+                  mapController: _controller,
+                  options: MapOptions(
+                    initialCenter: _currentPoints.isEmpty
+                        ? _initialCenter
+                        : _currentPoints.first,
+                    initialZoom: _currentPoints.isEmpty ? _initialZoom : 16,
+                    initialCameraFit: _currentPoints.length >= 3
+                        ? CameraFit.bounds(
+                            bounds: LatLngBounds.fromPoints(_currentPoints),
+                            padding: const EdgeInsets.all(40),
+                          )
+                        : null,
+                    onTap: (_, latLng) => _onMapTap(latLng),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                      userAgentPackageName: 'grainright.wrkfarm',
+                    ),
+                    if (_currentPoints.length >= 3)
+                      PolygonLayer(
+                        polygons: [
+                          Polygon(
+                            points: _currentPoints,
+                            color: AppTheme.green.withValues(alpha: 0.22),
+                            borderColor: AppTheme.green,
+                            borderStrokeWidth: 3,
+                          ),
+                        ],
+                      ),
+                    CircleLayer(
+                      circles: _currentPoints
+                          .map(
+                            (point) => CircleMarker(
+                              point: point,
+                              radius: 7,
+                              color: AppTheme.greenDark,
+                              borderColor: Colors.white,
+                              borderStrokeWidth: 1.5,
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
                 ),
-                
+
                 // Search Bar Overlay
                 Positioned(
                   top: 16,
@@ -216,7 +243,11 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
                           boxShadow: const [
-                            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                            BoxShadow(
+                              color: Colors.black12,
+                              blurRadius: 4,
+                              offset: Offset(0, 2),
+                            ),
                           ],
                         ),
                         child: TextField(
@@ -225,7 +256,10 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                           decoration: InputDecoration(
                             hintText: 'Search location...',
                             border: InputBorder.none,
-                            prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                            prefixIcon: const Icon(
+                              Icons.search,
+                              color: Colors.grey,
+                            ),
                             suffixIcon: _searchController.text.isNotEmpty
                                 ? IconButton(
                                     icon: const Icon(Icons.clear, size: 20),
@@ -235,7 +269,10 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                                     },
                                   )
                                 : null,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
                         ),
                       ),
@@ -247,7 +284,11 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(8),
                             boxShadow: const [
-                              BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                              BoxShadow(
+                                color: Colors.black12,
+                                blurRadius: 4,
+                                offset: Offset(0, 2),
+                              ),
                             ],
                           ),
                           child: ListView.builder(
@@ -256,7 +297,10 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                             itemBuilder: (context, index) {
                               final p = _predictions[index];
                               return ListTile(
-                                leading: const Icon(Icons.location_on, color: Colors.grey),
+                                leading: const Icon(
+                                  Icons.location_on,
+                                  color: Colors.grey,
+                                ),
                                 title: Text(p.description),
                                 onTap: () => _goToPlace(p),
                               );
@@ -276,17 +320,39 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                       FloatingActionButton.small(
                         heroTag: 'undo_btn',
                         backgroundColor: Colors.white,
-                        onPressed: _currentPoints.isNotEmpty ? _undoLastPoint : null,
-                        child: Icon(Icons.undo, color: _currentPoints.isNotEmpty ? Colors.black87 : Colors.grey),
+                        onPressed: _currentPoints.isNotEmpty
+                            ? _undoLastPoint
+                            : null,
+                        child: Icon(
+                          Icons.undo,
+                          color: _currentPoints.isNotEmpty
+                              ? Colors.black87
+                              : Colors.grey,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       FloatingActionButton.small(
                         heroTag: 'clear_btn',
                         backgroundColor: Colors.white,
-                        onPressed: _currentPoints.isNotEmpty ? _clearPolygon : null,
-                        child: Icon(Icons.delete_outline, color: _currentPoints.isNotEmpty ? Colors.red : Colors.grey),
+                        onPressed: _currentPoints.isNotEmpty
+                            ? _clearPolygon
+                            : null,
+                        child: Icon(
+                          Icons.delete_outline,
+                          color: _currentPoints.isNotEmpty
+                              ? Colors.red
+                              : Colors.grey,
+                        ),
                       ),
                     ],
+                  ),
+                ),
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: _MapZoomControls(
+                    onZoomIn: () => _zoomBy(1),
+                    onZoomOut: () => _zoomBy(-1),
                   ),
                 ),
               ],
@@ -305,23 +371,44 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
       ],
     );
   }
+}
 
-  LatLngBounds _getBounds(List<LatLng> points) {
-    double minLat = points.first.latitude;
-    double maxLat = points.first.latitude;
-    double minLng = points.first.longitude;
-    double maxLng = points.first.longitude;
+class _MapZoomControls extends StatelessWidget {
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
 
-    for (var p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
+  const _MapZoomControls({required this.onZoomIn, required this.onZoomOut});
 
-    return LatLngBounds(
-      southwest: LatLng(minLat, minLng),
-      northeast: LatLng(maxLat, maxLng),
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black26,
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Zoom in',
+            onPressed: onZoomIn,
+            icon: const Icon(Icons.add_rounded),
+          ),
+          const Divider(height: 1),
+          IconButton(
+            tooltip: 'Zoom out',
+            onPressed: onZoomOut,
+            icon: const Icon(Icons.remove_rounded),
+          ),
+        ],
+      ),
     );
   }
 }

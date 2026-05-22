@@ -197,6 +197,10 @@ class FormController extends GetxController {
     });
   }
 
+  void prepareEdit(String id) {
+    editId = id;
+  }
+
   Future<void> loadConfig() async {
     hasError.value = false;
     isConfigLoaded.value = false;
@@ -507,12 +511,15 @@ class FormController extends GetxController {
   Future<void> loadSurvey(String id) async {
     try {
       editId = id;
-      final data = await _surveyService.fetchById(id);
-      _populateFromJson(data.toJson());
+      final data = await _surveyService.fetchEditableById(id);
+      _populateFromJson(data);
+      kharifRows.assignAll(_rowList(data[SurveyService.kharifRowsKey]));
+      yearlyRows.assignAll(_rowList(data[SurveyService.yearlyRowsKey]));
+      practiceRows.assignAll(_rowList(data[SurveyService.practiceRowsKey]));
       visitedSteps.addAll(List.generate(totalSteps, (i) => i).toSet());
     } catch (e, st) {
       debugPrint('[FormController.loadSurvey] $e\n$st');
-      Get.snackbar('Error', _friendlyError(e));
+      Get.snackbar('Could not open survey', _surveyLoadError(e));
     }
   }
 
@@ -645,7 +652,7 @@ class FormController extends GetxController {
                 final v = double.tryParse(c.text);
                 if (v != null && v > 0) areas[k] = v;
               });
-              if (areas.isNotEmpty) map['millet_land_areas'] = areas;
+              if (areas.isNotEmpty) extraDetails['millet_land_areas'] = areas;
             }
         }
 
@@ -715,7 +722,13 @@ class FormController extends GetxController {
     try {
       final json = _buildJson();
       if (isEditMode) {
-        await _surveyService.update(editId!, json);
+        await _surveyService.updateWithChildren(
+          editId!,
+          json,
+          kharifRows.toList(),
+          yearlyRows.toList(),
+          practiceRows.toList(),
+        );
       } else {
         if (kharifRows.isNotEmpty ||
             yearlyRows.isNotEmpty ||
@@ -868,6 +881,21 @@ class FormController extends GetxController {
     if (value is int) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
+  }
+
+  static List<Map<String, dynamic>> _rowList(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  static String _surveyLoadError(Object e) {
+    if (e is PostgrestException && e.code == 'PGRST116') {
+      return 'This survey is not available for this login session. Refresh the list and try again.';
+    }
+    return _friendlyError(e);
   }
 
   static String _friendlyError(Object e) {

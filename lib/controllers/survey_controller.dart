@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,6 +14,7 @@ class SurveyController extends GetxController {
   final isLoading = false.obs;
   final hasError = false.obs;
   final errorMessage = ''.obs;
+  final deletingSurveyIds = <String>{}.obs;
 
   @override
   void onInit() {
@@ -33,22 +36,44 @@ class SurveyController extends GetxController {
     }
   }
 
-  /// Removes the survey from the app list and deletes it from Google Sheets.
-  /// Does NOT delete from the Supabase database.
+  bool isDeleting(String? surveyId) =>
+      surveyId != null && deletingSurveyIds.contains(surveyId);
+
+  /// Deletes the survey from Supabase, then mirrors the delete to Google Sheets.
   Future<bool> deleteSurvey(FarmerSurvey survey) async {
+    final id = survey.id;
+    if (id == null || id.isEmpty) {
+      Get.snackbar('Delete failed', 'This survey is missing a database id.');
+      return false;
+    }
+    if (deletingSurveyIds.contains(id)) return false;
+
+    deletingSurveyIds.add(id);
     try {
-      // Delete from Google Sheets in the background
-      _sheetsService.deleteFromSheet(
-        farmerName: survey.farmerName ?? '',
-        surveyDate: survey.surveyDate,
-        mobileNo: survey.mobileNo,
+      final deleted = await _service.delete(id);
+      if (!deleted) {
+        Get.snackbar(
+          'Delete failed',
+          'Survey was not deleted. It may already be gone, or this user may not own it.',
+        );
+        return false;
+      }
+
+      unawaited(
+        _sheetsService.deleteFromSheet(
+          farmerName: survey.farmerName ?? '',
+          surveyDate: survey.surveyDate,
+          mobileNo: survey.mobileNo,
+        ),
       );
-      Get.snackbar('Deleted', 'Survey removed from app');
+      Get.snackbar('Deleted', 'Survey deleted from the remote database');
       return true;
     } catch (e, st) {
       debugPrint('[SurveyController.deleteSurvey] $e\n$st');
       Get.snackbar('Error', _friendlyError(e));
       return false;
+    } finally {
+      deletingSurveyIds.remove(id);
     }
   }
 

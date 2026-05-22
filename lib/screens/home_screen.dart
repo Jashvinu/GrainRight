@@ -1,12 +1,67 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../controllers/survey_controller.dart';
+import '../models/farmer_survey.dart';
 import '../widgets/brand_text.dart';
 import '../widgets/survey_list_tile.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
+
+  Future<bool> _confirmDelete(BuildContext context, FarmerSurvey survey) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Survey'),
+        content: Text(
+          'Delete survey for "${survey.farmerName ?? 'Unnamed'}" from the remote database and Google Sheet? This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _deleteFromMenu(
+    BuildContext context,
+    SurveyController controller,
+    FarmerSurvey survey,
+  ) async {
+    final confirmed = await _confirmDelete(context, survey);
+    if (!confirmed) return;
+
+    final deleted = await controller.deleteSurvey(survey);
+    if (deleted) _removeFromList(controller, survey);
+  }
+
+  bool _canDelete(FarmerSurvey survey) {
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    return currentUserId != null && survey.userId == currentUserId;
+  }
+
+  void _removeFromList(SurveyController controller, FarmerSurvey survey) {
+    final id = survey.id;
+    if (id == null) {
+      controller.surveys.remove(survey);
+      return;
+    }
+    controller.surveys.removeWhere((item) => item.id == id);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +104,11 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.cloud_off_rounded,
-                      size: 56, color: Colors.grey),
+                  const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 56,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     controller.errorMessage.value,
@@ -69,11 +127,45 @@ class HomeScreen extends StatelessWidget {
           );
         }
         if (controller.surveys.isEmpty) {
-          // Auto-navigate to form when no surveys exist
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Get.toNamed('/form');
-          });
-          return const SizedBox.shrink();
+          return RefreshIndicator(
+            color: AppTheme.green,
+            onRefresh: controller.loadSurveys,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(28, 96, 28, 28),
+              children: [
+                Icon(
+                  Icons.cloud_done_outlined,
+                  size: 58,
+                  color: Colors.grey[350],
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'No surveys found',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.greenDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Farmer survey records will appear here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 14, color: AppTheme.textMuted),
+                ),
+                const SizedBox(height: 24),
+                Center(
+                  child: ElevatedButton.icon(
+                    onPressed: () => Get.toNamed('/form'),
+                    icon: const Icon(Icons.add_rounded),
+                    label: const Text('New Survey'),
+                  ),
+                ),
+              ],
+            ),
+          );
         }
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -92,7 +184,10 @@ class HomeScreen extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.greenPale,
                           borderRadius: BorderRadius.circular(20),
@@ -117,11 +212,6 @@ class HomeScreen extends StatelessWidget {
                       color: AppTheme.greenDark,
                       letterSpacing: -0.3,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Swipe left on a survey to delete',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[500]),
                   ),
                 ],
               ),
@@ -160,53 +250,44 @@ class HomeScreen extends StatelessWidget {
                     }
                     i -= 1;
                     final survey = controller.surveys[i];
+                    final canDelete = _canDelete(survey);
                     return Dismissible(
-                      key: Key(survey.id!),
-                      direction: DismissDirection.endToStart,
+                      key: ValueKey(survey.id ?? 'survey-$i'),
+                      direction: controller.isDeleting(survey.id) || !canDelete
+                          ? DismissDirection.none
+                          : DismissDirection.endToStart,
                       background: Container(
                         alignment: Alignment.centerRight,
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 5,
+                        ),
                         padding: const EdgeInsets.only(right: 24),
                         decoration: BoxDecoration(
                           color: Colors.red.shade50,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(Icons.delete_outline, color: Colors.red.shade400),
-                      ),
-                      confirmDismiss: (_) => showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          title: const Text('Delete Survey'),
-                          content: Text(
-                            'Remove survey for "${survey.farmerName ?? 'Unnamed'}" from the app and Google Sheet? Data will be kept in the database.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancel'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red.shade400,
-                              ),
-                              child: const Text('Delete'),
-                            ),
-                          ],
+                        child: Icon(
+                          Icons.delete_outline,
+                          color: Colors.red.shade400,
                         ),
                       ),
+                      confirmDismiss: (_) async {
+                        final confirmed = await _confirmDelete(context, survey);
+                        if (!confirmed) return false;
+                        return controller.deleteSurvey(survey);
+                      },
                       onDismissed: (_) async {
-                        final index = controller.surveys.indexOf(survey);
-                        controller.surveys.remove(survey);
-                        final ok = await controller.deleteSurvey(survey);
-                        if (!ok && index >= 0) {
-                          controller.surveys.insert(index, survey);
-                        }
+                        _removeFromList(controller, survey);
                       },
                       child: SurveyListTile(
                         survey: survey,
-                        onTap: () => Get.toNamed('/form', arguments: survey.id),
+                        onTap: () =>
+                            Get.toNamed('/form/classic', arguments: survey.id),
+                        onDelete: canDelete
+                            ? () => _deleteFromMenu(context, controller, survey)
+                            : null,
+                        isDeleting: controller.isDeleting(survey.id),
                       ),
                     );
                   },

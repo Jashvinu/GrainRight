@@ -39,10 +39,11 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
   }
 
   Future<void> _loadData() async {
+    final surveyId = Get.arguments as String?;
+    if (surveyId != null) c.prepareEdit(surveyId);
     await c.loadConfig();
     if (!c.isConfigLoaded.value) return;
     _chipKeys = List.generate(c.totalSteps, (_) => GlobalKey());
-    final surveyId = Get.arguments as String?;
     if (surveyId != null) {
       await c.loadSurvey(surveyId);
     } else {

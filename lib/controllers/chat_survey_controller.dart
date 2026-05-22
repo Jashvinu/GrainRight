@@ -47,8 +47,9 @@ class ChatSurveyController extends GetxController {
   }
 
   Future<void> _start() async {
-    await formController.loadConfig();
     final id = Get.arguments as String?;
+    if (id != null) formController.prepareEdit(id);
+    await formController.loadConfig();
     if (id != null) {
       await formController.loadSurvey(id);
     }
@@ -148,7 +149,7 @@ class ChatSurveyController extends GetxController {
     final submitted = await formController.submit(popOnSuccess: false);
     isSubmitting.value = false;
     if (!submitted) return;
-    Get.offNamed('/home');
+    Get.offNamed('/surveys');
     Get.snackbar('Success', 'Survey submitted. Diagnostics now available.');
   }
 

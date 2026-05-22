@@ -49,12 +49,6 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
     WidgetsBinding.instance.removeObserver(this);
     _messageWorker.dispose();
     _scrollController.dispose();
-    if (Get.isRegistered<ChatSurveyController>(tag: 'chat_survey')) {
-      Get.delete<ChatSurveyController>(tag: 'chat_survey');
-    }
-    if (Get.isRegistered<FormController>(tag: _formTag)) {
-      Get.delete<FormController>(tag: _formTag);
-    }
     super.dispose();
   }
 

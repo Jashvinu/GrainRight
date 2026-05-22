@@ -6,11 +6,15 @@ import '../models/farmer_survey.dart';
 class SurveyListTile extends StatelessWidget {
   final FarmerSurvey survey;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
+  final bool isDeleting;
 
   const SurveyListTile({
     super.key,
     required this.survey,
     required this.onTap,
+    this.onDelete,
+    this.isDeleting = false,
   });
 
   @override
@@ -67,15 +71,23 @@ class SurveyListTile extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        if (survey.villageGp != null && survey.villageGp!.isNotEmpty) ...[
-                          Icon(Icons.location_on_outlined, size: 13, color: Colors.grey[400]),
+                        if (survey.villageGp != null &&
+                            survey.villageGp!.isNotEmpty) ...[
+                          Icon(
+                            Icons.location_on_outlined,
+                            size: 13,
+                            color: Colors.grey[400],
+                          ),
                           const SizedBox(width: 3),
                           Flexible(
                             child: Text(
                               [survey.villageGp, survey.district]
                                   .where((s) => s != null && s.isNotEmpty)
                                   .join(', '),
-                              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -98,7 +110,65 @@ class SurveyListTile extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey[400]),
+                  SizedBox(
+                    height: 32,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 20,
+                          color: Colors.grey[400],
+                        ),
+                        if (onDelete != null)
+                          isDeleting
+                              ? const SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                              : SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: PopupMenuButton<_SurveyTileAction>(
+                                    tooltip: 'Survey actions',
+                                    padding: EdgeInsets.zero,
+                                    icon: Icon(
+                                      Icons.more_vert_rounded,
+                                      size: 20,
+                                      color: Colors.grey[500],
+                                    ),
+                                    onSelected: (action) {
+                                      switch (action) {
+                                        case _SurveyTileAction.delete:
+                                          onDelete?.call();
+                                      }
+                                    },
+                                    itemBuilder: (_) => [
+                                      const PopupMenuItem(
+                                        value: _SurveyTileAction.delete,
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline),
+                                            SizedBox(width: 10),
+                                            Text('Delete'),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -108,3 +178,5 @@ class SurveyListTile extends StatelessWidget {
     );
   }
 }
+
+enum _SurveyTileAction { delete }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
+import 'package:latlong2/latlong.dart' as ll;
 import '../../config/theme.dart';
 import '../../models/form_config.dart';
 import '../../screens/pencil_polygon_screen.dart';
@@ -32,10 +34,7 @@ class PolygonPromptWidget extends StatelessWidget {
           children: [
             Text(
               field.localizedLabel(context),
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 19,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 19),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -100,6 +99,7 @@ class PolygonAnswerWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ring = PolygonGeometry.fromGeoJsonRing(coords);
+    final points = ring.map(_toMapPoint).toList();
     return Align(
       alignment: Alignment.centerRight,
       child: SizedBox(
@@ -110,28 +110,40 @@ class PolygonAnswerWidget extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              GoogleMap(
-                mapType: MapType.satellite,
-                initialCameraPosition: CameraPosition(
-                  target: ring.isEmpty ? const LatLng(20.5937, 78.9629) : ring.first,
-                  zoom: 17,
+              FlutterMap(
+                options: MapOptions(
+                  initialCenter: points.isEmpty
+                      ? const ll.LatLng(20.5937, 78.9629)
+                      : points.first,
+                  initialZoom: 16,
+                  initialCameraFit: points.length >= 4
+                      ? CameraFit.bounds(
+                          bounds: LatLngBounds.fromPoints(points),
+                          padding: const EdgeInsets.all(20),
+                        )
+                      : null,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.none,
+                  ),
                 ),
-                liteModeEnabled: true,
-                zoomControlsEnabled: false,
-                scrollGesturesEnabled: false,
-                zoomGesturesEnabled: false,
-                rotateGesturesEnabled: false,
-                tiltGesturesEnabled: false,
-                polygons: {
-                  if (ring.length >= 4)
-                    Polygon(
-                      polygonId: const PolygonId('answer_polygon'),
-                      points: ring,
-                      strokeColor: AppTheme.green,
-                      strokeWidth: 3,
-                      fillColor: AppTheme.green.withValues(alpha: 0.25),
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    userAgentPackageName: 'grainright.wrkfarm',
+                  ),
+                  if (points.length >= 4)
+                    PolygonLayer(
+                      polygons: [
+                        Polygon(
+                          points: points,
+                          color: AppTheme.green.withValues(alpha: 0.25),
+                          borderColor: AppTheme.green,
+                          borderStrokeWidth: 3,
+                        ),
+                      ],
                     ),
-                },
+                ],
               ),
               Positioned(
                 left: 8,
@@ -142,7 +154,10 @@ class PolygonAnswerWidget extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
                     child: Text('${areaHectares.toStringAsFixed(2)} ha'),
                   ),
                 ),
@@ -153,4 +168,7 @@ class PolygonAnswerWidget extends StatelessWidget {
       ),
     );
   }
+
+  static ll.LatLng _toMapPoint(gmaps.LatLng point) =>
+      ll.LatLng(point.latitude, point.longitude);
 }

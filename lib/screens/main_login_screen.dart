@@ -16,7 +16,7 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscure = true;
-  bool _isSignup = false;
+  bool _showEmailLogin = false;
 
   @override
   void dispose() {
@@ -25,14 +25,10 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  void _submitEmailLogin() {
     if (!_formKey.currentState!.validate()) return;
     final auth = Get.find<MainAuthController>();
-    if (_isSignup) {
-      auth.signup(_emailCtrl.text.trim(), _passCtrl.text);
-    } else {
-      auth.login(_emailCtrl.text.trim(), _passCtrl.text);
-    }
+    auth.login(_emailCtrl.text.trim(), _passCtrl.text);
   }
 
   @override
@@ -82,14 +78,13 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
               ),
             ),
 
-            // Form card
+            // Login panel
             Expanded(
               flex: 3,
               child: Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(28)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
                 child: SingleChildScrollView(
@@ -99,115 +94,179 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Text(
-                          _isSignup ? 'Create Account' : 'Sign In',
+                          'Continue as Guest',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w700,
                             color: AppTheme.textDark,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'No account setup required.',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 14,
+                          ),
+                        ),
                         const SizedBox(height: 20),
-                        TextFormField(
-                          controller: _emailCtrl,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Email',
-                            prefixIcon: Icon(Icons.email_outlined),
+                        Obx(
+                          () => ElevatedButton.icon(
+                            onPressed: auth.isLoading.value
+                                ? null
+                                : auth.continueAsGuest,
+                            icon: auth.isLoading.value
+                                ? const SizedBox(
+                                    height: 18,
+                                    width: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.person_outline),
+                            label: const Text('Continue as Guest'),
                           ),
-                          validator: (v) => (v?.contains('@') ?? false)
-                              ? null
-                              : 'Enter a valid email',
                         ),
-                        const SizedBox(height: 14),
-                        TextFormField(
-                          controller: _passCtrl,
-                          obscureText: _obscure,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _submit(),
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outlined),
-                            suffixIcon: IconButton(
-                              icon: Icon(_obscure
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined),
-                              onPressed: () =>
-                                  setState(() => _obscure = !_obscure),
-                            ),
-                          ),
-                          validator: (v) => (v?.length ?? 0) >= 6
-                              ? null
-                              : 'Minimum 6 characters',
+                        Obx(
+                          () => auth.errorMessage.isNotEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Text(
+                                    auth.errorMessage.value,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
-                        Obx(() => auth.errorMessage.isNotEmpty
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Text(
-                                  auth.errorMessage.value,
-                                  style: const TextStyle(
-                                      color: Colors.red, fontSize: 13),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          child: Row(
+                            children: [
+                              const Expanded(child: Divider()),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
                                 ),
-                              )
-                            : const SizedBox.shrink()),
-                        const SizedBox(height: 16),
-                        Obx(() => ElevatedButton(
-                              onPressed: auth.isLoading.value ? null : _submit,
-                              child: auth.isLoading.value
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white),
-                                    )
-                                  : Text(_isSignup
-                                      ? 'Create Account'
-                                      : 'Sign In'),
-                            )),
-                        const SizedBox(height: 8),
-                        TextButton(
+                                child: Text(
+                                  'optional',
+                                  style: TextStyle(
+                                    color: AppTheme.textMuted,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const Expanded(child: Divider()),
+                            ],
+                          ),
+                        ),
+                        OutlinedButton.icon(
                           onPressed: () => setState(() {
-                            _isSignup = !_isSignup;
+                            _showEmailLogin = !_showEmailLogin;
                             auth.errorMessage.value = '';
                           }),
-                          child: Text(
-                            _isSignup
-                                ? 'Already have an account? Sign In'
-                                : "Don't have an account? Sign Up",
-                            style: TextStyle(color: AppTheme.green),
+                          icon: Icon(
+                            _showEmailLogin
+                                ? Icons.expand_less
+                                : Icons.email_outlined,
+                          ),
+                          label: Text(
+                            _showEmailLogin
+                                ? 'Hide Email Login'
+                                : 'Use Email Login',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: AppTheme.green.withValues(alpha: 0.4),
+                            ),
                           ),
                         ),
-
-                        // Divider
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(children: [
-                            const Expanded(child: Divider()),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('or',
-                                  style: TextStyle(
-                                      color: AppTheme.textMuted,
-                                      fontSize: 13)),
-                            ),
-                            const Expanded(child: Divider()),
-                          ]),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: _showEmailLogin
+                              ? Padding(
+                                  key: const ValueKey('email-login'),
+                                  padding: const EdgeInsets.only(top: 16),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      TextFormField(
+                                        controller: _emailCtrl,
+                                        keyboardType:
+                                            TextInputType.emailAddress,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Email',
+                                          prefixIcon: Icon(
+                                            Icons.email_outlined,
+                                          ),
+                                        ),
+                                        validator: (v) =>
+                                            (v?.contains('@') ?? false)
+                                            ? null
+                                            : 'Enter a valid email',
+                                      ),
+                                      const SizedBox(height: 14),
+                                      TextFormField(
+                                        controller: _passCtrl,
+                                        obscureText: _obscure,
+                                        textInputAction: TextInputAction.done,
+                                        onFieldSubmitted: (_) =>
+                                            _submitEmailLogin(),
+                                        decoration: InputDecoration(
+                                          labelText: 'Password',
+                                          prefixIcon: const Icon(
+                                            Icons.lock_outlined,
+                                          ),
+                                          suffixIcon: IconButton(
+                                            icon: Icon(
+                                              _obscure
+                                                  ? Icons
+                                                        .visibility_off_outlined
+                                                  : Icons.visibility_outlined,
+                                            ),
+                                            onPressed: () => setState(
+                                              () => _obscure = !_obscure,
+                                            ),
+                                          ),
+                                        ),
+                                        validator: (v) => (v?.length ?? 0) >= 6
+                                            ? null
+                                            : 'Minimum 6 characters',
+                                      ),
+                                      const SizedBox(height: 16),
+                                      Obx(
+                                        () => ElevatedButton.icon(
+                                          onPressed: auth.isLoading.value
+                                              ? null
+                                              : _submitEmailLogin,
+                                          icon: auth.isLoading.value
+                                              ? const SizedBox(
+                                                  height: 18,
+                                                  width: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                        color: Colors.white,
+                                                      ),
+                                                )
+                                              : const Icon(
+                                                  Icons.login_outlined,
+                                                ),
+                                          label: const Text(
+                                            'Sign In with Email',
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : const SizedBox.shrink(),
                         ),
-
-                        // Guest access
-                        Obx(() => OutlinedButton(
-                              onPressed: auth.isLoading.value
-                                  ? null
-                                  : auth.continueAsGuest,
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                    color: AppTheme.green.withValues(
-                                        alpha: 0.4)),
-                              ),
-                              child: const Text('Continue without signing in'),
-                            )),
                       ],
                     ),
                   ),
