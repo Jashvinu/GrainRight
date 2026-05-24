@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
@@ -49,7 +51,27 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
     WidgetsBinding.instance.removeObserver(this);
     _messageWorker.dispose();
     _scrollController.dispose();
+    unawaited(_persistAndReleaseControllers());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      unawaited(_chatController.persistProgress());
+    }
+  }
+
+  Future<void> _persistAndReleaseControllers() async {
+    await _chatController.persistProgress();
+    if (Get.isRegistered<ChatSurveyController>(tag: 'chat_survey')) {
+      Get.delete<ChatSurveyController>(tag: 'chat_survey');
+    }
+    if (Get.isRegistered<FormController>(tag: _formTag)) {
+      Get.delete<FormController>(tag: _formTag);
+    }
   }
 
   @override
@@ -92,14 +114,35 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
           );
         }
         final visible = _visibleMessages(_chatController.messages);
-        return Column(
+        final activeField = _chatController.activeField.value;
+        final inputType = activeField?.inputType;
+        final showAnswerBar =
+            inputType != null &&
+            inputType != 'polygon' &&
+            inputType != 'polygon_pencil';
+        final answerField = showAnswerBar ? activeField : null;
+        final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+        final liftAnswerBar =
+            inputType != null && _shouldLiftAnswerBar(inputType);
+        final answerBottom = _answerBottomOffset(
+          keyboardVisible: keyboardVisible,
+          liftAnswerBar: liftAnswerBar,
+        );
+        final listBottomPadding = answerField != null
+            ? _messageListBottomPadding(
+                keyboardVisible: keyboardVisible,
+                liftAnswerBar: liftAnswerBar,
+              )
+            : 18.0;
+
+        return Stack(
           children: [
-            Expanded(
+            Positioned.fill(
               child: ListView.separated(
                 controller: _scrollController,
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+                padding: EdgeInsets.fromLTRB(16, 16, 16, listBottomPadding),
                 itemCount: visible.length,
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 12),
@@ -109,21 +152,22 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
                 },
               ),
             ),
-            Obx(() {
-              final field = _chatController.activeField.value;
-              if (field == null ||
-                  field.inputType == 'polygon' ||
-                  field.inputType == 'polygon_pencil') {
-                return const SizedBox.shrink();
-              }
-              return ChatAnswerBar(
-                key: ValueKey(field.fieldKey),
-                field: field,
-                formController: _formController,
-                onSubmit: () => _chatController.continueFromField(context),
-                onSkip: field.isRequired ? null : _chatController.skipField,
-              );
-            }),
+            if (answerField != null)
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: answerBottom,
+                child: ChatAnswerBar(
+                  key: ValueKey(answerField.fieldKey),
+                  field: answerField,
+                  formController: _formController,
+                  onSubmit: () => _chatController.continueFromField(context),
+                  onSkip: answerField.isRequired
+                      ? null
+                      : _chatController.skipField,
+                  floating: true,
+                ),
+              ),
           ],
         );
       }),
@@ -144,6 +188,41 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
       }
     }
     return out;
+  }
+
+  bool _shouldLiftAnswerBar(String inputType) {
+    return switch (inputType) {
+      'text' ||
+      'textarea' ||
+      'numeric' ||
+      'currency' ||
+      'acre' ||
+      'mobile' ||
+      'aadhar' ||
+      'millet_land_picker' ||
+      'boolean' ||
+      'dropdown' ||
+      'multiselect' ||
+      'date' ||
+      'auto_calc' => true,
+      _ => false,
+    };
+  }
+
+  double _answerBottomOffset({
+    required bool keyboardVisible,
+    required bool liftAnswerBar,
+  }) {
+    if (liftAnswerBar) return 88.0;
+    return keyboardVisible ? 8.0 : 24.0;
+  }
+
+  double _messageListBottomPadding({
+    required bool keyboardVisible,
+    required bool liftAnswerBar,
+  }) {
+    if (keyboardVisible && !liftAnswerBar) return 108.0;
+    return liftAnswerBar ? 206.0 : 142.0;
   }
 
   Widget _messageWidget(BuildContext context, ChatMessage message) {
@@ -175,10 +254,17 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
         :final cropRole,
       ) =>
         RepeatGroupPrompt(
+          key: ValueKey('chat-repeat-$groupKey-${cropRole ?? ''}'),
           groupKey: groupKey,
           title: title,
           cropRole: cropRole,
           formController: _formController,
+          initialRows: _repeatInitialRows(groupKey, cropRole),
+          onChanged: (rows) => _chatController.updateRepeatGroupRows(
+            groupKey: groupKey,
+            cropRole: cropRole,
+            rows: rows,
+          ),
           onDone: (rows) => _chatController.saveRepeatGroup(
             groupKey: groupKey,
             title: title,
@@ -197,6 +283,21 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
         ),
       ),
       TypingIndicatorMessage() => const TypingIndicator(),
+    };
+  }
+
+  List<Map<String, dynamic>> _repeatInitialRows(
+    String groupKey,
+    String? cropRole,
+  ) {
+    return switch (groupKey) {
+      'kharif_crops' || 'other_crops' => _formController.kharifRows.toList(),
+      'main_crop_yearly' => _formController.yearlyRows.toList(),
+      'crop_practices' =>
+        _formController.practiceRows
+            .where((row) => row['crop_role'] == cropRole)
+            .toList(),
+      _ => const [],
     };
   }
 }

@@ -43,9 +43,10 @@ dependencies:
   latlong2: ^0.9.0
   fl_chart: ^0.69.0
   shared_preferences: ^2.3.0
+  flutter_secure_storage: ^9.2.4
+  connectivity_plus: ^6.1.5
   http: ^1.2.0
   google_maps_flutter: ^2.16.0
-  flutter_dotenv: ^6.0.0
   geolocator: ^13.0.0
   flutter_markdown: ^0.7.4
 
@@ -65,9 +66,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.jpeg"
+  image_path: "assets/logo.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/logo.jpeg"
+  adaptive_icon_foreground: "assets/logo.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -82,8 +83,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/logo.jpeg
-    - .env
+    - assets/logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -8,6 +8,7 @@ class CustomTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final int maxLines;
   final String? suffixText;
+  final String? hintText;
 
   const CustomTextField({
     super.key,
@@ -17,6 +18,7 @@ class CustomTextField extends StatelessWidget {
     this.validator,
     this.maxLines = 1,
     this.suffixText,
+    this.hintText,
   });
 
   @override
@@ -27,6 +29,8 @@ class CustomTextField extends StatelessWidget {
         controller: controller,
         keyboardType: numeric
             ? const TextInputType.numberWithOptions(decimal: true)
+            : maxLines > 1
+            ? TextInputType.multiline
             : TextInputType.text,
         inputFormatters: numeric
             ? [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))]
@@ -34,6 +38,7 @@ class CustomTextField extends StatelessWidget {
         maxLines: maxLines,
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
           suffixText: suffixText,
           suffixStyle: suffixText != null
               ? TextStyle(

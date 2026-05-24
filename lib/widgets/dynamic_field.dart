@@ -46,17 +46,40 @@ class DynamicField extends StatelessWidget {
       // Subscribe to language changes so field rebuilds on toggle
       final _ = Get.find<LanguageController>().language.value;
 
+      if (config.inputType == 'dropdown' && config.fieldKey == 'disease_name') {
+        return _buildDropdownWithOther(
+          context,
+          c,
+          otherKey: 'disease_name_other',
+          otherLabel: 'Other disease name',
+        );
+      }
+      if (config.inputType == 'dropdown' &&
+          config.fieldKey == 'affected_crop') {
+        return _buildAffectedCropDropdown(context, c);
+      }
+
       return switch (config.inputType) {
         'text' => CustomTextField(
           label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
+          hintText: config.localizedHint(context),
           suffixText: config.suffixText,
+          validator: _buildValidator(),
+        ),
+        'textarea' => CustomTextField(
+          label: _translatedLabel(context),
+          controller: c.textController(config.fieldKey),
+          hintText: config.localizedHint(context),
+          suffixText: config.suffixText,
+          maxLines: 4,
           validator: _buildValidator(),
         ),
         'numeric' => CustomTextField(
           label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
           numeric: true,
+          hintText: config.localizedHint(context),
           suffixText: config.suffixText,
           validator: _buildValidator(),
         ),
@@ -169,6 +192,100 @@ class DynamicField extends StatelessWidget {
     );
   }
 
+  Widget _buildDropdownWithOther(
+    BuildContext context,
+    FormController c, {
+    required String otherKey,
+    required String otherLabel,
+  }) {
+    final items = c.dropdownOptions[config.dropdownOptionsKey] ?? [];
+    final selected = c.dropdownValue(config.fieldKey);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStandardDropdown(
+          label: _label(context),
+          items: items,
+          selectedValue: selected.value,
+          itemLabel: (value) =>
+              c.localizedOptionLabel(config.dropdownOptionsKey, value),
+          onChanged: (value) {
+            c.setDropdown(config.fieldKey, value);
+            if (value != 'Other') c.clearAuxText(otherKey);
+          },
+        ),
+        if (selected.value == 'Other')
+          CustomTextField(
+            label: _trLabel(otherLabel),
+            controller: c.auxTextController(otherKey),
+            hintText: _trLabel('Write name if not listed'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAffectedCropDropdown(BuildContext context, FormController c) {
+    final selected = c.dropdownValue(config.fieldKey);
+    final items = c.affectedCropOptions;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStandardDropdown(
+          label: _label(context),
+          items: items,
+          selectedValue: items.contains(selected.value) ? selected.value : null,
+          itemLabel: c.affectedCropLabel,
+          onChanged: (value) {
+            c.setDropdown(config.fieldKey, value);
+            if (value != 'Other') c.clearAuxText('affected_crop_other');
+          },
+        ),
+        if (selected.value == 'Other')
+          CustomTextField(
+            label: _trLabel('Other crop affected'),
+            controller: c.auxTextController('affected_crop_other'),
+            hintText: _trLabel('Write crop name if not listed'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildStandardDropdown({
+    required String label,
+    required List<String> items,
+    required String? selectedValue,
+    required String Function(String value) itemLabel,
+    required ValueChanged<String?> onChanged,
+  }) {
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: InputDecorator(
+          decoration: InputDecoration(labelText: label),
+          child: Text(
+            _trLabel('No options'),
+            style: TextStyle(color: Colors.grey[400]),
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('$label-${selectedValue ?? ''}-${items.join('|')}'),
+        initialValue: selectedValue,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: label),
+        items: [
+          for (final value in items)
+            DropdownMenuItem(value: value, child: Text(itemLabel(value))),
+        ],
+        onChanged: onChanged,
+      ),
+    );
+  }
+
   Widget _buildDatePicker(BuildContext context, FormController c) {
     final rxDate = c.dateValue(config.fieldKey);
     // Default range starts in 1930 so date-of-birth years are selectable;
@@ -205,7 +322,7 @@ class DynamicField extends StatelessWidget {
               firstDate: firstDate,
               lastDate: lastDate,
             );
-            if (d != null) rxDate.value = d;
+            if (d != null) c.setDate(config.fieldKey, d);
           },
           borderRadius: BorderRadius.circular(10),
           child: InputDecorator(

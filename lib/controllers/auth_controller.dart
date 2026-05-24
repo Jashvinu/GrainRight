@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/secure_app_storage.dart';
 import '../services/satellite_service.dart';
 
 class SatelliteUser {
@@ -11,6 +11,7 @@ class SatelliteUser {
 
 class AuthController extends GetxController {
   final _service = SatelliteService();
+  final _secureStorage = SecureAppStorage();
 
   final isLoggedIn = false.obs;
   final currentUser = Rxn<SatelliteUser>();
@@ -30,11 +31,10 @@ class AuthController extends GetxController {
   }
 
   Future<void> _restoreSession() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_keyAccess) ?? '';
-    final refresh = prefs.getString(_keyRefresh) ?? '';
-    final userId = prefs.getString(_keyUserId) ?? '';
-    final email = prefs.getString(_keyEmail) ?? '';
+    final token = await _secureStorage.readString(_keyAccess) ?? '';
+    final refresh = await _secureStorage.readString(_keyRefresh) ?? '';
+    final userId = await _secureStorage.readString(_keyUserId) ?? '';
+    final email = await _secureStorage.readString(_keyEmail) ?? '';
 
     if (token.isEmpty) return;
 
@@ -43,12 +43,12 @@ class AuthController extends GetxController {
       if (refresh.isNotEmpty) {
         final result = await _service.refreshToken(refresh);
         if (result != null && result.accessToken.isNotEmpty) {
-          await _saveSession(result, prefs);
+          await _saveSession(result);
           _setLoggedIn(result.accessToken, result.userId, result.email);
           return;
         }
       }
-      await _clearSession(prefs);
+      await _clearSession();
       return;
     }
 
@@ -84,20 +84,20 @@ class AuthController extends GetxController {
     isLoggedIn.value = true;
   }
 
-  Future<void> _saveSession(AuthResult result, SharedPreferences prefs) async {
-    await prefs.setString(_keyAccess, result.accessToken);
+  Future<void> _saveSession(AuthResult result) async {
+    await _secureStorage.writeString(_keyAccess, result.accessToken);
     if (result.refreshToken != null) {
-      await prefs.setString(_keyRefresh, result.refreshToken!);
+      await _secureStorage.writeString(_keyRefresh, result.refreshToken!);
     }
-    await prefs.setString(_keyUserId, result.userId);
-    await prefs.setString(_keyEmail, result.email);
+    await _secureStorage.writeString(_keyUserId, result.userId);
+    await _secureStorage.writeString(_keyEmail, result.email);
   }
 
-  Future<void> _clearSession(SharedPreferences prefs) async {
-    await prefs.remove(_keyAccess);
-    await prefs.remove(_keyRefresh);
-    await prefs.remove(_keyUserId);
-    await prefs.remove(_keyEmail);
+  Future<void> _clearSession() async {
+    await _secureStorage.remove(_keyAccess);
+    await _secureStorage.remove(_keyRefresh);
+    await _secureStorage.remove(_keyUserId);
+    await _secureStorage.remove(_keyEmail);
     isLoggedIn.value = false;
     accessToken.value = '';
     currentUser.value = null;
@@ -110,8 +110,7 @@ class AuthController extends GetxController {
     errorMessage.value = '';
     try {
       final result = await _service.signIn(email, password);
-      final prefs = await SharedPreferences.getInstance();
-      await _saveSession(result, prefs);
+      await _saveSession(result);
       _setLoggedIn(result.accessToken, result.userId, result.email);
       Get.offAllNamed('/satellite/shell');
     } on SatelliteApiException catch (e) {
@@ -138,8 +137,7 @@ class AuthController extends GetxController {
         );
         return;
       }
-      final prefs = await SharedPreferences.getInstance();
-      await _saveSession(result, prefs);
+      await _saveSession(result);
       _setLoggedIn(result.accessToken, result.userId, result.email);
       Get.offAllNamed('/satellite/draw-polygon');
     } on SatelliteApiException catch (e) {
@@ -152,8 +150,7 @@ class AuthController extends GetxController {
   }
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await _clearSession(prefs);
+    await _clearSession();
     // Also clear satellite-related GetX controllers
     if (Get.isRegistered<dynamic>(tag: 'farm')) {
       Get.delete<dynamic>(tag: 'farm');

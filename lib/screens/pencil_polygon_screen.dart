@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import '../config/satellite_config.dart';
 import '../config/theme.dart';
 import '../services/location_service.dart';
+import '../services/map_tile_provider.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/polygon_simplify.dart';
 
@@ -25,6 +26,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
   final _locationService = LocationService();
   final _liveStroke = <gmaps.LatLng>[];
 
+  bool _mapReady = false;
   bool _pencilMode = false;
   gmaps.LatLng _center = gmaps.LatLng(
     SatelliteConfig.defaultCenter.latitude,
@@ -126,13 +128,14 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
   }
 
   void _zoomBy(double delta) {
+    if (!_mapReady || !mounted) return;
     try {
       final camera = _mapController.camera;
-      _mapController.move(
-        camera.center,
-        (camera.zoom + delta).clamp(3.0, 20.0),
-      );
-    } catch (_) {}
+      final nextZoom = (camera.zoom + delta).clamp(3.0, 20.0).toDouble();
+      _mapController.move(camera.center, nextZoom);
+    } catch (e) {
+      debugPrint('[PencilPolygonScreen._zoomBy] $e');
+    }
   }
 
   @override
@@ -187,13 +190,16 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
               interactionOptions: InteractionOptions(
                 flags: _pencilMode ? InteractiveFlag.none : InteractiveFlag.all,
               ),
+              onMapReady: () {
+                _mapReady = true;
+                if (_ring.isEmpty) _moveMap(_center, zoom: 17);
+              },
             ),
             children: [
-              TileLayer(
-                urlTemplate:
-                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                userAgentPackageName: 'grainright.wrkfarm',
+              const OfflineMapBackground(
+                message: 'Offline map\nPan to your farm and draw',
               ),
+              const OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
               if (_ring.length >= 3)
                 PolygonLayer(
                   polygons: [
@@ -315,6 +321,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
   }
 
   void _moveMap(gmaps.LatLng center, {required double zoom}) {
+    if (!_mapReady) return;
     try {
       _mapController.move(_toMapPoint(center), zoom);
     } catch (_) {

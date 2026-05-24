@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:latlong2/latlong.dart';
+import '../config/runtime_config.dart';
 import '../config/theme.dart';
+import '../services/map_tile_provider.dart';
 
 class PolygonMapField extends StatefulWidget {
   final String label;
@@ -32,11 +33,12 @@ class _Prediction {
 
 class _PolygonMapFieldState extends State<PolygonMapField> {
   final _controller = MapController();
-  late final String _apiKey;
+  String _apiKey = '';
 
   final _searchController = TextEditingController();
   List<_Prediction> _predictions = [];
 
+  bool _mapReady = false;
   List<LatLng> _currentPoints = [];
 
   static const _initialCenter = LatLng(20.5937, 78.9629);
@@ -45,10 +47,7 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   @override
   void initState() {
     super.initState();
-    _apiKey =
-        dotenv.env['VITE_GOOGLE_MAPS_API_KEY'] ??
-        dotenv.env['GOOGLE_MAPS_API_KEY'] ??
-        '';
+    unawaited(_loadApiKey());
 
     if (widget.polygonState.value != null &&
         widget.polygonState.value!.isNotEmpty) {
@@ -56,6 +55,12 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
           .map((pt) => LatLng(pt[1], pt[0]))
           .toList();
     }
+  }
+
+  Future<void> _loadApiKey() async {
+    final key = await RuntimeConfig.googleMapsApiKey();
+    if (!mounted) return;
+    _apiKey = key;
   }
 
   @override
@@ -144,7 +149,7 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
           final loc = data['result']['geometry']['location'];
           final lat = (loc['lat'] as num).toDouble();
           final lng = (loc['lng'] as num).toDouble();
-          _controller.move(LatLng(lat, lng), 16);
+          _moveMap(LatLng(lat, lng), 16);
         }
       }
     } catch (e) {
@@ -153,10 +158,23 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   }
 
   void _zoomBy(double delta) {
+    if (!_mapReady || !mounted) return;
     try {
       final camera = _controller.camera;
-      _controller.move(camera.center, (camera.zoom + delta).clamp(3.0, 20.0));
-    } catch (_) {}
+      final nextZoom = (camera.zoom + delta).clamp(3.0, 20.0).toDouble();
+      _controller.move(camera.center, nextZoom);
+    } catch (e) {
+      debugPrint('[PolygonMapField._zoomBy] $e');
+    }
+  }
+
+  void _moveMap(LatLng center, double zoom) {
+    if (!_mapReady) return;
+    try {
+      _controller.move(center, zoom);
+    } catch (e) {
+      debugPrint('[PolygonMapField._moveMap] $e');
+    }
   }
 
   @override
@@ -197,12 +215,16 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                           )
                         : null,
                     onTap: (_, latLng) => _onMapTap(latLng),
+                    onMapReady: () {
+                      _mapReady = true;
+                    },
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                      userAgentPackageName: 'grainright.wrkfarm',
+                    const OfflineMapBackground(
+                      message: 'Offline map\nTap points to mark boundary',
+                    ),
+                    const OfflineAwareTileLayer(
+                      urlTemplate: arcGisWorldImageryUrl,
                     ),
                     if (_currentPoints.length >= 3)
                       PolygonLayer(

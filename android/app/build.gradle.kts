@@ -14,6 +14,35 @@ if (keyPropertiesFile.exists()) {
     keyProperties.load(FileInputStream(keyPropertiesFile))
 }
 
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties()
+if (localPropertiesFile.exists()) {
+    localProperties.load(FileInputStream(localPropertiesFile))
+}
+
+val googleMapsApiKey =
+    (project.findProperty("GOOGLE_MAPS_API_KEY") as String?)
+        ?: localProperties.getProperty("GOOGLE_MAPS_API_KEY")
+        ?: System.getenv("GOOGLE_MAPS_API_KEY")
+        ?: ""
+
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.name.contains("Release", ignoreCase = true) } &&
+        !keyPropertiesFile.exists()
+    ) {
+        throw GradleException(
+            "Release builds require android/key.properties. Do not ship debug-signed release builds."
+        )
+    }
+    if (allTasks.any { it.name.contains("Release", ignoreCase = true) } &&
+        googleMapsApiKey.isBlank()
+    ) {
+        throw GradleException(
+            "Release builds require GOOGLE_MAPS_API_KEY from Gradle property, android/local.properties, or environment."
+        )
+    }
+}
+
 android {
     namespace = "grainright.wrkfarm"
     compileSdk = flutter.compileSdkVersion
@@ -47,14 +76,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
     buildTypes {
         release {
-            signingConfig = if (keyPropertiesFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (keyPropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

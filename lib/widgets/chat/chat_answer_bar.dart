@@ -12,6 +12,7 @@ class ChatAnswerBar extends StatefulWidget {
   final FormController formController;
   final VoidCallback onSubmit;
   final VoidCallback? onSkip;
+  final bool floating;
 
   const ChatAnswerBar({
     super.key,
@@ -19,6 +20,7 @@ class ChatAnswerBar extends StatefulWidget {
     required this.formController,
     required this.onSubmit,
     this.onSkip,
+    this.floating = false,
   });
 
   @override
@@ -30,6 +32,7 @@ class _ChatAnswerBarState extends State<ChatAnswerBar> {
 
   bool get _usesKeyboard => switch (widget.field.inputType) {
     'text' ||
+    'textarea' ||
     'numeric' ||
     'currency' ||
     'acre' ||
@@ -76,12 +79,17 @@ class _ChatAnswerBarState extends State<ChatAnswerBar> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Colors.grey.shade200)),
+          borderRadius: BorderRadius.circular(widget.floating ? 18 : 0),
+          border: widget.floating
+              ? Border.all(color: Colors.grey.shade200)
+              : Border(top: BorderSide(color: Colors.grey.shade200)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, -4),
+              color: Colors.black.withValues(
+                alpha: widget.floating ? 0.14 : 0.05,
+              ),
+              blurRadius: widget.floating ? 22 : 14,
+              offset: Offset(0, widget.floating ? 8 : -4),
             ),
           ],
         ),
@@ -96,6 +104,7 @@ class _ChatAnswerBarState extends State<ChatAnswerBar> {
   Widget _buildInput(BuildContext context) {
     return switch (widget.field.inputType) {
       'text' ||
+      'textarea' ||
       'numeric' ||
       'currency' ||
       'acre' ||
@@ -168,9 +177,12 @@ class _TextAnswerInput extends StatelessWidget {
             focusNode: focusNode,
             autofocus: true,
             minLines: 1,
-            maxLines: field.inputType == 'text' ? 4 : 1,
+            maxLines: field.inputType == 'text' || field.inputType == 'textarea'
+                ? 4
+                : 1,
             keyboardType: _keyboardType,
-            textInputAction: field.inputType == 'text'
+            textInputAction:
+                field.inputType == 'text' || field.inputType == 'textarea'
                 ? TextInputAction.newline
                 : TextInputAction.send,
             textCapitalization: _textCapitalization,
@@ -193,17 +205,12 @@ class _TextAnswerInput extends StatelessWidget {
             onSubmitted: (_) => onSubmit(),
           ),
         ),
-        if (onSkip != null) ...[
-          const SizedBox(width: 8),
-          TextButton(onPressed: onSkip, child: const Text('Skip')),
-        ],
+        if (onSkip != null) ...[const SizedBox(width: 8), _SkipButton(onSkip!)],
         const SizedBox(width: 8),
-        IconButton.filled(
+        _AnswerIconButton(
           tooltip: 'Send',
-          iconSize: 28,
-          padding: const EdgeInsets.all(14),
           onPressed: onSubmit,
-          icon: const Icon(Icons.arrow_upward_rounded),
+          icon: Icons.arrow_upward_rounded,
         ),
       ],
     );
@@ -220,7 +227,9 @@ class _TextAnswerInput extends StatelessWidget {
   };
 
   TextCapitalization get _textCapitalization {
-    if (field.inputType != 'text') return TextCapitalization.none;
+    if (field.inputType != 'text' && field.inputType != 'textarea') {
+      return TextCapitalization.none;
+    }
     final key = field.fieldKey.toLowerCase();
     if (key.contains('name') ||
         key.contains('village') ||
@@ -235,6 +244,7 @@ class _TextAnswerInput extends StatelessWidget {
   TextInputType get _keyboardType {
     return switch (field.inputType) {
       'text' => TextInputType.multiline,
+      'textarea' => TextInputType.multiline,
       'mobile' => TextInputType.phone,
       'aadhar' => TextInputType.number,
       'numeric' || 'millet_land_picker' => TextInputType.number,
@@ -277,40 +287,26 @@ class _BooleanAnswerInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ChipRow(
-      children: [
-        ActionChip(
-          avatar: const Icon(Icons.check_rounded, size: 22),
-          label: const Text('Yes'),
-          labelStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    return _AnswerScrollRow(
+      choices: [
+        _AnswerChoiceChip(
+          label: 'Yes',
+          icon: Icons.check_rounded,
           onPressed: () {
             formController.setBool(field.fieldKey, true);
             onSubmit();
           },
         ),
-        ActionChip(
-          avatar: const Icon(Icons.close_rounded, size: 22),
-          label: const Text('No'),
-          labelStyle: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        _AnswerChoiceChip(
+          label: 'No',
+          icon: Icons.close_rounded,
           onPressed: () {
             formController.setBool(field.fieldKey, false);
             onSubmit();
           },
         ),
-        if (onSkip != null)
-          TextButton(
-            onPressed: onSkip,
-            child: const Text('Skip', style: TextStyle(fontSize: 17)),
-          ),
       ],
+      trailing: [if (onSkip != null) _SkipButton(onSkip!)],
     );
   }
 }
@@ -333,32 +329,21 @@ class _ChoiceAnswerInput extends StatelessWidget {
     final options =
         formController.dropdownOptions[field.dropdownOptionsKey] ??
         const <String>[];
-    return _ChipRow(
-      children: [
+    return _AnswerScrollRow(
+      choices: [
         for (final option in options)
-          ActionChip(
-            label: Text(
-              formController.localizedOptionLabel(
-                field.dropdownOptionsKey,
-                option,
-              ),
+          _AnswerChoiceChip(
+            label: formController.localizedOptionLabel(
+              field.dropdownOptionsKey,
+              option,
             ),
-            labelStyle: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
             onPressed: () {
               formController.setDropdown(field.fieldKey, option);
               onSubmit();
             },
           ),
-        if (onSkip != null)
-          TextButton(
-            onPressed: onSkip,
-            child: const Text('Skip', style: TextStyle(fontSize: 17)),
-          ),
       ],
+      trailing: [if (onSkip != null) _SkipButton(onSkip!)],
     );
   }
 }
@@ -383,42 +368,31 @@ class _MultiChoiceAnswerInput extends StatelessWidget {
         const <String>[];
     final selected = formController.multiSelectValue(field.fieldKey);
     return Obx(
-      () => Row(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  for (final option in options)
-                    FilterChip(
-                      label: Text(
-                        formController.localizedOptionLabel(
-                          field.dropdownOptionsKey,
-                          option,
-                        ),
-                      ),
-                      selected: selected.contains(option),
-                      onSelected: (isSelected) {
-                        if (isSelected) {
-                          selected.add(option);
-                        } else {
-                          selected.remove(option);
-                        }
-                      },
-                    ),
-                ],
+      () => _AnswerScrollRow(
+        choices: [
+          for (final option in options)
+            _AnswerChoiceChip(
+              label: formController.localizedOptionLabel(
+                field.dropdownOptionsKey,
+                option,
               ),
+              selected: selected.contains(option),
+              selectedIcon: Icons.check_rounded,
+              onPressed: () {
+                if (selected.contains(option)) {
+                  selected.remove(option);
+                } else {
+                  selected.add(option);
+                }
+              },
             ),
-          ),
-          if (onSkip != null)
-            TextButton(onPressed: onSkip, child: const Text('Skip')),
-          const SizedBox(width: 8),
-          IconButton.filled(
+        ],
+        trailing: [
+          if (onSkip != null) _SkipButton(onSkip!),
+          _AnswerIconButton(
             tooltip: 'Done',
             onPressed: onSubmit,
-            icon: const Icon(Icons.check_rounded),
+            icon: Icons.check_rounded,
           ),
         ],
       ),
@@ -447,8 +421,9 @@ class _DateAnswerInput extends StatelessWidget {
         children: [
           Expanded(
             child: OutlinedButton.icon(
+              style: _answerOutlinedButtonStyle,
               onPressed: () => _pickDate(context),
-              icon: const Icon(Icons.calendar_today_rounded, size: 18),
+              icon: const Icon(Icons.calendar_today_rounded, size: 20),
               label: Text(
                 rxDate.value == null
                     ? 'Select date'
@@ -458,13 +433,13 @@ class _DateAnswerInput extends StatelessWidget {
           ),
           if (onSkip != null) ...[
             const SizedBox(width: 8),
-            TextButton(onPressed: onSkip, child: const Text('Skip')),
+            _SkipButton(onSkip!),
           ],
           const SizedBox(width: 8),
-          IconButton.filled(
+          _AnswerIconButton(
             tooltip: 'Send',
             onPressed: onSubmit,
-            icon: const Icon(Icons.arrow_upward_rounded),
+            icon: Icons.arrow_upward_rounded,
           ),
         ],
       ),
@@ -518,19 +493,30 @@ class _AutoCalcAnswerInput extends StatelessWidget {
       () => Row(
         children: [
           Expanded(
-            child: Text(
-              'Rs ${value.value.toStringAsFixed(2)}',
-              style: const TextStyle(
-                color: AppTheme.greenDark,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 48),
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Text(
+                'Rs ${value.value.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  color: AppTheme.greenDark,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
-          IconButton.filled(
+          const SizedBox(width: 8),
+          _AnswerIconButton(
             tooltip: 'Continue',
             onPressed: onSubmit,
-            icon: const Icon(Icons.arrow_forward_rounded),
+            icon: Icons.arrow_forward_rounded,
           ),
         ],
       ),
@@ -547,21 +533,40 @@ class _UnsupportedAnswerInput extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
-      child: FilledButton(onPressed: onSubmit, child: const Text('Continue')),
+      child: FilledButton.icon(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        onPressed: onSubmit,
+        icon: const Icon(Icons.arrow_forward_rounded),
+        label: const Text('Continue'),
+      ),
     );
   }
 }
 
-class _ChipRow extends StatelessWidget {
-  final List<Widget> children;
+class _AnswerScrollRow extends StatelessWidget {
+  final List<Widget> choices;
+  final List<Widget> trailing;
 
-  const _ChipRow({required this.children});
+  const _AnswerScrollRow({required this.choices, this.trailing = const []});
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(children: _withSpacing(children)),
+    return Row(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: _withSpacing(choices)),
+          ),
+        ),
+        for (final action in trailing) ...[const SizedBox(width: 8), action],
+      ],
     );
   }
 
@@ -573,4 +578,130 @@ class _ChipRow extends StatelessWidget {
     }
     return spaced;
   }
+}
+
+class _AnswerChoiceChip extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final IconData? selectedIcon;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  const _AnswerChoiceChip({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.selectedIcon,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final foregroundColor = selected ? Colors.white : AppTheme.greenDark;
+    final borderColor = selected ? AppTheme.green : Colors.grey.shade300;
+    final backgroundColor = selected ? AppTheme.green : AppTheme.surface;
+    final displayIcon = selected ? selectedIcon ?? icon : icon;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOutCubic,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor, width: selected ? 1.5 : 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (displayIcon != null) ...[
+                  Icon(displayIcon, size: 20, color: foregroundColor),
+                  const SizedBox(width: 6),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: foregroundColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SkipButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _SkipButton(this.onPressed);
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(0, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      ),
+      onPressed: onPressed,
+      child: const Text('Skip'),
+    );
+  }
+}
+
+class _AnswerIconButton extends StatelessWidget {
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  const _AnswerIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton.filled(
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        backgroundColor: AppTheme.green,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(48, 48),
+        fixedSize: const Size(48, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      iconSize: 24,
+      padding: EdgeInsets.zero,
+      onPressed: onPressed,
+      icon: Icon(icon),
+    );
+  }
+}
+
+ButtonStyle get _answerOutlinedButtonStyle {
+  return OutlinedButton.styleFrom(
+    foregroundColor: AppTheme.greenDark,
+    backgroundColor: AppTheme.surface,
+    minimumSize: const Size(0, 48),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    side: BorderSide(color: Colors.grey.shade300),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+  );
 }

@@ -55,10 +55,14 @@ class _ClassicRepeatGroupField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           RepeatGroupPrompt(
+            key: ValueKey('classic-repeat-$groupKey-${field.cropRole ?? ''}'),
             groupKey: groupKey,
             title: field.localizedLabel(context),
             cropRole: field.cropRole,
-            onDone: (rows) => _saveRows(c, rows),
+            formController: c,
+            initialRows: _initialRows(c),
+            onChanged: (rows) => _saveRows(c, rows),
+            onDone: (rows) => _saveRows(c, rows, showSnackbar: true),
           ),
           const SizedBox(height: 8),
           Obx(() {
@@ -87,7 +91,23 @@ class _ClassicRepeatGroupField extends StatelessWidget {
     );
   }
 
-  void _saveRows(FormController c, List<Map<String, dynamic>> rows) {
+  List<Map<String, dynamic>> _initialRows(FormController c) {
+    return switch (groupKey) {
+      'kharif_crops' || 'other_crops' => c.kharifRows.toList(),
+      'main_crop_yearly' => c.yearlyRows.toList(),
+      'crop_practices' =>
+        c.practiceRows
+            .where((row) => row['crop_role'] == field.cropRole)
+            .toList(),
+      _ => const [],
+    };
+  }
+
+  void _saveRows(
+    FormController c,
+    List<Map<String, dynamic>> rows, {
+    bool showSnackbar = false,
+  }) {
     switch (groupKey) {
       case 'kharif_crops':
       case 'other_crops':
@@ -95,11 +115,19 @@ class _ClassicRepeatGroupField extends StatelessWidget {
       case 'main_crop_yearly':
         c.setYearlyRows(rows);
       case 'crop_practices':
+        final role =
+            field.cropRole ??
+            (rows.isNotEmpty ? rows.first['crop_role']?.toString() : null);
         final existing = c.practiceRows
-            .where((row) => row['crop_role'] != field.cropRole)
+            .where((row) => row['crop_role'] != role)
             .toList();
-        c.setPracticeRows([...existing, ...rows]);
+        final normalizedRows = role == null
+            ? rows
+            : rows.map((row) => {...row, 'crop_role': role}).toList();
+        c.setPracticeRows([...existing, ...normalizedRows]);
     }
-    Get.snackbar('Saved', '${field.label} saved');
+    if (showSnackbar) {
+      Get.snackbar('Saved', '${field.label} saved');
+    }
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../config/theme.dart';
@@ -5,11 +7,60 @@ import '../../config/translations.dart';
 import '../../controllers/form_controller.dart';
 import '../../controllers/language_controller.dart';
 
+const _sprayQuantityUnits = ['ml', 'kg'];
+const _productionQuantityUnits = ['qt', 'kg', 'ton'];
+const _soldWhereOptions = [
+  'Local market',
+  'FPC',
+  'APMC/Mandi',
+  'Trader',
+  'SHG/Co-op',
+  'Processing unit',
+  'Direct consumer',
+  'Other',
+];
+const _cropVarietyOptions = {
+  'bajra': [
+    'Dhanshakti',
+    'ICTP 8203',
+    'Phule Adishakti',
+    'Phule Mahashakti',
+    'Pusa Composite 612',
+    'ICMV 221',
+    'ICMV 155',
+    'AIMP 92901 Samrudhi',
+    'Other',
+  ],
+  'nachani': [
+    'GPU 28',
+    'GPU 67',
+    'GPU 66',
+    'VL Mandua',
+    'Dapoli 1',
+    'Phule Nachani',
+    'MR 6',
+    'Other',
+  ],
+  'paddy': [
+    'Indrayani',
+    'Ambemohar',
+    'Phule Maval',
+    'Phule Samruddhi',
+    'Jaya',
+    'Kolam',
+    'HMT',
+    'Sona Masuri',
+    'Other',
+  ],
+};
+
 class RepeatGroupPrompt extends StatefulWidget {
   final String groupKey;
   final String title;
   final String? cropRole;
   final FormController? formController;
+  final List<Map<String, dynamic>> initialRows;
+  final void Function(List<Map<String, dynamic>> rows)? onChanged;
   final void Function(List<Map<String, dynamic>> rows) onDone;
 
   const RepeatGroupPrompt({
@@ -18,6 +69,8 @@ class RepeatGroupPrompt extends StatefulWidget {
     required this.title,
     this.cropRole,
     this.formController,
+    this.initialRows = const [],
+    this.onChanged,
     required this.onDone,
   });
 
@@ -36,6 +89,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
   List<String> _cropOptions = const [];
   Map<String, String> _cropOptionLabels = const {};
   int _practiceStep = 0;
+  Timer? _changeDebounce;
   static const _practiceStepCount = 4;
 
   @override
@@ -43,6 +97,9 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
     super.initState();
     _practiceRow = _PracticeRow(widget.cropRole ?? 'main');
     _prefillFromMainCrop();
+    if (widget.initialRows.isNotEmpty) {
+      _hydrateInitialRows();
+    }
   }
 
   /// Translates a UI string to Marathi when that language is active.
@@ -65,7 +122,8 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         ? options.where((opt) => opt != 'other').toList()
         : options;
     _cropOptionLabels = {
-      for (final opt in options) opt: form.localizedOptionLabel('main_crop_v2', opt),
+      for (final opt in options)
+        opt: form.localizedOptionLabel('main_crop_v2', opt),
     };
     final mainCrop = form.valueFor('main_crop')?.toString() ?? '';
     final mainArea = form.valueFor('main_crop_land_acre')?.toString() ?? '';
@@ -78,8 +136,47 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
     }
   }
 
+  void _hydrateInitialRows() {
+    switch (widget.groupKey) {
+      case 'kharif_crops':
+      case 'other_crops':
+        _kharifRows
+          ..clear()
+          ..addAll(widget.initialRows.map(_KharifRow.fromJson));
+        if (_kharifRows.isEmpty) _kharifRows.add(_KharifRow());
+      case 'main_crop_yearly':
+        final byYear = {
+          for (final row in widget.initialRows) _intFrom(row['year']) ?? 0: row,
+        };
+        for (final row in _yearlyRows) {
+          final source = byYear[row.year];
+          if (source != null) row.applyJson(source);
+        }
+      case 'crop_practices':
+        final source = _firstRowForRole(
+          widget.initialRows,
+          _practiceRow.cropRole,
+        );
+        if (source != null) _practiceRow.applyJson(source);
+    }
+  }
+
+  void _emitChanged() {
+    _changeDebounce?.cancel();
+    _changeDebounce = Timer(const Duration(milliseconds: 450), _emitChangedNow);
+  }
+
+  void _emitChangedNow() {
+    _changeDebounce?.cancel();
+    _changeDebounce = null;
+    final onChanged = widget.onChanged;
+    if (onChanged == null) return;
+    onChanged(_buildRows());
+  }
+
   @override
   void dispose() {
+    _emitChangedNow();
     for (final row in _kharifRows) {
       row.dispose();
     }
@@ -87,6 +184,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
       row.dispose();
     }
     _practiceRow.dispose();
+    _changeDebounce?.cancel();
     super.dispose();
   }
 
@@ -108,10 +206,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
             if (isPractice) ...[
               const SizedBox(height: 6),
@@ -138,8 +233,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
                 if (showBack) ...[
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () =>
-                          setState(() => _practiceStep -= 1),
+                      onPressed: () {
+                        _emitChangedNow();
+                        setState(() => _practiceStep -= 1);
+                      },
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         textStyle: const TextStyle(
@@ -157,7 +254,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
                   child: ElevatedButton(
                     onPressed: isLastStep
                         ? _submit
-                        : () => setState(() => _practiceStep += 1),
+                        : () {
+                            _emitChangedNow();
+                            setState(() => _practiceStep += 1);
+                          },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       textStyle: const TextStyle(
@@ -191,11 +291,13 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
               'Cultivated area (acre)',
               keyboardType: TextInputType.number,
             ),
-            _text(_kharifRows[i].variety, 'Variety'),
-            _text(
+            _varietyField(_kharifRows[i]),
+            _quantityText(
               _kharifRows[i].production,
               'Production quantity',
-              keyboardType: TextInputType.number,
+              unitValue: _kharifRows[i].productionUnit,
+              units: _productionQuantityUnits,
+              onUnitChanged: (value) => _kharifRows[i].productionUnit = value,
             ),
             _text(
               _kharifRows[i].cost,
@@ -205,7 +307,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
           ]),
         if (_kharifRows.length < 4)
           TextButton.icon(
-            onPressed: () => setState(() => _kharifRows.add(_KharifRow())),
+            onPressed: () {
+              setState(() => _kharifRows.add(_KharifRow()));
+              _emitChanged();
+            },
             icon: const Icon(Icons.add, size: 24),
             label: Text(
               _tr('Add another crop'),
@@ -231,8 +336,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         decoration: InputDecoration(
           labelText: _tr('Crop name'),
           labelStyle: const TextStyle(fontSize: 16),
-          contentPadding:
-              const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 8,
+            horizontal: 12,
+          ),
           border: const OutlineInputBorder(),
         ),
         items: [
@@ -250,9 +357,57 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
           setState(() {
             row.cropNameValue = value;
             row.cropName.text = _cropOptionLabels[value] ?? value;
+            row.varietyValue = null;
+            row.variety.clear();
           });
+          _emitChanged();
         },
       ),
+    );
+  }
+
+  Widget _varietyField(_KharifRow row) {
+    final options = _cropVarietyOptions[row.cropNameValue];
+    if (options == null) {
+      return _text(row.variety, 'Variety');
+    }
+    final selected = options.contains(row.varietyValue)
+        ? row.varietyValue
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DropdownButtonFormField<String>(
+            key: ValueKey('variety-${row.cropNameValue}-$selected'),
+            initialValue: selected,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: _tr('Variety'),
+              labelStyle: const TextStyle(fontSize: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 8,
+                horizontal: 12,
+              ),
+              border: const OutlineInputBorder(),
+            ),
+            items: [
+              for (final option in options)
+                DropdownMenuItem(value: option, child: Text(_tr(option))),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                row.varietyValue = value;
+                row.variety.text = value == 'Other' ? '' : value;
+              });
+              _emitChanged();
+            },
+          ),
+        ),
+        if (row.varietyValue == 'Other') _text(row.variety, 'Other variety'),
+      ],
     );
   }
 
@@ -262,22 +417,38 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         for (final row in _yearlyRows)
           _section(row.year.toString(), [
             _text(row.area, 'Area (acre)', keyboardType: TextInputType.number),
-            _text(
+            _quantityText(
               row.production,
               'Total production',
-              keyboardType: TextInputType.number,
+              unitValue: row.productionUnit,
+              units: _productionQuantityUnits,
+              onUnitChanged: (value) => row.productionUnit = value,
             ),
-            _text(
+            _quantityText(
               row.homeConsumption,
               'Home consumption',
-              keyboardType: TextInputType.number,
+              unitValue: row.homeConsumptionUnit,
+              units: _productionQuantityUnits,
+              onUnitChanged: (value) => row.homeConsumptionUnit = value,
             ),
-            _text(
+            _quantityText(
               row.quantitySold,
               'Quantity sold',
-              keyboardType: TextInputType.number,
+              unitValue: row.quantitySoldUnit,
+              units: _productionQuantityUnits,
+              onUnitChanged: (value) => row.quantitySoldUnit = value,
             ),
-            _text(row.soldWhere, 'Sold where'),
+            _multiDropdown(
+              'Sold where',
+              row.soldWhereValues,
+              _soldWhereOptions,
+              (v) => setState(() {
+                row.soldWhereValues = v;
+                row.soldWhere.text = _joinSoldWhere(v, row.soldWhereOther.text);
+              }),
+            ),
+            if (row.soldWhereValues.contains('Other'))
+              _text(row.soldWhereOther, 'Other selling place'),
             _text(
               row.sellingPrice,
               'Selling price (Rupees ₹)',
@@ -383,7 +554,12 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         _singleChips(
           'Seedling method',
           row.seedlingMethodValue,
-          const ['Direct sowing', 'Nursery transplant', 'Broadcasting', 'Other'],
+          const [
+            'Direct sowing',
+            'Nursery transplant',
+            'Broadcasting',
+            'Other',
+          ],
           (v) => setState(() {
             row.seedlingMethodValue = v;
             row.seedlingMethod.text = v;
@@ -496,28 +672,36 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
             }),
           ),
           if (row.sprayMethodsValues.contains('Matka'))
-            _text(
+            _quantityText(
               row.matkaPerAcre,
               'Matka per acre',
-              keyboardType: TextInputType.number,
+              unitValue: row.matkaPerAcreUnit,
+              units: _sprayQuantityUnits,
+              onUnitChanged: (value) => row.matkaPerAcreUnit = value,
             ),
           if (row.sprayMethodsValues.contains('Neem'))
-            _text(
+            _quantityText(
               row.neemPerAcre,
               'Neem per acre',
-              keyboardType: TextInputType.number,
+              unitValue: row.neemPerAcreUnit,
+              units: _sprayQuantityUnits,
+              onUnitChanged: (value) => row.neemPerAcreUnit = value,
             ),
           if (row.sprayMethodsValues.contains('Jeevamrut'))
-            _text(
+            _quantityText(
               row.jeevamrutPerAcre,
               'Jeevamrut per acre',
-              keyboardType: TextInputType.number,
+              unitValue: row.jeevamrutPerAcreUnit,
+              units: _sprayQuantityUnits,
+              onUnitChanged: (value) => row.jeevamrutPerAcreUnit = value,
             ),
           if (row.sprayMethodsValues.contains('Pesticide'))
-            _text(
+            _quantityText(
               row.pesticidePerAcre,
               'Pesticide per acre',
-              keyboardType: TextInputType.number,
+              unitValue: row.pesticidePerAcreUnit,
+              units: _sprayQuantityUnits,
+              onUnitChanged: (value) => row.pesticidePerAcreUnit = value,
             ),
           if (row.sprayMethodsValues.contains('Other'))
             _text(row.sprayMethodsOther, 'Other spray details'),
@@ -680,23 +864,76 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         keyboardType == TextInputType.phone;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(fontSize: 18),
-        textCapitalization:
-            isNumeric ? TextCapitalization.none : TextCapitalization.sentences,
-        autocorrect: !isNumeric,
-        enableSuggestions: !isNumeric,
-        decoration: InputDecoration(
-          labelText: _tr(label),
-          labelStyle: const TextStyle(fontSize: 16),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 14,
-            horizontal: 12,
+      child: Focus(
+        onFocusChange: (hasFocus) {
+          if (!hasFocus) _emitChangedNow();
+        },
+        child: TextField(
+          controller: controller,
+          onChanged: (_) => _emitChanged(),
+          keyboardType: keyboardType,
+          style: const TextStyle(fontSize: 18),
+          textCapitalization: isNumeric
+              ? TextCapitalization.none
+              : TextCapitalization.sentences,
+          autocorrect: !isNumeric,
+          enableSuggestions: !isNumeric,
+          decoration: InputDecoration(
+            labelText: _tr(label),
+            labelStyle: const TextStyle(fontSize: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              vertical: 14,
+              horizontal: 12,
+            ),
+            border: const OutlineInputBorder(),
           ),
-          border: const OutlineInputBorder(),
         ),
+      ),
+    );
+  }
+
+  Widget _quantityText(
+    TextEditingController controller,
+    String label, {
+    required String? unitValue,
+    required List<String> units,
+    required ValueChanged<String> onUnitChanged,
+  }) {
+    final selectedUnit = units.contains(unitValue) ? unitValue : units.first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: _text(controller, label, keyboardType: TextInputType.number),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 96,
+            child: DropdownButtonFormField<String>(
+              initialValue: selectedUnit,
+              decoration: InputDecoration(
+                labelText: _tr('Unit'),
+                labelStyle: const TextStyle(fontSize: 14),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 10,
+                ),
+                border: const OutlineInputBorder(),
+              ),
+              items: [
+                for (final unit in units)
+                  DropdownMenuItem(value: unit, child: Text(unit)),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                onUnitChanged(value);
+                _emitChangedNow();
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -810,6 +1047,83 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
     );
   }
 
+  Widget _multiDropdown(
+    String label,
+    List<String> values,
+    List<String> options,
+    ValueChanged<List<String>> onChanged,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            key: ValueKey('$label-${values.join('|')}'),
+            initialValue: null,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: _tr(label),
+              labelStyle: const TextStyle(fontSize: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 14,
+                horizontal: 12,
+              ),
+              border: const OutlineInputBorder(),
+            ),
+            hint: Text(_tr('Select one or more')),
+            items: [
+              for (final option in options)
+                DropdownMenuItem(
+                  value: option,
+                  child: Row(
+                    children: [
+                      Icon(
+                        values.contains(option)
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 18,
+                        color: values.contains(option)
+                            ? AppTheme.green
+                            : AppTheme.textMuted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(_tr(option))),
+                    ],
+                  ),
+                ),
+            ],
+            onChanged: (option) {
+              if (option == null) return;
+              final next = List<String>.from(values);
+              if (!next.contains(option)) next.add(option);
+              onChanged(next);
+              _emitChanged();
+            },
+          ),
+          if (values.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final option in values)
+                  InputChip(
+                    label: Text(_tr(option)),
+                    onDeleted: () {
+                      final next = List<String>.from(values)..remove(option);
+                      onChanged(next);
+                      _emitChanged();
+                    },
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _bigToggleButton(
     String label, {
     required bool selected,
@@ -817,7 +1131,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
   }) {
     return InkWell(
       borderRadius: BorderRadius.circular(10),
-      onTap: onTap,
+      onTap: () {
+        onTap();
+        _emitChanged();
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -842,7 +1159,12 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
   }
 
   void _submit() {
-    final rows = switch (widget.groupKey) {
+    _emitChangedNow();
+    widget.onDone(_buildRows());
+  }
+
+  List<Map<String, dynamic>> _buildRows() {
+    return switch (widget.groupKey) {
       'kharif_crops' =>
         _kharifRows
             .asMap()
@@ -861,7 +1183,6 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
       'crop_practices' => [_practiceRow.toJson()],
       _ => <Map<String, dynamic>>[],
     };
-    widget.onDone(rows);
   }
 }
 
@@ -874,17 +1195,39 @@ class _KharifRow {
   final production = TextEditingController();
   final cost = TextEditingController();
   String? cropNameValue;
+  String? varietyValue;
+  String productionUnit = 'qt';
+
+  factory _KharifRow.fromJson(Map<String, dynamic> json) {
+    final row = _KharifRow();
+    row.cropNameValue = json['crop_name']?.toString();
+    row.cropName.text = json['crop_name']?.toString() ?? '';
+    row.otherCropName.text = json['other_crop_name']?.toString() ?? '';
+    row.otherCropDetails.text = json['other_crop_details']?.toString() ?? '';
+    row.area.text = _textFrom(json['cultivated_area_acre']);
+    row.variety.text = json['crop_variety']?.toString() ?? '';
+    row.varietyValue = _varietyValueFrom(row.cropNameValue, row.variety.text);
+    row.production.text = _textFrom(json['production_qty']);
+    row.productionUnit = _unitFrom(json['production_qty_unit'], 'qt');
+    row.cost.text = _textFrom(json['avg_estimated_cost']);
+    return row;
+  }
+
+  _KharifRow();
 
   Map<String, dynamic> toJson(int position) => _compact({
     'position': position,
     'crop_name': cropNameValue ?? _textValue(cropName),
-    'other_crop_name':
-        cropNameValue == 'other' ? _textValue(otherCropName) : null,
-    'other_crop_details':
-        cropNameValue == 'other' ? _textValue(otherCropDetails) : null,
+    'other_crop_name': cropNameValue == 'other'
+        ? _textValue(otherCropName)
+        : null,
+    'other_crop_details': cropNameValue == 'other'
+        ? _textValue(otherCropDetails)
+        : null,
     'cultivated_area_acre': _doubleValue(area),
     'crop_variety': _textValue(variety),
     'production_qty': _doubleValue(production),
+    'production_qty_unit': _unitValue(production, productionUnit),
     'avg_estimated_cost': _doubleValue(cost),
   });
 
@@ -906,17 +1249,63 @@ class _YearlyRow {
   final homeConsumption = TextEditingController();
   final quantitySold = TextEditingController();
   final soldWhere = TextEditingController();
+  final soldWhereOther = TextEditingController();
   final sellingPrice = TextEditingController();
+  String productionUnit = 'qt';
+  String homeConsumptionUnit = 'qt';
+  String quantitySoldUnit = 'qt';
+  List<String> soldWhereValues = [];
 
   _YearlyRow(this.year);
+
+  void applyJson(Map<String, dynamic> json) {
+    area.text = _textFrom(json['area_acre']);
+    production.text = _textFrom(json['total_production']);
+    productionUnit = _unitFrom(json['total_production_unit'], 'qt');
+    homeConsumption.text = _textFrom(json['home_consumption']);
+    homeConsumptionUnit = _unitFrom(json['home_consumption_unit'], 'qt');
+    quantitySold.text = _textFrom(json['quantity_sold']);
+    quantitySoldUnit = _unitFrom(json['quantity_sold_unit'], 'qt');
+    soldWhereValues = _soldWhereListFrom(json['sold_where_options']);
+    var otherSoldWhere = json['sold_where_other']?.toString() ?? '';
+    if (soldWhereValues.isEmpty) {
+      final legacyValues = _listFrom(json['sold_where']);
+      soldWhereValues = [
+        for (final value in legacyValues)
+          if (_soldWhereOptions.contains(value)) value,
+      ];
+      final legacyOther = legacyValues
+          .where((value) => !_soldWhereOptions.contains(value))
+          .join(', ');
+      if (legacyOther.isNotEmpty) {
+        soldWhereValues = [...soldWhereValues, 'Other'];
+        otherSoldWhere = legacyOther;
+      }
+    }
+    if (otherSoldWhere.isNotEmpty && !soldWhereValues.contains('Other')) {
+      soldWhereValues = [...soldWhereValues, 'Other'];
+    }
+    soldWhereOther.text = otherSoldWhere;
+    soldWhere.text = _joinSoldWhere(soldWhereValues, soldWhereOther.text);
+    sellingPrice.text = _textFrom(json['selling_price']);
+  }
 
   Map<String, dynamic> toJson() => _compact({
     'year': year,
     'area_acre': _doubleValue(area),
     'total_production': _doubleValue(production),
+    'total_production_unit': _unitValue(production, productionUnit),
     'home_consumption': _doubleValue(homeConsumption),
+    'home_consumption_unit': _unitValue(homeConsumption, homeConsumptionUnit),
     'quantity_sold': _doubleValue(quantitySold),
-    'sold_where': _textValue(soldWhere),
+    'quantity_sold_unit': _unitValue(quantitySold, quantitySoldUnit),
+    'sold_where': _nullableText(
+      _joinSoldWhere(soldWhereValues, soldWhereOther.text),
+    ),
+    'sold_where_options': soldWhereValues.isEmpty ? null : soldWhereValues,
+    'sold_where_other': soldWhereValues.contains('Other')
+        ? _textValue(soldWhereOther)
+        : null,
     'selling_price': _doubleValue(sellingPrice),
   });
 
@@ -926,6 +1315,7 @@ class _YearlyRow {
     homeConsumption.dispose();
     quantitySold.dispose();
     soldWhere.dispose();
+    soldWhereOther.dispose();
     sellingPrice.dispose();
   }
 }
@@ -1001,12 +1391,106 @@ class _PracticeRow {
   String? harvestMethodValue;
   String? harvestLabourTypeValue;
   String? sellingTimeValue;
+  String matkaPerAcreUnit = 'ml';
+  String neemPerAcreUnit = 'ml';
+  String jeevamrutPerAcreUnit = 'ml';
+  String pesticidePerAcreUnit = 'ml';
   List<String> seedSourcesValues = [];
   List<String> seedTreatmentMaterialsValues = [];
   List<String> sprayMethodsValues = [];
   List<String> monitoringMethodsValues = [];
 
   _PracticeRow(this.cropRole);
+
+  void applyJson(Map<String, dynamic> json) {
+    grownOn.text = json['grown_on']?.toString() ?? '';
+    grownOnValue = grownOn.text.isEmpty ? null : grownOn.text;
+    grownOnOther.text = json['grown_on_other']?.toString() ?? '';
+    sameLandEveryYear = _boolFrom(json['same_land_every_year']);
+    landTopology.text = json['land_topology']?.toString() ?? '';
+    landTopologyValue = landTopology.text.isEmpty ? null : landTopology.text;
+    landTopologyOther.text = json['land_topology_other']?.toString() ?? '';
+    seedSourcesValues = _listFrom(json['seed_sources']);
+    seedSources.text = seedSourcesValues.join(', ');
+    seedSourceOther.text = json['seed_source_other']?.toString() ?? '';
+    popTrainingReceived = _boolFrom(json['pop_training_received']);
+    popTrainingSource.text = json['pop_training_source']?.toString() ?? '';
+    farmingMethod.text = json['farming_method']?.toString() ?? '';
+    farmingMethodValue = farmingMethod.text.isEmpty ? null : farmingMethod.text;
+    treatsSeeds = _boolFrom(json['treats_seeds']);
+    seedTreatmentMaterialsValues = _listFrom(json['seed_treatment_materials']);
+    seedTreatmentMaterials.text = seedTreatmentMaterialsValues.join(', ');
+    seedTreatmentMaterialsOther.text =
+        json['seed_treatment_materials_other']?.toString() ?? '';
+    seedlingMethod.text = json['seedling_method']?.toString() ?? '';
+    seedlingMethodValue = seedlingMethod.text.isEmpty
+        ? null
+        : seedlingMethod.text;
+    seedlingMethodOther.text = json['seedling_method_other']?.toString() ?? '';
+    seedlingReadyDays.text = _textFrom(json['seedling_ready_days']);
+    seedlingMethodDifference.text =
+        json['seedling_method_difference']?.toString() ?? '';
+    landPrepTractorDays.text = _textFrom(json['land_prep_tractor_days']);
+    landPrepTractorCost.text = _textFrom(json['land_prep_tractor_cost']);
+    landPrepBullockDays.text = _textFrom(json['land_prep_bullock_days']);
+    landPrepBullockCost.text = _textFrom(json['land_prep_bullock_cost']);
+    landPrepByHand = _boolFrom(json['land_prep_by_hand']);
+    transplantMethod.text = json['transplant_method']?.toString() ?? '';
+    transplantMethodValue = transplantMethod.text.isEmpty
+        ? null
+        : transplantMethod.text;
+    transplantMethodOther.text =
+        json['transplant_method_other']?.toString() ?? '';
+    dipInJeevamrut = _boolFrom(json['dip_in_jeevamrut']);
+    plantSpacingCm.text = _textFrom(json['plant_spacing_cm']);
+    transplantDays.text = _textFrom(json['transplant_days']);
+    needsTransplantLabour = _boolFrom(json['needs_transplant_labour']);
+    transplantLabourers.text = _textFrom(json['transplant_labourers']);
+    transplantDailyWage.text = _textFrom(json['transplant_daily_wage']);
+    doesWeeding = _boolFrom(json['does_weeding']);
+    weedingAfterDays.text = _textFrom(json['weeding_after_days']);
+    spraysForPest = _boolFrom(json['sprays_for_pest']);
+    sprayMethodsValues = _listFrom(json['spray_methods']);
+    sprayMethods.text = sprayMethodsValues.join(', ');
+    matkaPerAcre.text = _textFrom(json['matka_per_acre']);
+    matkaPerAcreUnit = _unitFrom(json['matka_per_acre_unit'], 'ml');
+    neemPerAcre.text = _textFrom(json['neem_per_acre']);
+    neemPerAcreUnit = _unitFrom(json['neem_per_acre_unit'], 'ml');
+    jeevamrutPerAcre.text = _textFrom(json['jeevamrut_per_acre']);
+    jeevamrutPerAcreUnit = _unitFrom(json['jeevamrut_per_acre_unit'], 'ml');
+    pesticidePerAcre.text = _textFrom(json['pesticide_per_acre']);
+    pesticidePerAcreUnit = _unitFrom(json['pesticide_per_acre_unit'], 'ml');
+    sprayMethodsOther.text = json['spray_methods_other']?.toString() ?? '';
+    organicFertHelpsDisease = _boolFrom(json['organic_fert_helps_disease']);
+    plantingToFloweringDays.text = _textFrom(
+      json['planting_to_flowering_days'],
+    );
+    usesFertilizer = _boolFrom(json['uses_fertilizer']);
+    fertilizerNames.text = json['fertilizer_names']?.toString() ?? '';
+    fertilizerQtyPerAcre.text = _textFrom(json['fertilizer_qty_per_acre']);
+    floweringPestProblem = _boolFrom(json['flowering_pest_problem']);
+    floweringPestType.text = json['flowering_pest_type']?.toString() ?? '';
+    floweringSpraysUsed.text = json['flowering_sprays_used']?.toString() ?? '';
+    maturityDays.text = _textFrom(json['maturity_days']);
+    monitorsCrop = _boolFrom(json['monitors_crop']);
+    monitoringMethodsValues = _listFrom(json['monitoring_methods']);
+    monitoringMethods.text = monitoringMethodsValues.join(', ');
+    monitoringMethodsOther.text =
+        json['monitoring_methods_other']?.toString() ?? '';
+    harvestMethod.text = json['harvest_method']?.toString() ?? '';
+    harvestMethodValue = harvestMethod.text.isEmpty ? null : harvestMethod.text;
+    harvestLabourType.text = json['harvest_labour_type']?.toString() ?? '';
+    harvestLabourTypeValue = harvestLabourType.text.isEmpty
+        ? null
+        : harvestLabourType.text;
+    harvestDailyWage.text = _textFrom(json['harvest_daily_wage']);
+    harvestLabourers.text = _textFrom(json['harvest_labourers']);
+    harvestDays.text = _textFrom(json['harvest_days']);
+    readyToEatOrSellDays.text = _textFrom(json['ready_to_eat_or_sell_days']);
+    sellsMainCrop = _boolFrom(json['sells_main_crop']);
+    sellingTime.text = json['selling_time']?.toString() ?? '';
+    sellingTimeValue = sellingTime.text.isEmpty ? null : sellingTime.text;
+  }
 
   Map<String, dynamic> toJson() => _compact({
     'crop_role': cropRole,
@@ -1045,9 +1529,19 @@ class _PracticeRow {
     'sprays_for_pest': spraysForPest,
     'spray_methods': _listValue(sprayMethods),
     'matka_per_acre': _doubleValue(matkaPerAcre),
+    'matka_per_acre_unit': _unitValue(matkaPerAcre, matkaPerAcreUnit),
     'neem_per_acre': _doubleValue(neemPerAcre),
+    'neem_per_acre_unit': _unitValue(neemPerAcre, neemPerAcreUnit),
     'jeevamrut_per_acre': _doubleValue(jeevamrutPerAcre),
+    'jeevamrut_per_acre_unit': _unitValue(
+      jeevamrutPerAcre,
+      jeevamrutPerAcreUnit,
+    ),
     'pesticide_per_acre': _doubleValue(pesticidePerAcre),
+    'pesticide_per_acre_unit': _unitValue(
+      pesticidePerAcre,
+      pesticidePerAcreUnit,
+    ),
     'spray_methods_other': _textValue(sprayMethodsOther),
     'organic_fert_helps_disease': organicFertHelpsDisease,
     'planting_to_flowering_days': _intValue(plantingToFloweringDays),
@@ -1130,11 +1624,48 @@ String? _textValue(TextEditingController controller) {
   return text.isEmpty ? null : text;
 }
 
+String? _nullableText(String value) {
+  final text = value.trim();
+  return text.isEmpty ? null : text;
+}
+
 double? _doubleValue(TextEditingController controller) =>
     double.tryParse(controller.text.trim());
 
 int? _intValue(TextEditingController controller) =>
     int.tryParse(controller.text.trim());
+
+int? _intFrom(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '');
+}
+
+bool? _boolFrom(dynamic value) {
+  if (value is bool) return value;
+  final text = value?.toString().toLowerCase();
+  if (text == 'true') return true;
+  if (text == 'false') return false;
+  return null;
+}
+
+String _textFrom(dynamic value) => value == null ? '' : value.toString();
+
+String _unitFrom(dynamic value, String fallback) {
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) return fallback;
+  return {'ml', 'kg', 'qt', 'ton'}.contains(text) ? text : fallback;
+}
+
+String? _varietyValueFrom(String? cropNameValue, String variety) {
+  final options = _cropVarietyOptions[cropNameValue];
+  if (options == null || variety.trim().isEmpty) return null;
+  return options.contains(variety) ? variety : 'Other';
+}
+
+String? _unitValue(TextEditingController controller, String unit) {
+  return _doubleValue(controller) == null ? null : unit;
+}
 
 List<String>? _listValue(TextEditingController controller) {
   final values = controller.text
@@ -1143,6 +1674,44 @@ List<String>? _listValue(TextEditingController controller) {
       .where((item) => item.isNotEmpty)
       .toList();
   return values.isEmpty ? null : values;
+}
+
+List<String> _listFrom(dynamic value) {
+  if (value is List) return value.map((item) => item.toString()).toList();
+  final text = value?.toString() ?? '';
+  if (text.isEmpty) return [];
+  return text
+      .split(',')
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+List<String> _soldWhereListFrom(dynamic value) {
+  final values = _listFrom(value);
+  return [
+    for (final item in values)
+      if (_soldWhereOptions.contains(item)) item,
+  ];
+}
+
+String _joinSoldWhere(List<String> values, String other) {
+  final parts = [
+    for (final value in values)
+      if (value != 'Other') value,
+    if (values.contains('Other') && other.trim().isNotEmpty) other.trim(),
+  ];
+  return parts.join(', ');
+}
+
+Map<String, dynamic>? _firstRowForRole(
+  List<Map<String, dynamic>> rows,
+  String cropRole,
+) {
+  for (final row in rows) {
+    if (row['crop_role'] == cropRole) return row;
+  }
+  return null;
 }
 
 Map<String, dynamic> _compact(Map<String, dynamic> row) {

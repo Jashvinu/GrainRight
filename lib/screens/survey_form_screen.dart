@@ -47,47 +47,13 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
     if (surveyId != null) {
       await c.loadSurvey(surveyId);
     } else {
-      // Check for saved draft and ask user
       final hasDraft = await c.hasDraft();
       if (hasDraft && mounted) {
-        final restore = await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            icon: const Icon(
-              Icons.restore_rounded,
-              color: AppTheme.green,
-              size: 40,
-            ),
-            title: Text(_tr('Resume Last Form?')),
-            content: Text(
-              _tr(
-                'You have an unfinished form from last time. Would you like to continue where you left off?',
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: Text(
-                  _tr('Start Fresh'),
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(ctx).pop(true),
-                child: Text(_tr('Resume')),
-              ),
-            ],
-          ),
+        await c.loadDraft();
+        Get.snackbar(
+          _tr('Draft restored'),
+          _tr('Your previous progress has been restored.'),
         );
-        if (restore == true) {
-          await c.loadDraft();
-        } else {
-          await c.clearDraft();
-        }
       }
     }
     if (mounted) setState(() {});
@@ -443,26 +409,30 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                                 ),
                               ),
                               const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${_tr('Step')} ${step + 1} ${_tr('of')} $totalSteps',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[500],
-                                      fontWeight: FontWeight.w500,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${_tr('Step')} ${step + 1} ${_tr('of')} $totalSteps',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey[500],
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
-                                  ),
-                                  Text(
-                                    sectionTitle,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.greenDark,
+                                    Text(
+                                      sectionTitle,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.greenDark,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),

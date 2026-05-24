@@ -2,17 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
 import '../config/translations.dart';
+import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 
 class YesNoToggle extends StatelessWidget {
   final String label;
   final Rxn<bool> value;
 
-  const YesNoToggle({
-    super.key,
-    required this.label,
-    required this.value,
-  });
+  const YesNoToggle({super.key, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -35,19 +32,28 @@ class YesNoToggle extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style:
-                      const TextStyle(fontSize: 14, color: AppTheme.textDark),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.textDark,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
-              _chip(yes, value.value == true, () => value.value = true),
+              _chip(yes, value.value == true, () => _setValue(true)),
               const SizedBox(width: 6),
-              _chip(no, value.value == false, () => value.value = false),
+              _chip(no, value.value == false, () => _setValue(false)),
             ],
           ),
         );
       }),
     );
+  }
+
+  void _setValue(bool nextValue) {
+    value.value = nextValue;
+    if (Get.isRegistered<FormController>()) {
+      Get.find<FormController>().saveDraft();
+    }
   }
 
   Widget _chip(String text, bool selected, VoidCallback onTap) {

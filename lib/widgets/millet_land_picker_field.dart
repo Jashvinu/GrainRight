@@ -29,7 +29,8 @@ class MilletLandPickerField extends StatelessWidget {
               color: AppTheme.greenPale,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: AppTheme.greenLight.withValues(alpha: 0.4)),
+                color: AppTheme.greenLight.withValues(alpha: 0.4),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,6 +53,7 @@ class MilletLandPickerField extends StatelessWidget {
                       onTap: () {
                         c.milletLandMode.value = 'total';
                         c.clearMilletLandAreas();
+                        c.saveDraft();
                       },
                     ),
                     const SizedBox(width: 8),
@@ -59,7 +61,10 @@ class MilletLandPickerField extends StatelessWidget {
                       label: 'Per millet type',
                       icon: Icons.grid_view_rounded,
                       selected: mode == 'per_type',
-                      onTap: () => c.milletLandMode.value = 'per_type',
+                      onTap: () {
+                        c.milletLandMode.value = 'per_type';
+                        c.saveDraft();
+                      },
                     ),
                   ],
                 ),
@@ -79,13 +84,15 @@ class MilletLandPickerField extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 14),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: Colors.orange[600]),
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: Colors.orange[600],
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Select millet types above first',
-                      style: TextStyle(
-                          fontSize: 13, color: Colors.orange[700]),
+                      style: TextStyle(fontSize: 13, color: Colors.orange[700]),
                     ),
                   ],
                 ),
@@ -101,13 +108,16 @@ class MilletLandPickerField extends StatelessWidget {
             if (total > 0)
               Container(
                 margin: const EdgeInsets.only(bottom: 14),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.green.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                      color: AppTheme.green.withValues(alpha: 0.3)),
+                    color: AppTheme.green.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -158,8 +168,7 @@ class _ModeChip extends StatelessWidget {
         onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: selected ? AppTheme.green : Colors.white,
             borderRadius: BorderRadius.circular(10),
@@ -170,9 +179,11 @@ class _ModeChip extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon,
-                  size: 16,
-                  color: selected ? Colors.white : Colors.grey[600]),
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? Colors.white : Colors.grey[600],
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(

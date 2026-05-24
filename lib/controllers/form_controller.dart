@@ -1,21 +1,40 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/survey_controller.dart';
 import '../models/form_config.dart';
 import '../services/form_config_service.dart';
 import '../services/location_service.dart';
+import '../services/offline_survey_queue_service.dart';
+import '../services/secure_app_storage.dart';
 import '../services/sheets_sync_service.dart';
 import '../services/survey_service.dart';
+
+const _incomeSourceOrder = [
+  'farming',
+  'private_job',
+  'govt_job',
+  'business',
+  'other',
+];
+
+const _incomeSourceEnglishLabels = {
+  'farming': 'Farming',
+  'private_job': 'Private Job',
+  'govt_job': 'Government Job',
+  'business': 'Business',
+  'other': 'Other',
+};
 
 class FormController extends GetxController {
   final _surveyService = SurveyService();
   final _configService = FormConfigService();
   final _sheetsSyncService = SheetsSyncService();
   final _locationService = LocationService();
+  final _offlineQueueService = OfflineSurveyQueueService();
+  final _secureStorage = SecureAppStorage();
 
   // Config state
   final sections = <FormSectionConfig>[].obs;
@@ -32,6 +51,7 @@ class FormController extends GetxController {
   final visitedSteps = <int>{0}.obs;
 
   String? editId;
+  bool _suppressDraftSave = false;
   bool get isEditMode => editId != null;
   int get totalSteps => sections.length;
 
@@ -56,6 +76,12 @@ class FormController extends GetxController {
 
   // Accessors for DynamicField
   TextEditingController textController(String key) => _textControllers[key]!;
+  TextEditingController auxTextController(String key) =>
+      _textControllers.putIfAbsent(key, () {
+        final controller = TextEditingController();
+        controller.addListener(saveDraft);
+        return controller;
+      });
   Rxn<bool> boolValue(String key) => _boolValues[key]!;
   Rxn<String> dropdownValue(String key) => _stringValues[key]!;
   Rxn<DateTime> dateValue(String key) => _dateValues[key]!;
@@ -151,26 +177,37 @@ class FormController extends GetxController {
 
   void setText(String key, String value) {
     _textControllers[key]?.text = value;
+    saveDraft();
   }
 
   void setBool(String key, bool? value) {
     _boolValues[key]?.value = value;
+    saveDraft();
   }
 
   void setDropdown(String key, String? value) {
     _stringValues[key]?.value = value;
+    saveDraft();
+  }
+
+  void clearAuxText(String key) {
+    _textControllers[key]?.clear();
+    saveDraft();
   }
 
   void setDate(String key, DateTime? value) {
     _dateValues[key]?.value = value;
+    saveDraft();
   }
 
   void setPolygon(String key, List<List<double>>? value) {
     _polygonValues[key]?.value = value;
+    saveDraft();
   }
 
   void setMultiSelect(String key, List<String> values) {
     _multiSelectValues[key]?.assignAll(values);
+    saveDraft();
   }
 
   void setKharifRows(List<Map<String, dynamic>> rows) {
@@ -215,11 +252,19 @@ class FormController extends GetxController {
         _configService.fetchDropdownOptions(),
         _configService.fetchDropdownOptionRows(),
       ]);
-      sections.value = results[0] as List<FormSectionConfig>;
-      dropdownOptions.value = results[1] as Map<String, List<String>>;
-      dropdownOptionLabels.value = _buildOptionLabelMap(
+      final loadedSections = results[0] as List<FormSectionConfig>;
+      final loadedOptions = Map<String, List<String>>.from(
+        results[1] as Map<String, List<String>>,
+      );
+      final loadedOptionLabels = _buildOptionLabelMap(
         results[2] as List<Map<String, dynamic>>,
       );
+      _normalizeIncomeSourceOptions(loadedOptions, loadedOptionLabels);
+      _ensureDiseaseDropdownOptionsFallback(loadedOptions, loadedOptionLabels);
+
+      sections.value = _ensureDiseaseSectionFallback(loadedSections);
+      dropdownOptions.value = loadedOptions;
+      dropdownOptionLabels.value = loadedOptionLabels;
       _initializeFieldControllers();
       isConfigLoaded.value = true;
     } catch (e, st) {
@@ -249,6 +294,7 @@ class FormController extends GetxController {
       for (final field in section.fields) {
         switch (field.inputType) {
           case 'text':
+          case 'textarea':
           case 'numeric':
           case 'mobile':
           case 'aadhar':
@@ -271,6 +317,12 @@ class FormController extends GetxController {
             _multiSelectValues[field.fieldKey] = <String>[].obs;
         }
       }
+    }
+    if (_stringValues.containsKey('disease_name')) {
+      auxTextController('disease_name_other');
+    }
+    if (_stringValues.containsKey('affected_crop')) {
+      auxTextController('affected_crop_other');
     }
     _setupAutoCalcListeners();
   }
@@ -349,6 +401,7 @@ class FormController extends GetxController {
       final key = field.fieldKey;
       switch (field.inputType) {
         case 'text':
+        case 'textarea':
         case 'numeric':
         case 'mobile':
         case 'aadhar':
@@ -378,7 +431,7 @@ class FormController extends GetxController {
   // --- Draft saving ---
 
   Future<void> saveDraft() async {
-    if (isEditMode) return;
+    if (isEditMode || _suppressDraftSave) return;
     try {
       final draft = <String, dynamic>{};
       for (final section in sections) {
@@ -386,6 +439,7 @@ class FormController extends GetxController {
           final key = field.fieldKey;
           switch (field.inputType) {
             case 'text':
+            case 'textarea':
             case 'numeric':
             case 'mobile':
             case 'aadhar':
@@ -410,7 +464,8 @@ class FormController extends GetxController {
               break;
             case 'polygon':
             case 'polygon_pencil':
-              break;
+              final v = _polygonValues[key]?.value;
+              if (v != null && v.isNotEmpty) draft[key] = v;
           }
         }
       }
@@ -428,10 +483,16 @@ class FormController extends GetxController {
       if (practiceRows.isNotEmpty) {
         draft['__practice_rows'] = practiceRows.toList();
       }
+      for (final key in const ['disease_name_other', 'affected_crop_other']) {
+        final value = _textControllers[key]?.text.trim();
+        if (value != null && value.isNotEmpty) draft[key] = value;
+      }
       draft['__current_step'] = currentStep.value;
+      final now = DateTime.now().toUtc();
+      draft['__updated_at'] = now.toIso8601String();
+      draft['__expires_at'] = now.add(_draftRetention).toIso8601String();
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('form_draft', jsonEncode(draft));
+      await _secureStorage.writeString(_draftKey, jsonEncode(draft));
     } catch (e) {
       debugPrint('[FormController.saveDraft] $e');
     }
@@ -439,13 +500,22 @@ class FormController extends GetxController {
 
   Future<bool> hasDraft() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('form_draft');
+      final raw = await _secureStorage.readString(_draftKey);
       if (raw == null) return false;
       final draft = jsonDecode(raw) as Map<String, dynamic>;
+      if (_isExpired(draft['__expires_at'])) {
+        await clearDraft(suppressAutosave: true);
+        return false;
+      }
       // Check if there's any real data (not just metadata keys)
       final dataKeys = draft.keys.where((k) => !k.startsWith('__')).toList();
-      return dataKeys.isNotEmpty;
+      if (dataKeys.isNotEmpty) return true;
+      final step = draft['__current_step'];
+      if (step is int && step > 0) return true;
+      return draft['__kharif_rows'] is List ||
+          draft['__yearly_rows'] is List ||
+          draft['__practice_rows'] is List ||
+          draft['__millet_land_areas'] is Map;
     } catch (_) {
       return false;
     }
@@ -453,10 +523,13 @@ class FormController extends GetxController {
 
   Future<void> loadDraft() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('form_draft');
+      final raw = await _secureStorage.readString(_draftKey);
       if (raw == null) return;
       final draft = jsonDecode(raw) as Map<String, dynamic>;
+      if (_isExpired(draft['__expires_at'])) {
+        await clearDraft(suppressAutosave: true);
+        return;
+      }
       _populateFromJson(draft);
 
       final mode = draft['__millet_land_mode'] as String?;
@@ -499,10 +572,10 @@ class FormController extends GetxController {
     }
   }
 
-  Future<void> clearDraft() async {
+  Future<void> clearDraft({bool suppressAutosave = false}) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('form_draft');
+      if (suppressAutosave) _suppressDraftSave = true;
+      await _secureStorage.remove(_draftKey);
     } catch (_) {}
   }
 
@@ -530,6 +603,15 @@ class FormController extends GetxController {
       extra.forEach(
         (key, value) => source.putIfAbsent(key.toString(), () => value),
       );
+      final croppingPattern = extra['cropping_pattern'];
+      if (croppingPattern is Map) {
+        final disease = croppingPattern['disease'];
+        if (disease is Map) {
+          disease.forEach(
+            (key, value) => source.putIfAbsent(key.toString(), () => value),
+          );
+        }
+      }
     }
     for (final section in sections) {
       for (final field in section.fields) {
@@ -539,6 +621,7 @@ class FormController extends GetxController {
 
         switch (field.inputType) {
           case 'text':
+          case 'textarea':
           case 'mobile':
             _textControllers[key]!.text = raw.toString();
           case 'aadhar':
@@ -565,7 +648,7 @@ class FormController extends GetxController {
           case 'date':
             _dateValues[key]!.value = DateTime.tryParse(raw.toString());
           case 'dropdown':
-            _stringValues[key]!.value = raw.toString();
+            _setDropdownFromStoredValue(field, raw.toString(), source);
           case 'boolean':
             if (raw is bool) _boolValues[key]!.value = raw;
           case 'polygon':
@@ -595,6 +678,63 @@ class FormController extends GetxController {
 
   // --- Submission ---
 
+  void _setDropdownFromStoredValue(
+    FormFieldConfig field,
+    String value,
+    Map<String, dynamic> source,
+  ) {
+    if (field.fieldKey == 'disease_name') {
+      _setDropdownOrOther(
+        field.fieldKey,
+        value,
+        field.dropdownOptionsKey,
+        'disease_name_other',
+        source,
+      );
+      return;
+    }
+    if (field.fieldKey == 'affected_crop') {
+      _setDropdownOrOther(
+        field.fieldKey,
+        value,
+        'affected_crop_fallback',
+        'affected_crop_other',
+        source,
+        extraOptions: affectedCropOptions,
+      );
+      return;
+    }
+    _stringValues[field.fieldKey]!.value = value;
+  }
+
+  void _setDropdownOrOther(
+    String key,
+    String value,
+    String? optionKey,
+    String otherKey,
+    Map<String, dynamic> source, {
+    List<String> extraOptions = const [],
+  }) {
+    final options = <String>{
+      ...(dropdownOptions[optionKey] ?? const <String>[]),
+      ...extraOptions,
+    };
+    final storedOther = source[otherKey]?.toString().trim();
+    if (value == 'Other') {
+      _stringValues[key]!.value = 'Other';
+      if (storedOther != null && storedOther.isNotEmpty) {
+        auxTextController(otherKey).text = storedOther;
+      }
+      return;
+    }
+    if (options.contains(value) || value.trim().isEmpty) {
+      _stringValues[key]!.value = value.trim().isEmpty ? null : value;
+      return;
+    }
+    _stringValues[key]!.value = 'Other';
+    auxTextController(otherKey).text = value;
+  }
+
   Map<String, dynamic> _buildJson() {
     final map = <String, dynamic>{};
     final extraDetails = <String, dynamic>{};
@@ -606,6 +746,7 @@ class FormController extends GetxController {
 
         switch (field.inputType) {
           case 'text':
+          case 'textarea':
             final t = _textControllers[key]!.text;
             value = t.isNotEmpty ? t : null;
           case 'numeric':
@@ -659,12 +800,17 @@ class FormController extends GetxController {
         if (value != null) {
           if (_parentExtraDetailKeys.contains(key)) {
             extraDetails[key] = value;
-          } else {
-            map[key] = value;
           }
+          map[key] = value;
         }
       }
     }
+
+    final diseasePayload = _buildDiseasePayload();
+    if (diseasePayload.isNotEmpty) {
+      map.addAll(diseasePayload);
+    }
+
     if (extraDetails.isNotEmpty) map['extra_details'] = extraDetails;
     // Attach location + start time (only on new submissions)
     if (!isEditMode) {
@@ -687,6 +833,47 @@ class FormController extends GetxController {
     }
 
     return map;
+  }
+
+  Map<String, dynamic> _buildDiseasePayload() {
+    final hasDiseaseConfig =
+        _boolValues.containsKey('disease_present') ||
+        _textControllers.containsKey('disease_name') ||
+        _stringValues.containsKey('disease_name') ||
+        _stringValues.containsKey('affected_crop') ||
+        _stringValues.containsKey('disease_severity');
+    if (!hasDiseaseConfig) return const {};
+
+    final present = _boolValues['disease_present']?.value;
+    final diseaseName = _fieldTextOrDropdown(
+      'disease_name',
+      otherKey: 'disease_name_other',
+    );
+    final affectedCrop = _fieldTextOrDropdown(
+      'affected_crop',
+      otherKey: 'affected_crop_other',
+    );
+    final severity = _stringValues['disease_severity']?.value;
+    final symptoms = _cleanText('symptoms_observed');
+    final treatment = _cleanText('treatment_taken');
+    final hasAnyAnswer =
+        present != null ||
+        diseaseName != null ||
+        affectedCrop != null ||
+        severity != null ||
+        symptoms != null ||
+        treatment != null;
+    if (!hasAnyAnswer) return const {};
+
+    final includeDetails = present == true;
+    return {
+      'disease_present': present,
+      'disease_name': includeDetails ? diseaseName : null,
+      'affected_crop': includeDetails ? affectedCrop : null,
+      'disease_severity': includeDetails ? severity : null,
+      'symptoms_observed': includeDetails ? symptoms : null,
+      'treatment_taken': includeDetails ? treatment : null,
+    };
   }
 
   Future<bool> submit({bool popOnSuccess = true}) async {
@@ -721,37 +908,77 @@ class FormController extends GetxController {
     isSubmitting.value = true;
     try {
       final json = _buildJson();
-      if (isEditMode) {
-        await _surveyService.updateWithChildren(
-          editId!,
-          json,
-          kharifRows.toList(),
-          yearlyRows.toList(),
-          practiceRows.toList(),
+      final kharif = kharifRows.toList();
+      final yearly = yearlyRows.toList();
+      final practices = practiceRows.toList();
+      final isOnline = await _offlineQueueService.isOnline();
+
+      if (isEditMode && !isOnline) {
+        isSubmitting.value = false;
+        Get.snackbar(
+          'Offline',
+          'Editing an existing survey needs internet. Please try again when online.',
         );
-      } else {
-        if (kharifRows.isNotEmpty ||
-            yearlyRows.isNotEmpty ||
-            practiceRows.isNotEmpty) {
-          await _surveyService.insertWithChildren(
+        return false;
+      }
+
+      if (!isEditMode && !isOnline) {
+        await _queueOfflineSubmission(json, kharif, yearly, practices);
+        isSubmitting.value = false;
+        if (popOnSuccess) Get.back();
+        Get.snackbar(
+          'Saved offline',
+          'Survey saved on this device and will sync when internet returns.',
+        );
+        return true;
+      }
+
+      String? syncedSurveyId;
+      try {
+        if (isEditMode) {
+          await _surveyService.updateWithChildren(
+            editId!,
             json,
-            kharifRows.toList(),
-            yearlyRows.toList(),
-            practiceRows.toList(),
+            kharif,
+            yearly,
+            practices,
           );
         } else {
-          await _surveyService.insert(json);
+          syncedSurveyId = await _surveyService.insertWithChildren(
+            json,
+            kharif,
+            yearly,
+            practices,
+          );
         }
+      } catch (e) {
+        if (!isEditMode && _offlineQueueService.shouldQueueAfterError(e)) {
+          await _queueOfflineSubmission(json, kharif, yearly, practices);
+          isSubmitting.value = false;
+          if (popOnSuccess) Get.back();
+          Get.snackbar(
+            'Saved offline',
+            'Survey saved on this device and will sync when internet returns.',
+          );
+          return true;
+        }
+        rethrow;
       }
-      await clearDraft();
+
+      await clearDraft(suppressAutosave: true);
       if (Get.isRegistered<SurveyController>()) {
         Get.find<SurveyController>().loadSurveys();
       }
 
       // Sync to Google Sheets in background (fire-and-forget)
-      // Pass the id on edits so the edge function updates the existing row
-      if (isEditMode) json['_id'] = editId;
-      _sheetsSyncService.syncToSheet(json);
+      final sheetPayload = Map<String, dynamic>.from(json);
+      _attachSheetChildSummaries(sheetPayload, kharif, yearly, practices);
+      if (isEditMode) {
+        sheetPayload['_id'] = editId;
+      } else if (syncedSurveyId != null) {
+        sheetPayload['_id'] = syncedSurveyId;
+      }
+      _sheetsSyncService.syncToSheet(sheetPayload);
 
       isSubmitting.value = false;
       if (popOnSuccess) {
@@ -767,6 +994,97 @@ class FormController extends GetxController {
       debugPrint('[FormController.submit] $e');
       Get.snackbar('Error', 'Failed to submit: $e');
       return false;
+    }
+  }
+
+  void _attachSheetChildSummaries(
+    Map<String, dynamic> sheetPayload,
+    List<Map<String, dynamic>> kharif,
+    List<Map<String, dynamic>> yearly,
+    List<Map<String, dynamic>> practices,
+  ) {
+    sheetPayload['kharif_crop_production_units'] = kharif
+        .where((row) => row['production_qty'] != null)
+        .map((row) {
+          final crop = row['crop_name']?.toString() ?? '';
+          final value = row['production_qty']?.toString() ?? '';
+          final unit = row['production_qty_unit']?.toString() ?? '';
+          final prefix = crop.isEmpty ? '' : '$crop: ';
+          return '$prefix$value${unit.isEmpty ? '' : ' $unit'}';
+        })
+        .join('; ');
+
+    String yearlySummary(String valueKey, String unitKey) {
+      return yearly
+          .where((row) => row[valueKey] != null)
+          .map((row) {
+            final year = row['year']?.toString() ?? '';
+            final value = row[valueKey]?.toString() ?? '';
+            final unit = row[unitKey]?.toString() ?? '';
+            final prefix = year.isEmpty ? '' : '$year: ';
+            return '$prefix$value${unit.isEmpty ? '' : ' $unit'}';
+          })
+          .join('; ');
+    }
+
+    sheetPayload['main_crop_yearly_total_production_units'] = yearlySummary(
+      'total_production',
+      'total_production_unit',
+    );
+    sheetPayload['main_crop_yearly_home_consumption_units'] = yearlySummary(
+      'home_consumption',
+      'home_consumption_unit',
+    );
+    sheetPayload['main_crop_yearly_quantity_sold_units'] = yearlySummary(
+      'quantity_sold',
+      'quantity_sold_unit',
+    );
+    sheetPayload['main_crop_yearly_sold_where'] = yearly
+        .where((row) => row['sold_where'] != null)
+        .map((row) => '${row['year']}: ${row['sold_where']}')
+        .join('; ');
+    sheetPayload['main_crop_yearly_sold_where_other'] = yearly
+        .where((row) => row['sold_where_other'] != null)
+        .map((row) => '${row['year']}: ${row['sold_where_other']}')
+        .join('; ');
+    sheetPayload['crop_practice_spray_units'] = practices
+        .map(_sprayUnitSummary)
+        .where((value) => value.isNotEmpty)
+        .join('; ');
+  }
+
+  String _sprayUnitSummary(Map<String, dynamic> row) {
+    final role = row['crop_role']?.toString() ?? 'crop';
+    final parts = <String>[];
+    void addPart(String label, String valueKey, String unitKey) {
+      final value = row[valueKey];
+      if (value == null) return;
+      final unit = row[unitKey]?.toString() ?? '';
+      parts.add('$label $value${unit.isEmpty ? '' : ' $unit'}');
+    }
+
+    addPart('Matka', 'matka_per_acre', 'matka_per_acre_unit');
+    addPart('Neem', 'neem_per_acre', 'neem_per_acre_unit');
+    addPart('Jeevamrut', 'jeevamrut_per_acre', 'jeevamrut_per_acre_unit');
+    addPart('Pesticide', 'pesticide_per_acre', 'pesticide_per_acre_unit');
+    return parts.isEmpty ? '' : '$role: ${parts.join(', ')}';
+  }
+
+  Future<void> _queueOfflineSubmission(
+    Map<String, dynamic> parent,
+    List<Map<String, dynamic>> kharif,
+    List<Map<String, dynamic>> yearly,
+    List<Map<String, dynamic>> practices,
+  ) async {
+    await _offlineQueueService.enqueue(
+      parent: parent,
+      kharifRows: kharif,
+      yearlyRows: yearly,
+      practiceRows: practices,
+    );
+    await clearDraft(suppressAutosave: true);
+    if (Get.isRegistered<SurveyController>()) {
+      await Get.find<SurveyController>().loadPendingSubmissions();
     }
   }
 
@@ -787,6 +1105,7 @@ class FormController extends GetxController {
     final key = field.fieldKey;
     return switch (field.inputType) {
       'text' ||
+      'textarea' ||
       'numeric' ||
       'mobile' ||
       'aadhar' ||
@@ -827,6 +1146,279 @@ class FormController extends GetxController {
     };
   }
 
+  List<String> get affectedCropOptions {
+    final values = <String>[];
+    void add(String? value) {
+      final text = value?.trim();
+      if (text == null || text.isEmpty || values.contains(text)) return;
+      values.add(text);
+    }
+
+    add(_stringValues['main_crop']?.value);
+    for (final row in kharifRows) {
+      add(row['crop_name']?.toString());
+    }
+    for (final value in _affectedCropFallbackValues) {
+      add(value);
+    }
+    return values;
+  }
+
+  String affectedCropLabel(String value) {
+    if (value == 'Other') {
+      return localizedOptionLabel('affected_crop_fallback', value);
+    }
+    final labels = dropdownOptionLabels['affected_crop_fallback']?[value];
+    if (labels != null) {
+      return localizedOptionLabel('affected_crop_fallback', value);
+    }
+    return localizedOptionLabel('main_crop_v2', value);
+  }
+
+  void _normalizeIncomeSourceOptions(
+    Map<String, List<String>> options,
+    Map<String, Map<String, Map<String, String>>> labels,
+  ) {
+    final current = options['income_sources_v2'];
+    if (current == null) return;
+
+    options['income_sources_v2'] = [
+      for (final value in _incomeSourceOrder)
+        if (current.contains(value)) value,
+      for (final value in current)
+        if (!_incomeSourceOrder.contains(value)) value,
+    ];
+
+    final incomeLabels = labels['income_sources_v2'];
+    if (incomeLabels == null) return;
+    for (final entry in _incomeSourceEnglishLabels.entries) {
+      incomeLabels.putIfAbsent(entry.key, () => <String, String>{})['en'] =
+          entry.value;
+    }
+  }
+
+  List<FormSectionConfig> _ensureDiseaseSectionFallback(
+    List<FormSectionConfig> loadedSections,
+  ) {
+    final sections = [...loadedSections];
+    final fallbackFields = _buildDiseaseFallbackFields();
+    final diseaseIndex = sections.indexWhere((s) => s.title == 'Disease');
+    final diseaseSortOrder =
+        sections.where((section) => section.title != 'Disease').fold<int>(0, (
+          max,
+          section,
+        ) {
+          return section.sortOrder > max ? section.sortOrder : max;
+        }) +
+        10;
+
+    if (diseaseIndex == -1) {
+      sections.add(
+        FormSectionConfig(
+          id: '__disease_section',
+          sortOrder: diseaseSortOrder,
+          title: 'Disease',
+          titleHi: 'रोग',
+          titleMr: 'रोग',
+          iconName: 'eco_outlined',
+          fields: fallbackFields,
+        ),
+      );
+    } else {
+      final existing = sections[diseaseIndex];
+      final existingByKey = {
+        for (final field in existing.fields) field.fieldKey: field,
+      };
+      final repairedFields = [
+        for (final fallback in fallbackFields)
+          _mergeDiseaseField(existingByKey[fallback.fieldKey], fallback),
+        for (final field in existing.fields)
+          if (!_diseaseFieldKeys.contains(field.fieldKey)) field,
+      ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+      sections[diseaseIndex] = FormSectionConfig(
+        id: existing.id,
+        sortOrder: diseaseSortOrder,
+        title: 'Disease',
+        titleHi: 'रोग',
+        titleMr: 'रोग',
+        iconName: 'eco_outlined',
+        fields: repairedFields,
+      );
+    }
+
+    sections.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+    return sections;
+  }
+
+  List<FormFieldConfig> _buildDiseaseFallbackFields() {
+    const visibleWhenDiseasePresent = <String, dynamic>{
+      'depends_on': 'disease_present',
+      'operator': 'equals',
+      'value': true,
+    };
+
+    return [
+      FormFieldConfig(
+        id: '__disease_present',
+        fieldKey: 'disease_present',
+        label: 'Any Disease Observed?',
+        inputType: 'boolean',
+        sortOrder: 1,
+        isRequired: false,
+        validation: const {},
+        labelHi: 'क्या कोई रोग दिखाई दिया?',
+        labelMr: 'कोणताही रोग दिसला का?',
+      ),
+      FormFieldConfig(
+        id: '__disease_name',
+        fieldKey: 'disease_name',
+        label: 'Disease Name',
+        inputType: 'dropdown',
+        sortOrder: 3,
+        isRequired: false,
+        validation: const {},
+        visibilityRule: visibleWhenDiseasePresent,
+        dropdownOptionsKey: 'disease_name_common',
+        hintText: 'Select disease name',
+        labelHi: 'रोग का नाम',
+        labelMr: 'रोगाचे नाव',
+      ),
+      FormFieldConfig(
+        id: '__affected_crop',
+        fieldKey: 'affected_crop',
+        label: 'Crop affected',
+        inputType: 'dropdown',
+        sortOrder: 2,
+        isRequired: false,
+        validation: const {},
+        visibilityRule: visibleWhenDiseasePresent,
+        dropdownOptionsKey: 'affected_crop_fallback',
+        hintText: 'Select affected crop',
+        labelHi: 'प्रभावित फसल',
+        labelMr: 'बाधित पीक',
+      ),
+      FormFieldConfig(
+        id: '__disease_severity',
+        fieldKey: 'disease_severity',
+        label: 'Disease Severity',
+        inputType: 'dropdown',
+        sortOrder: 4,
+        isRequired: false,
+        validation: const {},
+        visibilityRule: visibleWhenDiseasePresent,
+        dropdownOptionsKey: 'disease_severity',
+        labelHi: 'रोग की गंभीरता',
+        labelMr: 'रोगाची तीव्रता',
+      ),
+      FormFieldConfig(
+        id: '__symptoms_observed',
+        fieldKey: 'symptoms_observed',
+        label: 'Symptoms Observed',
+        inputType: 'textarea',
+        sortOrder: 5,
+        isRequired: false,
+        validation: const {},
+        visibilityRule: visibleWhenDiseasePresent,
+        hintText: 'Write key symptoms',
+        labelHi: 'देखे गए लक्षण',
+        labelMr: 'दिसलेली लक्षणे',
+      ),
+      FormFieldConfig(
+        id: '__treatment_taken',
+        fieldKey: 'treatment_taken',
+        label: 'Treatment Taken',
+        inputType: 'textarea',
+        sortOrder: 6,
+        isRequired: false,
+        validation: const {},
+        visibilityRule: visibleWhenDiseasePresent,
+        hintText: 'Fungicide, biocontrol, etc.',
+        labelHi: 'किया गया उपचार',
+        labelMr: 'केलेली उपाययोजना',
+      ),
+    ];
+  }
+
+  FormFieldConfig _mergeDiseaseField(
+    FormFieldConfig? existing,
+    FormFieldConfig fallback,
+  ) {
+    if (existing == null) return fallback;
+    return FormFieldConfig(
+      id: existing.id,
+      fieldKey: fallback.fieldKey,
+      label: fallback.label,
+      inputType: fallback.inputType,
+      sortOrder: fallback.sortOrder,
+      isRequired: fallback.isRequired,
+      validation: fallback.validation,
+      visibilityRule: fallback.visibilityRule,
+      autoCalcFormula: fallback.autoCalcFormula,
+      dropdownOptionsKey: fallback.dropdownOptionsKey,
+      hintText: fallback.hintText,
+      labelHi: fallback.labelHi,
+      labelMr: fallback.labelMr,
+      hintTextHi: fallback.hintTextHi,
+      hintTextMr: fallback.hintTextMr,
+      suffixText: fallback.suffixText,
+      cropRole: fallback.cropRole,
+      repeatGroup: fallback.repeatGroup,
+    );
+  }
+
+  void _ensureDiseaseDropdownOptionsFallback(
+    Map<String, List<String>> options,
+    Map<String, Map<String, Map<String, String>>> labels,
+  ) {
+    final values = options.putIfAbsent('disease_severity', () => <String>[]);
+    for (final value in _diseaseSeverityValues) {
+      if (!values.contains(value)) values.add(value);
+    }
+
+    final severityLabels = labels.putIfAbsent('disease_severity', () => {});
+    for (final entry in _diseaseSeverityLabels.entries) {
+      severityLabels.putIfAbsent(entry.key, () => entry.value);
+    }
+
+    _ensureOptionValues(
+      options,
+      labels,
+      'disease_name_common',
+      _diseaseNameValues,
+      _diseaseNameLabels,
+    );
+    _ensureOptionValues(
+      options,
+      labels,
+      'affected_crop_fallback',
+      _affectedCropFallbackValues,
+      _affectedCropFallbackLabels,
+    );
+  }
+
+  void _ensureOptionValues(
+    Map<String, List<String>> options,
+    Map<String, Map<String, Map<String, String>>> labels,
+    String optionKey,
+    List<String> valuesToAdd,
+    Map<String, Map<String, String>> labelsToAdd,
+  ) {
+    final values = options.putIfAbsent(optionKey, () => <String>[]);
+    for (final value in valuesToAdd) {
+      if (!values.contains(value)) values.add(value);
+    }
+    final optionLabels = labels.putIfAbsent(optionKey, () => {});
+    for (final entry in labelsToAdd.entries) {
+      final current = optionLabels.putIfAbsent(entry.key, () => entry.value);
+      for (final localized in entry.value.entries) {
+        if ((current[localized.key] ?? '').isEmpty) {
+          current[localized.key] = localized.value;
+        }
+      }
+    }
+  }
+
   Map<String, Map<String, Map<String, String>>> _buildOptionLabelMap(
     List<Map<String, dynamic>> rows,
   ) {
@@ -851,6 +1443,7 @@ class FormController extends GetxController {
     final text = switch (field.inputType) {
       'mobile' => value.toString().trim(),
       'aadhar' => value.toString().replaceAll(' ', '').trim(),
+      'text' || 'textarea' => value.toString().trim(),
       _ => '',
     };
     if (text.isEmpty) return null;
@@ -860,6 +1453,23 @@ class FormController extends GetxController {
     }
     if (field.inputType == 'aadhar' && !RegExp(r'^[0-9]{12}$').hasMatch(text)) {
       return 'Enter a 12 digit Aadhaar number';
+    }
+    if ((field.inputType == 'text' || field.inputType == 'textarea') &&
+        field.validation.containsKey('min_length')) {
+      final minLength = field.validation['min_length'] as int;
+      if (text.length < minLength) return 'Minimum $minLength characters';
+    }
+    if ((field.inputType == 'text' || field.inputType == 'textarea') &&
+        field.validation.containsKey('max_length')) {
+      final maxLength = field.validation['max_length'] as int;
+      if (text.length > maxLength) return 'Maximum $maxLength characters';
+    }
+    if (field.validation.containsKey('regex')) {
+      final regex = RegExp(field.validation['regex'] as String);
+      if (!regex.hasMatch(text)) {
+        return (field.validation['regex_message'] as String?) ??
+            'Invalid format';
+      }
     }
     return null;
   }
@@ -881,6 +1491,21 @@ class FormController extends GetxController {
     if (value is int) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
+  }
+
+  String? _cleanText(String key) {
+    final value = _textControllers[key]?.text.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  String? _fieldTextOrDropdown(String key, {String? otherKey}) {
+    if (_stringValues.containsKey(key)) {
+      final value = _stringValues[key]?.value?.trim();
+      if (value == null || value.isEmpty) return null;
+      if (value == 'Other' && otherKey != null) return _cleanText(otherKey);
+      return value;
+    }
+    return _cleanText(key);
   }
 
   static List<Map<String, dynamic>> _rowList(dynamic value) {
@@ -917,4 +1542,94 @@ class FormController extends GetxController {
   }
 }
 
-const _parentExtraDetailKeys = {'other_crop_details'};
+const _parentExtraDetailKeys = <String>{};
+
+const _draftKey = 'form_draft';
+const _draftRetention = Duration(days: 7);
+
+bool _isExpired(Object? raw) {
+  final expiresAt = DateTime.tryParse(raw?.toString() ?? '');
+  return expiresAt != null && DateTime.now().toUtc().isAfter(expiresAt);
+}
+
+const _diseaseFieldKeys = {
+  'disease_present',
+  'disease_name',
+  'affected_crop',
+  'disease_severity',
+  'symptoms_observed',
+  'treatment_taken',
+};
+
+const _diseaseSeverityValues = ['Mild', 'Moderate', 'Severe'];
+
+const _diseaseSeverityLabels = {
+  'Mild': {'en': 'Mild', 'hi': 'हल्का', 'mr': 'सौम्य'},
+  'Moderate': {'en': 'Moderate', 'hi': 'मध्यम', 'mr': 'मध्यम'},
+  'Severe': {'en': 'Severe', 'hi': 'गंभीर', 'mr': 'गंभीर'},
+};
+
+const _diseaseNameValues = [
+  'Blast',
+  'Leaf blast',
+  'Neck blast',
+  'Finger blast',
+  'Brown spot',
+  'Sheath blight',
+  'Bacterial leaf blight',
+  'Bacterial leaf streak',
+  'False smut',
+  'Tungro',
+  'Downy mildew',
+  'Green ear disease',
+  'Ergot',
+  'Smut',
+  'Rust',
+  'Grain mold',
+  'Foot rot',
+  'Seedling blight',
+  'Other',
+];
+
+const _diseaseNameLabels = {
+  'Blast': {'en': 'Blast', 'hi': '', 'mr': 'करपा'},
+  'Leaf blast': {'en': 'Leaf blast', 'hi': '', 'mr': 'पानावरील करपा'},
+  'Neck blast': {'en': 'Neck blast', 'hi': '', 'mr': 'मान करपा'},
+  'Finger blast': {'en': 'Finger blast', 'hi': '', 'mr': 'कणसावरील करपा'},
+  'Brown spot': {'en': 'Brown spot', 'hi': '', 'mr': 'तपकिरी ठिपका'},
+  'Sheath blight': {'en': 'Sheath blight', 'hi': '', 'mr': 'खोडावरील करपा'},
+  'Bacterial leaf blight': {
+    'en': 'Bacterial leaf blight',
+    'hi': '',
+    'mr': 'जीवाणूजन्य पान करपा',
+  },
+  'Bacterial leaf streak': {
+    'en': 'Bacterial leaf streak',
+    'hi': '',
+    'mr': 'जीवाणूजन्य पान रेषा',
+  },
+  'False smut': {'en': 'False smut', 'hi': '', 'mr': 'खोटा काणी रोग'},
+  'Tungro': {'en': 'Tungro', 'hi': '', 'mr': 'टुंग्रो रोग'},
+  'Downy mildew': {'en': 'Downy mildew', 'hi': '', 'mr': 'केवडा रोग'},
+  'Green ear disease': {
+    'en': 'Green ear disease',
+    'hi': '',
+    'mr': 'हिरवा कणीस रोग',
+  },
+  'Ergot': {'en': 'Ergot', 'hi': '', 'mr': 'अरगट रोग'},
+  'Smut': {'en': 'Smut', 'hi': '', 'mr': 'काणी रोग'},
+  'Rust': {'en': 'Rust', 'hi': '', 'mr': 'तांबेरा रोग'},
+  'Grain mold': {'en': 'Grain mold', 'hi': '', 'mr': 'दाणा बुरशी'},
+  'Foot rot': {'en': 'Foot rot', 'hi': '', 'mr': 'खोड कुज'},
+  'Seedling blight': {'en': 'Seedling blight', 'hi': '', 'mr': 'रोप करपा'},
+  'Other': {'en': 'Other', 'hi': 'अन्य', 'mr': 'इतर'},
+};
+
+const _affectedCropFallbackValues = ['bajra', 'nachani', 'paddy', 'Other'];
+
+const _affectedCropFallbackLabels = {
+  'bajra': {'en': 'Bajra', 'hi': 'बाजरा', 'mr': 'बाजरी'},
+  'nachani': {'en': 'Nachani (Ragi)', 'hi': 'रागी/नाचनी', 'mr': 'नाचणी'},
+  'paddy': {'en': 'Paddy (Rice)', 'hi': 'धान', 'mr': 'भात'},
+  'Other': {'en': 'Other', 'hi': 'अन्य', 'mr': 'इतर'},
+};

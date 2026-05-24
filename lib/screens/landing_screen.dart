@@ -19,7 +19,7 @@ class LandingScreen extends StatelessWidget {
               // Header
               Row(
                 children: [
-                  Image.asset('assets/logo.jpeg', width: 40, height: 40),
+                  Image.asset('assets/logo.png', width: 40, height: 40),
                   const SizedBox(width: 10),
                   const BrandText(fontSize: 22),
                 ],

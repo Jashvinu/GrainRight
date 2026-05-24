@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
+import '../../utils/pii_masking.dart';
 
 class SummaryCard extends StatelessWidget {
   final Map<String, dynamic> snapshot;
@@ -38,7 +39,7 @@ class SummaryCard extends StatelessWidget {
             for (final entry in entries)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
-                child: Text('${entry.key}: ${entry.value}'),
+                child: Text('${entry.key}: ${_displayValue(entry)}'),
               ),
             const SizedBox(height: 12),
             SizedBox(
@@ -59,5 +60,12 @@ class SummaryCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _displayValue(MapEntry<String, dynamic> entry) {
+    if (entry.key == 'aadhaar_number' || entry.key == 'aadhar_no') {
+      return maskAadhaar(entry.value?.toString());
+    }
+    return entry.value.toString();
   }
 }

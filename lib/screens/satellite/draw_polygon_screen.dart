@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
 import '../../config/theme.dart';
+import '../../services/map_tile_provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/farm_controller.dart';
 
@@ -158,10 +159,10 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
               onTap: _addPoint,
             ),
             children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'grainright.wrkfarm',
+              const OfflineMapBackground(
+                message: 'Offline map\nTap points to draw farm',
               ),
+              const OfflineAwareTileLayer(urlTemplate: openStreetMapTileUrl),
               if (_points.length >= 3)
                 PolygonLayer(
                   polygons: [

@@ -60,7 +60,7 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(20),
-                        child: Image.asset('assets/logo.jpeg', width: 80),
+                        child: Image.asset('assets/logo.png', width: 80),
                       ),
                     ),
                     const SizedBox(height: 16),

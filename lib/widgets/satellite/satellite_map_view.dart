@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
 import '../../config/theme.dart';
+import '../../services/map_tile_provider.dart';
 
 class SatelliteMapView extends StatelessWidget {
   final String? tileUrl;
@@ -41,12 +42,12 @@ class SatelliteMapView extends StatelessWidget {
                     : SatelliteConfig.defaultZoom,
               ),
               children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'grainright.wrkfarm',
+                const OfflineMapBackground(
+                  message: 'Offline map\nSaved farm boundary visible',
                 ),
+                const OfflineAwareTileLayer(urlTemplate: openStreetMapTileUrl),
                 if (tileUrl != null && tileUrl!.isNotEmpty)
-                  TileLayer(urlTemplate: tileUrl!),
+                  OfflineAwareTileLayer(urlTemplate: tileUrl!),
                 if (rasterUrl != null &&
                     rasterUrl!.isNotEmpty &&
                     rasterBounds != null)

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/supabase_config.dart';
+import '../utils/pii_masking.dart';
 
 /// Calls Supabase Edge Functions to sync survey data to Google Sheets.
 class SheetsSyncService {
@@ -14,13 +15,14 @@ class SheetsSyncService {
   /// Returns true on success, false on failure (never throws).
   Future<bool> syncToSheet(Map<String, dynamic> surveyData) async {
     try {
+      final payload = sanitizeSurveyForSheet(surveyData);
       final response = await http.post(
         Uri.parse(_functionUrl),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${SupabaseConfig.anonKey}',
         },
-        body: jsonEncode(surveyData),
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode == 200) {
@@ -28,7 +30,8 @@ class SheetsSyncService {
         return true;
       } else {
         debugPrint(
-            '[SheetsSyncService] Failed: ${response.statusCode} ${response.body}');
+          '[SheetsSyncService] Failed: ${response.statusCode} ${response.body}',
+        );
         return false;
       }
     } catch (e) {
@@ -45,17 +48,17 @@ class SheetsSyncService {
     String? mobileNo,
   }) async {
     try {
+      final payload = <String, dynamic>{'farmer_name': farmerName};
+      if (surveyDate != null) payload['survey_date'] = surveyDate;
+      if (mobileNo != null) payload['mobile_no'] = mobileNo;
+
       final response = await http.post(
         Uri.parse(_deleteUrl),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer ${SupabaseConfig.anonKey}',
         },
-        body: jsonEncode({
-          'farmer_name': farmerName,
-          if (surveyDate != null) 'survey_date': surveyDate, // ignore: use_null_aware_elements
-          if (mobileNo != null) 'mobile_no': mobileNo, // ignore: use_null_aware_elements
-        }),
+        body: jsonEncode(payload),
       );
 
       if (response.statusCode == 200) {
@@ -63,7 +66,8 @@ class SheetsSyncService {
         return true;
       } else {
         debugPrint(
-            '[SheetsSyncService] Delete failed: ${response.statusCode} ${response.body}');
+          '[SheetsSyncService] Delete failed: ${response.statusCode} ${response.body}',
+        );
         return false;
       }
     } catch (e) {

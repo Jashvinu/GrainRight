@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart' as ll;
 import '../../config/theme.dart';
 import '../../models/form_config.dart';
 import '../../screens/pencil_polygon_screen.dart';
+import '../../services/map_tile_provider.dart';
 import '../../utils/polygon_geometry.dart';
 
 class PolygonPromptWidget extends StatelessWidget {
@@ -127,10 +128,11 @@ class PolygonAnswerWidget extends StatelessWidget {
                   ),
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                    userAgentPackageName: 'grainright.wrkfarm',
+                  const OfflineMapBackground(
+                    message: 'Offline boundary preview',
+                  ),
+                  const OfflineAwareTileLayer(
+                    urlTemplate: arcGisWorldImageryUrl,
                   ),
                   if (points.length >= 4)
                     PolygonLayer(

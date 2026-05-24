@@ -53,6 +53,7 @@ class MultiSelectChipField extends StatelessWidget {
                     } else {
                       selected.add(option);
                     }
+                    formController.saveDraft();
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),

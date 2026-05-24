@@ -5,27 +5,43 @@ import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/chat_message.dart';
 import '../models/form_config.dart';
+import '../services/secure_app_storage.dart';
 import '../utils/polygon_geometry.dart';
+import '../utils/pii_masking.dart';
 
-sealed class _ChatStep {}
+sealed class _ChatStep {
+  int get sectionIndex;
+}
 
 class _FieldStep extends _ChatStep {
+  @override
+  final int sectionIndex;
   final FormFieldConfig field;
 
-  _FieldStep(this.field);
+  _FieldStep(this.field, this.sectionIndex);
 }
 
 class _RepeatStep extends _ChatStep {
+  @override
+  final int sectionIndex;
   final String groupKey;
   final String title;
   final String? cropRole;
 
-  _RepeatStep(this.groupKey, this.title, {this.cropRole});
+  _RepeatStep(
+    this.groupKey,
+    this.title, {
+    required this.sectionIndex,
+    this.cropRole,
+  });
 }
 
 class ChatSurveyController extends GetxController {
+  static const _cursorDraftKey = 'chat_form_cursor';
+
   final FormController formController;
   final LanguageController languageController;
+  final _secureStorage = SecureAppStorage();
 
   ChatSurveyController({
     required this.formController,
@@ -39,6 +55,7 @@ class ChatSurveyController extends GetxController {
 
   List<_ChatStep> _steps = [];
   int _cursor = 0;
+  bool _completed = false;
 
   @override
   void onInit() {
@@ -50,17 +67,35 @@ class ChatSurveyController extends GetxController {
     final id = Get.arguments as String?;
     if (id != null) formController.prepareEdit(id);
     await formController.loadConfig();
+    var restoredDraft = false;
+    int? restoredCursor;
     if (id != null) {
       await formController.loadSurvey(id);
+    } else if (await formController.hasDraft()) {
+      await formController.loadDraft();
+      restoredCursor = await _loadDraftCursor();
+      restoredDraft = true;
     }
     _steps = _buildSteps();
+    isReady.value = true;
+
+    if (restoredDraft) {
+      _cursor = _clampCursor(restoredCursor ?? _cursorForCurrentSection());
+      messages.add(
+        BotTextMessage(
+          'Your saved survey is restored. Continuing from the last question.',
+        ),
+      );
+      await _showNext();
+      return;
+    }
+
     messages.add(
       BotTextMessage(
         "Welcome, I'm your survey assistant",
         quickReplies: const ['English', 'हिन्दी', 'मराठी'],
       ),
     );
-    isReady.value = true;
   }
 
   Future<void> chooseLanguage(String language) async {
@@ -73,6 +108,7 @@ class ChatSurveyController extends GetxController {
     formController.setValue('language', code);
     _steps = _buildSteps();
     _cursor = 0;
+    await _saveProgress();
     messages.add(UserTextMessage(language));
     await _showNext();
   }
@@ -93,19 +129,14 @@ class ChatSurveyController extends GetxController {
 
     final display = _displayValue(field, context);
     messages.add(UserFieldAnswerMessage(field, display));
-    activeField.value = null;
-    _cursor++;
-    await formController.saveDraft();
-    await _showNext();
+    await _advanceToNext();
   }
 
   Future<void> skipField() async {
     final field = activeField.value;
     if (field == null || field.isRequired) return;
     messages.add(UserTextMessage('Skipped'));
-    activeField.value = null;
-    _cursor++;
-    await _showNext();
+    await _advanceToNext();
   }
 
   Future<void> acceptPolygon(List<List<double>> coords) async {
@@ -116,9 +147,7 @@ class ChatSurveyController extends GetxController {
     messages.add(
       PolygonAnswerMessage(coords, PolygonGeometry.areaHectares(ring)),
     );
-    activeField.value = null;
-    _cursor++;
-    await _showNext();
+    await _advanceToNext();
   }
 
   Future<void> saveRepeatGroup({
@@ -127,6 +156,16 @@ class ChatSurveyController extends GetxController {
     String? cropRole,
     required List<Map<String, dynamic>> rows,
   }) async {
+    updateRepeatGroupRows(groupKey: groupKey, cropRole: cropRole, rows: rows);
+    messages.add(RepeatGroupAnswerMessage(title, rows.length));
+    await _advanceToNext();
+  }
+
+  void updateRepeatGroupRows({
+    required String groupKey,
+    String? cropRole,
+    required List<Map<String, dynamic>> rows,
+  }) {
     switch (groupKey) {
       case 'kharif_crops':
       case 'other_crops':
@@ -134,14 +173,17 @@ class ChatSurveyController extends GetxController {
       case 'main_crop_yearly':
         formController.setYearlyRows(rows);
       case 'crop_practices':
+        final role =
+            cropRole ??
+            (rows.isNotEmpty ? rows.first['crop_role']?.toString() : null);
         final existing = formController.practiceRows
-            .where((row) => row['crop_role'] != cropRole)
+            .where((row) => row['crop_role'] != role)
             .toList();
-        formController.setPracticeRows([...existing, ...rows]);
+        final normalizedRows = role == null
+            ? rows
+            : rows.map((row) => {...row, 'crop_role': role}).toList();
+        formController.setPracticeRows([...existing, ...normalizedRows]);
     }
-    messages.add(RepeatGroupAnswerMessage(title, rows.length));
-    _cursor++;
-    await _showNext();
   }
 
   Future<void> submit() async {
@@ -149,8 +191,18 @@ class ChatSurveyController extends GetxController {
     final submitted = await formController.submit(popOnSuccess: false);
     isSubmitting.value = false;
     if (!submitted) return;
-    Get.offNamed('/surveys');
-    Get.snackbar('Success', 'Survey submitted. Diagnostics now available.');
+    _completed = true;
+    await _clearDraftCursor();
+    if (Get.previousRoute == '/surveys') {
+      Get.back();
+    } else {
+      Get.offNamed('/surveys');
+    }
+  }
+
+  Future<void> persistProgress() async {
+    if (_completed || formController.isEditMode) return;
+    await _saveProgress();
   }
 
   Future<void> _showNext() async {
@@ -166,8 +218,10 @@ class ChatSurveyController extends GetxController {
             _cursor++;
             continue;
           }
+          await _saveProgress();
           activeField.value = field;
-          if (field.inputType == 'polygon_pencil') {
+          if (field.inputType == 'polygon' ||
+              field.inputType == 'polygon_pencil') {
             messages.add(PolygonPromptMessage(field));
           } else {
             messages.add(BotFieldPromptMessage(field));
@@ -178,6 +232,7 @@ class ChatSurveyController extends GetxController {
             _cursor++;
             continue;
           }
+          await _saveProgress();
           activeField.value = null;
           messages.add(
             RepeatGroupPromptMessage(
@@ -190,13 +245,19 @@ class ChatSurveyController extends GetxController {
       }
     }
 
+    await _saveProgress();
     messages.add(SummaryMessage(formController.toFlatJson()));
   }
 
   List<_ChatStep> _buildSteps() {
     final steps = <_ChatStep>[];
     final configuredGroups = <String>{};
-    for (final section in formController.sections) {
+    for (
+      var sectionIndex = 0;
+      sectionIndex < formController.sections.length;
+      sectionIndex++
+    ) {
+      final section = formController.sections[sectionIndex];
       final repeatFields = section.fields
           .where((field) => field.repeatGroup != null)
           .toList();
@@ -211,6 +272,7 @@ class ChatSurveyController extends GetxController {
               _RepeatStep(
                 field.repeatGroup!,
                 _localizedFieldLabel(field),
+                sectionIndex: sectionIndex,
                 cropRole: field.cropRole,
               ),
             );
@@ -220,7 +282,7 @@ class ChatSurveyController extends GetxController {
 
       for (final field in section.fields) {
         if (field.repeatGroup == null) {
-          steps.add(_FieldStep(field));
+          steps.add(_FieldStep(field, sectionIndex));
         }
       }
     }
@@ -247,6 +309,7 @@ class ChatSurveyController extends GetxController {
       _RepeatStep(
         'kharif_crops',
         _localizedRepeatGroupTitle('kharif_crops', null),
+        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
       ),
     );
     insertAfter(
@@ -254,6 +317,7 @@ class ChatSurveyController extends GetxController {
       _RepeatStep(
         'crop_practices',
         _localizedRepeatGroupTitle('crop_practices', 'main'),
+        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
         cropRole: 'main',
       ),
     );
@@ -262,6 +326,7 @@ class ChatSurveyController extends GetxController {
       _RepeatStep(
         'main_crop_yearly',
         _localizedRepeatGroupTitle('main_crop_yearly', null),
+        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
       ),
     );
     insertAfter(
@@ -269,11 +334,65 @@ class ChatSurveyController extends GetxController {
       _RepeatStep(
         'crop_practices',
         _localizedRepeatGroupTitle('crop_practices', 'other'),
+        sectionIndex: _sectionIndexForField('makes_food_products'),
         cropRole: 'other',
       ),
     );
 
     return steps;
+  }
+
+  Future<void> _advanceToNext() async {
+    activeField.value = null;
+    _cursor++;
+    await _saveProgress();
+    await _showNext();
+  }
+
+  Future<void> _saveProgress() async {
+    if (_completed || formController.isEditMode) return;
+    _syncCurrentSection();
+    await formController.saveDraft();
+    await _secureStorage.writeInt(_cursorDraftKey, _cursor);
+  }
+
+  Future<int?> _loadDraftCursor() async {
+    return _secureStorage.readInt(_cursorDraftKey);
+  }
+
+  Future<void> _clearDraftCursor() async {
+    await _secureStorage.remove(_cursorDraftKey);
+  }
+
+  void _syncCurrentSection() {
+    if (_steps.isEmpty || formController.totalSteps == 0) return;
+    final cursor = _cursor.clamp(0, _steps.length - 1);
+    final sectionIndex = _steps[cursor].sectionIndex.clamp(
+      0,
+      formController.totalSteps - 1,
+    );
+    formController.currentStep.value = sectionIndex;
+  }
+
+  int _clampCursor(int cursor) {
+    if (_steps.isEmpty) return 0;
+    return cursor.clamp(0, _steps.length);
+  }
+
+  int _cursorForCurrentSection() {
+    final section = formController.currentStep.value;
+    final index = _steps.indexWhere((step) => step.sectionIndex >= section);
+    return index == -1 ? 0 : index;
+  }
+
+  int _sectionIndexForField(String fieldKey) {
+    for (var i = 0; i < formController.sections.length; i++) {
+      final section = formController.sections[i];
+      if (section.fields.any((field) => field.fieldKey == fieldKey)) {
+        return i;
+      }
+    }
+    return formController.totalSteps == 0 ? 0 : formController.totalSteps - 1;
   }
 
   bool _shouldShowRepeatGroup(String groupKey, String? cropRole) {
@@ -336,6 +455,7 @@ class ChatSurveyController extends GetxController {
     final value = formController.valueFor(field.fieldKey);
     return switch (field.inputType) {
       'text' ||
+      'textarea' ||
       'numeric' ||
       'currency' ||
       'acre' ||
@@ -361,6 +481,13 @@ class ChatSurveyController extends GetxController {
     if (field.inputType == 'aadhar' &&
         !RegExp(r'^[0-9]{12}$').hasMatch(value.replaceAll(' ', '').trim())) {
       return 'Enter a 12 digit Aadhaar number';
+    }
+    if ((field.inputType == 'text' || field.inputType == 'textarea') &&
+        field.validation.containsKey('min_length')) {
+      final minLength = field.validation['min_length'] as int;
+      if (value.trim().length < minLength) {
+        return 'Minimum $minLength characters';
+      }
     }
     return null;
   }
@@ -395,6 +522,9 @@ class ChatSurveyController extends GetxController {
         field.dropdownOptionsKey,
         value.toString(),
       );
+    }
+    if (field.inputType == 'aadhar') {
+      return maskAadhaar(value.toString());
     }
     return value.toString();
   }

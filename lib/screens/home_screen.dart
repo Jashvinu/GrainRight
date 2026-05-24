@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../controllers/survey_controller.dart';
 import '../models/farmer_survey.dart';
+import '../services/offline_survey_queue_service.dart';
 import '../widgets/brand_text.dart';
 import '../widgets/survey_list_tile.dart';
 
@@ -63,6 +64,12 @@ class HomeScreen extends StatelessWidget {
     controller.surveys.removeWhere((item) => item.id == id);
   }
 
+  Future<void> _openNewSurvey(SurveyController controller) async {
+    await Get.toNamed('/form');
+    await controller.loadPendingSubmissions();
+    await controller.refreshDraftState();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = Get.find<SurveyController>();
@@ -74,7 +81,7 @@ class HomeScreen extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset('assets/logo.jpeg', height: 60),
+              child: Image.asset('assets/logo.png', height: 60),
             ),
             const SizedBox(width: 14),
             Text(
@@ -92,12 +99,20 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
       body: Obx(() {
-        if (controller.isLoading.value) {
+        final pending = controller.pendingSubmissions;
+        final hasDraft = controller.hasActiveDraft.value;
+        if (controller.isLoading.value &&
+            controller.surveys.isEmpty &&
+            pending.isEmpty &&
+            !hasDraft) {
           return const Center(
             child: CircularProgressIndicator(color: AppTheme.green),
           );
         }
-        if (controller.hasError.value) {
+        if (controller.hasError.value &&
+            controller.surveys.isEmpty &&
+            pending.isEmpty &&
+            !hasDraft) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
@@ -126,7 +141,7 @@ class HomeScreen extends StatelessWidget {
             ),
           );
         }
-        if (controller.surveys.isEmpty) {
+        if (controller.surveys.isEmpty && pending.isEmpty && !hasDraft) {
           return RefreshIndicator(
             color: AppTheme.green,
             onRefresh: controller.loadSurveys,
@@ -158,7 +173,7 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 24),
                 Center(
                   child: ElevatedButton.icon(
-                    onPressed: () => Get.toNamed('/form'),
+                    onPressed: () => _openNewSurvey(controller),
                     icon: const Icon(Icons.add_rounded),
                     label: const Text('New Survey'),
                   ),
@@ -193,7 +208,7 @@ class HomeScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${controller.surveys.length} survey${controller.surveys.length == 1 ? '' : 's'}',
+                          '${controller.surveys.length + pending.length} survey${controller.surveys.length + pending.length == 1 ? '' : 's'}',
                           style: const TextStyle(
                             color: AppTheme.green,
                             fontWeight: FontWeight.w600,
@@ -213,6 +228,17 @@ class HomeScreen extends StatelessWidget {
                       letterSpacing: -0.3,
                     ),
                   ),
+                  if (controller.hasError.value) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      controller.errorMessage.value,
+                      style: const TextStyle(
+                        color: Color(0xFF856404),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -223,7 +249,11 @@ class HomeScreen extends StatelessWidget {
                 onRefresh: controller.loadSurveys,
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  itemCount: controller.surveys.length + 1,
+                  itemCount:
+                      controller.surveys.length +
+                      pending.length +
+                      (hasDraft ? 1 : 0) +
+                      1,
                   itemBuilder: (_, i) {
                     if (i == 0) {
                       final hasDiagnostics = controller.surveys.any(
@@ -241,14 +271,78 @@ class HomeScreen extends StatelessWidget {
                                 label: const Text('View Diagnostics'),
                               ),
                             TextButton(
-                              onPressed: () => Get.toNamed('/form/classic'),
-                              child: const Text('Use classic form'),
+                              onPressed: () => _openNewSurvey(controller),
+                              child: Text(
+                                pending.isEmpty
+                                    ? hasDraft
+                                          ? 'Resume saved survey'
+                                          : 'Start chat survey'
+                                    : 'Continue / New Survey',
+                              ),
                             ),
+                            if (pending.isNotEmpty)
+                              Container(
+                                margin: const EdgeInsets.only(top: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.greenPale,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    controller.isSyncingPending.value
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppTheme.green,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.cloud_upload_outlined,
+                                            color: AppTheme.green,
+                                            size: 18,
+                                          ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        controller.isSyncingPending.value
+                                            ? 'Syncing offline surveys...'
+                                            : '${pending.length} survey${pending.length == 1 ? '' : 's'} pending sync',
+                                        style: const TextStyle(
+                                          color: AppTheme.greenDark,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       );
                     }
                     i -= 1;
+                    if (hasDraft) {
+                      if (i == 0) {
+                        return _DraftSurveyTile(
+                          onTap: () => _openNewSurvey(controller),
+                        );
+                      }
+                      i -= 1;
+                    }
+                    if (i < pending.length) {
+                      return _PendingSurveyTile(
+                        submission: pending[i],
+                        isSyncing: controller.isSyncingPending.value,
+                      );
+                    }
+                    i -= pending.length;
                     final survey = controller.surveys[i];
                     final canDelete = _canDelete(survey);
                     return Dismissible(
@@ -298,9 +392,178 @@ class HomeScreen extends StatelessWidget {
         );
       }),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Get.toNamed('/form'),
+        onPressed: () => _openNewSurvey(controller),
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Survey'),
+      ),
+    );
+  }
+}
+
+class _DraftSurveyTile extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _DraftSurveyTile({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.greenPale,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: const Icon(
+                  Icons.edit_note_rounded,
+                  color: AppTheme.green,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Unfinished survey',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Continue from the last saved page',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppTheme.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingSurveyTile extends StatelessWidget {
+  final PendingSurveySubmission submission;
+  final bool isSyncing;
+
+  const _PendingSurveyTile({required this.submission, required this.isSyncing});
+
+  @override
+  Widget build(BuildContext context) {
+    final location = [
+      submission.village,
+      submission.district,
+    ].where((value) => value != null && value.isNotEmpty).join(', ');
+    final syncing = submission.isSyncing || isSyncing;
+    final statusText = submission.isFailed
+        ? 'Sync failed'
+        : syncing
+        ? 'Syncing'
+        : 'Pending sync';
+    final statusColor = submission.isFailed
+        ? Colors.red.shade600
+        : syncing
+        ? AppTheme.green
+        : const Color(0xFFB8860B);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppTheme.greenPale,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                submission.isFailed
+                    ? Icons.cloud_off_outlined
+                    : Icons.cloud_upload_outlined,
+                color: statusColor,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    submission.farmerName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (location.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      location,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  if (submission.lastError != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      submission.lastError!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.red.shade600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  submission.surveyDate ?? 'Saved offline',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[400],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

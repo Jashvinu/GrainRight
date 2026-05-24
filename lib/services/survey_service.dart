@@ -59,7 +59,7 @@ class SurveyService {
   }
 
   Future<void> insert(Map<String, dynamic> survey) async {
-    await _table.insert(survey);
+    await _table.insert(_storageParent(survey));
   }
 
   Future<String> insertWithChildren(
@@ -70,7 +70,10 @@ class SurveyService {
   ) async {
     String? surveyId;
     try {
-      final inserted = await _table.insert(parent).select('id').single();
+      final inserted = await _table
+          .insert(_storageParent(parent))
+          .select('id')
+          .single();
       surveyId = inserted['id'] as String;
 
       if (kharif.isNotEmpty) {
@@ -114,7 +117,7 @@ class SurveyService {
   }
 
   Future<void> update(String id, Map<String, dynamic> survey) async {
-    await _table.update(survey).eq('id', id);
+    await _table.update(_storageParent(survey)).eq('id', id);
   }
 
   Future<void> updateWithChildren(
@@ -124,7 +127,7 @@ class SurveyService {
     List<Map<String, dynamic>> yearly,
     List<Map<String, dynamic>> practices,
   ) async {
-    await _table.update(survey).eq('id', id);
+    await _table.update(_storageParent(survey)).eq('id', id);
     await _replaceRows(
       table: 'survey_kharif_crops',
       surveyId: id,
@@ -176,6 +179,56 @@ class SurveyService {
         .toList();
   }
 
+  Map<String, dynamic> _storageParent(Map<String, dynamic> parent) {
+    final output = <String, dynamic>{};
+    final extra = <String, dynamic>{};
+
+    final existingExtra = parent['extra_details'];
+    if (existingExtra is Map) {
+      existingExtra.forEach((key, value) {
+        if (value == null) return;
+        final columnKey = key.toString();
+        if (_farmerSurveyColumns.contains(columnKey)) {
+          output[columnKey] = value;
+        } else if (columnKey != 'cropping_pattern') {
+          extra[columnKey] = value;
+        }
+      });
+      final croppingPattern = existingExtra['cropping_pattern'];
+      if (croppingPattern is Map) {
+        final disease = croppingPattern['disease'];
+        if (disease is Map) {
+          disease.forEach((key, value) {
+            if (value == null) return;
+            final columnKey = key.toString();
+            if (_farmerSurveyColumns.contains(columnKey)) {
+              output.putIfAbsent(columnKey, () => value);
+            }
+          });
+        }
+      }
+    }
+
+    for (final entry in parent.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      if (value == null ||
+          key == 'extra_details' ||
+          _systemParentKeys.contains(key)) {
+        continue;
+      }
+
+      if (_farmerSurveyColumns.contains(key)) {
+        output[key] = value;
+      } else {
+        extra[key] = value;
+      }
+    }
+
+    if (extra.isNotEmpty) output['extra_details'] = extra;
+    return output;
+  }
+
   Map<String, dynamic> _storageRow(
     Map<String, dynamic> row,
     Set<String> columns,
@@ -190,7 +243,13 @@ class SurveyService {
       if (key == 'extra_details') {
         if (value is Map) {
           value.forEach((k, v) {
-            if (v != null) extra[k.toString()] = v;
+            if (v == null) return;
+            final columnKey = k.toString();
+            if (columns.contains(columnKey)) {
+              output[columnKey] = v;
+            } else {
+              extra[columnKey] = v;
+            }
           });
         }
         continue;
@@ -230,13 +289,72 @@ class SurveyService {
 }
 
 const _systemRowKeys = {'id', 'survey_id', 'created_at', 'updated_at'};
+const _systemParentKeys = {'id', 'created_at', 'updated_at'};
+
+const _farmerSurveyColumns = {
+  'user_id',
+  'survey_date',
+  'language',
+  'location_lat',
+  'location_lng',
+  'location_accuracy_m',
+  'started_at',
+  'submitted_at',
+  'farmer_name',
+  'village',
+  'gram_panchayat',
+  'taluka',
+  'district',
+  'mobile_number',
+  'aadhaar_number',
+  'date_of_birth',
+  'education',
+  'gender',
+  'category',
+  'income_sources',
+  'income_sources_other',
+  'farming_type',
+  'farming_type_other',
+  'owns_farmland',
+  'total_land_area_acre',
+  'irrigated_land_acre',
+  'dry_land_acre',
+  'fallow_land_acre',
+  'leased_land_acre',
+  'rain_based_area_acre',
+  'has_forest_patta',
+  'forest_patta_acre',
+  'applied_for_forest_patta',
+  'main_crop',
+  'main_crop_other',
+  'main_crop_land_acre',
+  'other_crop_land_acre',
+  'other_crop_details',
+  'farm_polygon',
+  'annual_agri_income',
+  'non_agri_income',
+  'total_annual_income',
+  'makes_food_products',
+  'food_products_list',
+  'food_product_training_received',
+  'food_product_training_source',
+  'disease_present',
+  'disease_name',
+  'affected_crop',
+  'disease_severity',
+  'symptoms_observed',
+  'treatment_taken',
+};
 
 const _kharifCropColumns = {
   'position',
   'crop_name',
+  'other_crop_name',
+  'other_crop_details',
   'cultivated_area_acre',
   'crop_variety',
   'production_qty',
+  'production_qty_unit',
   'avg_estimated_cost',
   'extra_details',
 };
@@ -245,9 +363,14 @@ const _yearlyCropColumns = {
   'year',
   'area_acre',
   'total_production',
+  'total_production_unit',
   'home_consumption',
+  'home_consumption_unit',
   'quantity_sold',
+  'quantity_sold_unit',
   'sold_where',
+  'sold_where_options',
+  'sold_where_other',
   'selling_price',
   'extra_details',
 };
@@ -255,6 +378,7 @@ const _yearlyCropColumns = {
 const _cropPracticeColumns = {
   'crop_role',
   'grown_on',
+  'grown_on_other',
   'same_land_every_year',
   'land_topology',
   'land_topology_other',
@@ -265,6 +389,7 @@ const _cropPracticeColumns = {
   'farming_method',
   'treats_seeds',
   'seed_treatment_materials',
+  'seed_treatment_materials_other',
   'seedling_method',
   'seedling_method_other',
   'seedling_ready_days',
@@ -275,6 +400,7 @@ const _cropPracticeColumns = {
   'land_prep_bullock_cost',
   'land_prep_by_hand',
   'transplant_method',
+  'transplant_method_other',
   'dip_in_jeevamrut',
   'plant_spacing_cm',
   'transplant_days',
@@ -286,7 +412,13 @@ const _cropPracticeColumns = {
   'sprays_for_pest',
   'spray_methods',
   'matka_per_acre',
+  'matka_per_acre_unit',
   'neem_per_acre',
+  'neem_per_acre_unit',
+  'jeevamrut_per_acre',
+  'jeevamrut_per_acre_unit',
+  'pesticide_per_acre',
+  'pesticide_per_acre_unit',
   'spray_methods_other',
   'organic_fert_helps_disease',
   'planting_to_flowering_days',
@@ -299,6 +431,7 @@ const _cropPracticeColumns = {
   'maturity_days',
   'monitors_crop',
   'monitoring_methods',
+  'monitoring_methods_other',
   'harvest_method',
   'harvest_labour_type',
   'harvest_daily_wage',
