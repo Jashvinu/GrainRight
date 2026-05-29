@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/form_config.dart';
+import 'local_app_database.dart';
 
 class FormConfigService {
   static const _sectionsCacheKey = 'form_sections_config_cache_v1';
@@ -11,6 +12,7 @@ class FormConfigService {
   static const _dropdownOptionRowsCacheKey = 'dropdown_option_rows_cache_v1';
 
   final _client = Supabase.instance.client;
+  final _db = LocalAppDatabase.instance;
 
   Future<List<FormSectionConfig>> fetchFormConfig() async {
     try {
@@ -99,15 +101,28 @@ class FormConfigService {
   }
 
   Future<void> _cacheList(String key, List data) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, jsonEncode(data));
+    await _db.cacheFormList(key: key, data: data);
   }
 
   Future<List<dynamic>?> _cachedList(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(key);
-    if (raw == null || raw.isEmpty) return null;
-    final decoded = jsonDecode(raw);
-    return decoded is List ? decoded : null;
+    final record = await _db.readFormList(key);
+    if (record != null) return record.payload;
+    return _legacyCachedList(key);
+  }
+
+  Future<List<dynamic>?> _legacyCachedList(String key) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(key);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        await _db.cacheFormList(key: key, data: decoded);
+        return decoded;
+      }
+    } catch (e) {
+      debugPrint('[FormConfigService] Legacy cache read failed: $e');
+    }
+    return null;
   }
 }

@@ -131,9 +131,7 @@ class PolygonAnswerWidget extends StatelessWidget {
                   const OfflineMapBackground(
                     message: 'Offline boundary preview',
                   ),
-                  const OfflineAwareTileLayer(
-                    urlTemplate: arcGisWorldImageryUrl,
-                  ),
+                  OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
                   if (points.length >= 4)
                     PolygonLayer(
                       polygons: [

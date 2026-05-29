@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/survey_controller.dart';
 import '../models/form_config.dart';
@@ -908,6 +909,12 @@ class FormController extends GetxController {
     isSubmitting.value = true;
     try {
       final json = _buildJson();
+      if (!isEditMode) {
+        json['client_uuid'] =
+            json['client_uuid']?.toString().trim().isNotEmpty == true
+            ? json['client_uuid']
+            : const Uuid().v4();
+      }
       final kharif = kharifRows.toList();
       final yearly = yearlyRows.toList();
       final practices = practiceRows.toList();

@@ -172,10 +172,22 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Center(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _openNewSurvey(controller),
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('New Survey'),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    alignment: WrapAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () => Get.toNamed('/offline-maps'),
+                        icon: const Icon(Icons.map_outlined),
+                        label: const Text('Offline Maps'),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _openNewSurvey(controller),
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('New Survey'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -270,6 +282,12 @@ class HomeScreen extends StatelessWidget {
                                 icon: const Icon(Icons.satellite_alt_outlined),
                                 label: const Text('View Diagnostics'),
                               ),
+                            if (hasDiagnostics) const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: () => Get.toNamed('/offline-maps'),
+                              icon: const Icon(Icons.map_outlined),
+                              label: const Text('Offline Maps'),
+                            ),
                             TextButton(
                               onPressed: () => _openNewSurvey(controller),
                               child: Text(
@@ -318,6 +336,19 @@ class HomeScreen extends StatelessWidget {
                                           fontWeight: FontWeight.w700,
                                           fontSize: 12,
                                         ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: 'Retry sync',
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed:
+                                          controller.isSyncingPending.value
+                                          ? null
+                                          : controller.syncPendingSurveys,
+                                      icon: const Icon(
+                                        Icons.refresh_rounded,
+                                        color: AppTheme.green,
+                                        size: 20,
                                       ),
                                     ),
                                   ],

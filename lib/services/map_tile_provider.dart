@@ -1,24 +1,29 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 
-const String arcGisWorldImageryUrl =
-    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-const String openStreetMapTileUrl =
-    'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+import '../config/runtime_config.dart';
+import 'local_app_database.dart';
 
-final TileProvider sharedMapTileProvider = _SharedMapTileProvider();
+final String arcGisWorldImageryUrl =
+    RuntimeConfig.onlineSatelliteTileUrlTemplate;
+const String openStreetMapTileUrl = RuntimeConfig.onlineBaseTileUrlTemplate;
 
 class OfflineAwareTileLayer extends StatefulWidget {
   final String urlTemplate;
   final String userAgentPackageName;
+  final bool preferOfflineTemplateWhenOffline;
 
   const OfflineAwareTileLayer({
     super.key,
     required this.urlTemplate,
     this.userAgentPackageName = 'grainright.wrkfarm',
+    this.preferOfflineTemplateWhenOffline = true,
   });
 
   @override
@@ -60,11 +65,21 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_online) return const SizedBox.shrink();
+    final offlineTemplate = RuntimeConfig.offlineTileUrlTemplate.trim();
+    final activeTemplate =
+        !_online &&
+            widget.preferOfflineTemplateWhenOffline &&
+            offlineTemplate.isNotEmpty
+        ? offlineTemplate
+        : widget.urlTemplate;
     return TileLayer(
-      urlTemplate: widget.urlTemplate,
+      urlTemplate: activeTemplate,
       userAgentPackageName: widget.userAgentPackageName,
-      tileProvider: sharedMapTileProvider,
+      tileProvider: _CachedMapTileProvider(
+        sourceId: activeTemplate,
+        allowNetwork: _online,
+        writeNetworkTiles: activeTemplate == offlineTemplate,
+      ),
       errorTileCallback: (tile, error, stackTrace) {
         if (_looksOffline(error)) {
           _setConnection(const [ConnectivityResult.none]);
@@ -180,13 +195,128 @@ class _OfflineMapGridPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _SharedMapTileProvider extends NetworkTileProvider {
-  _SharedMapTileProvider();
+class _CachedMapTileProvider extends TileProvider {
+  static final http.Client _httpClient = http.Client();
+
+  final String sourceId;
+  final bool allowNetwork;
+  final bool writeNetworkTiles;
+
+  _CachedMapTileProvider({
+    required this.sourceId,
+    required this.allowNetwork,
+    required this.writeNetworkTiles,
+  }) : super(headers: {'User-Agent': 'grainright.wrkfarm'});
 
   @override
-  void dispose() {
-    // Keep the shared HTTP client alive for the app lifetime. Closing it while
-    // Flutter is still resolving tile images causes RequestAbortedException logs
-    // when a map route is popped.
+  ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
+    return _CachedTileImageProvider(
+      url: getTileUrl(coordinates, options),
+      sourceId: sourceId,
+      z: coordinates.z,
+      x: coordinates.x,
+      y: coordinates.y,
+      headers: headers,
+      allowNetwork: allowNetwork,
+      writeNetworkTiles: writeNetworkTiles,
+      httpClient: _httpClient,
+    );
   }
+}
+
+@immutable
+class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
+  final String url;
+  final String sourceId;
+  final int z;
+  final int x;
+  final int y;
+  final Map<String, String> headers;
+  final bool allowNetwork;
+  final bool writeNetworkTiles;
+  final http.Client httpClient;
+
+  const _CachedTileImageProvider({
+    required this.url,
+    required this.sourceId,
+    required this.z,
+    required this.x,
+    required this.y,
+    required this.headers,
+    required this.allowNetwork,
+    required this.writeNetworkTiles,
+    required this.httpClient,
+  });
+
+  @override
+  Future<_CachedTileImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_CachedTileImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+    _CachedTileImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
+    return MultiFrameImageStreamCompleter(
+      codec: key._loadAsync(decode),
+      scale: 1,
+      debugLabel: url,
+      informationCollector: () => [
+        DiagnosticsProperty<String>('Tile URL', url),
+        DiagnosticsProperty<String>('Source ID', sourceId),
+      ],
+    );
+  }
+
+  Future<ui.Codec> _loadAsync(ImageDecoderCallback decode) async {
+    final cached = await LocalAppDatabase.instance.readTile(
+      sourceId: sourceId,
+      z: z,
+      x: x,
+      y: y,
+    );
+    if (cached != null) {
+      final buffer = await ui.ImmutableBuffer.fromUint8List(cached.bytes);
+      return decode(buffer);
+    }
+
+    if (!allowNetwork) {
+      throw StateError('Tile is not downloaded for offline use.');
+    }
+
+    final response = await httpClient.get(Uri.parse(url), headers: headers);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw http.ClientException(
+        'Tile request failed with ${response.statusCode}',
+        Uri.parse(url),
+      );
+    }
+    final bytes = response.bodyBytes;
+    if (writeNetworkTiles) {
+      await LocalAppDatabase.instance.writeTile(
+        sourceId: sourceId,
+        z: z,
+        x: x,
+        y: y,
+        bytes: bytes,
+        contentType: response.headers['content-type'] ?? 'image/png',
+      );
+    }
+    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+    return decode(buffer);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is _CachedTileImageProvider &&
+        other.url == url &&
+        other.sourceId == sourceId &&
+        other.z == z &&
+        other.x == x &&
+        other.y == y;
+  }
+
+  @override
+  int get hashCode => Object.hash(url, sourceId, z, x, y);
 }

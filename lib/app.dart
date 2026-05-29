@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'config/theme.dart';
+import 'controllers/connectivity_sync_controller.dart';
 import 'controllers/survey_controller.dart';
 import 'controllers/language_controller.dart';
 import 'controllers/main_auth_controller.dart';
@@ -12,6 +13,7 @@ import 'screens/survey_form_screen.dart';
 import 'screens/main_login_screen.dart';
 import 'screens/chatbot_survey_screen.dart';
 import 'screens/diagnostics_home_screen.dart';
+import 'screens/offline_maps_screen.dart';
 
 class MilletsNowApp extends StatelessWidget {
   final Locale initialLocale;
@@ -41,6 +43,7 @@ class MilletsNowApp extends StatelessWidget {
         Get.put(LanguageController());
         if (loadStartupControllers) {
           Get.put(SurveyController());
+          Get.put(ConnectivitySyncController());
         }
         Get.put(MainAuthController());
       }),
@@ -56,6 +59,7 @@ class MilletsNowApp extends StatelessWidget {
           name: '/diagnostics',
           page: () => const DiagnosticsHomeScreen(),
         ),
+        GetPage(name: '/offline-maps', page: () => const OfflineMapsScreen()),
       ],
     );
   }

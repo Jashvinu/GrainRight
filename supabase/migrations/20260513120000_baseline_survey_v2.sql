@@ -1,5 +1,4 @@
 create extension if not exists pgcrypto;
-
 create table if not exists public.form_sections (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -9,7 +8,6 @@ create table if not exists public.form_sections (
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
-
 create table if not exists public.form_fields (
   id uuid primary key default gen_random_uuid(),
   section_id uuid not null references public.form_sections(id) on delete cascade,
@@ -29,18 +27,15 @@ create table if not exists public.form_fields (
   updated_at timestamptz default now(),
   unique (field_key)
 );
-
 create table if not exists public.dropdown_options (
   id uuid primary key default gen_random_uuid(),
   option_key text not null,
   value text not null,
-  label text,
   sort_order int not null default 0,
   is_active boolean not null default true,
   created_at timestamptz default now(),
   unique (option_key, value)
 );
-
 do $$
 begin
   if to_regclass('public.farmer_surveys') is not null
@@ -48,7 +43,6 @@ begin
     alter table public.farmer_surveys rename to farmer_surveys_legacy_v1;
   end if;
 end $$;
-
 create table if not exists public.farmer_surveys (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id),
@@ -85,7 +79,6 @@ create table if not exists public.farmer_surveys (
   main_crop text,
   main_crop_other text,
   main_crop_land_acre numeric,
-  other_crop_land_acre numeric,
   farm_polygon jsonb,
   annual_agri_income numeric,
   non_agri_income numeric,
@@ -94,14 +87,11 @@ create table if not exists public.farmer_surveys (
   food_products_list text,
   food_product_training_received boolean,
   food_product_training_source text,
-  extra_details jsonb not null default '{}'::jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
-
 create index if not exists farmer_surveys_user_idx on public.farmer_surveys(user_id);
 create index if not exists farmer_surveys_main_crop_idx on public.farmer_surveys(main_crop);
-
 create table if not exists public.survey_kharif_crops (
   id uuid primary key default gen_random_uuid(),
   survey_id uuid not null references public.farmer_surveys(id) on delete cascade,
@@ -113,7 +103,6 @@ create table if not exists public.survey_kharif_crops (
   avg_estimated_cost numeric,
   unique (survey_id, position)
 );
-
 create table if not exists public.survey_main_crop_yearly (
   id uuid primary key default gen_random_uuid(),
   survey_id uuid not null references public.farmer_surveys(id) on delete cascade,
@@ -126,7 +115,6 @@ create table if not exists public.survey_main_crop_yearly (
   selling_price numeric,
   unique (survey_id, year)
 );
-
 create table if not exists public.survey_crop_practices (
   id uuid primary key default gen_random_uuid(),
   survey_id uuid not null references public.farmer_surveys(id) on delete cascade,
@@ -184,23 +172,16 @@ create table if not exists public.survey_crop_practices (
   ready_to_eat_or_sell_days int,
   sells_main_crop boolean,
   selling_time text,
-  extra_details jsonb not null default '{}'::jsonb,
   unique (survey_id, crop_role)
 );
-
-alter table public.farmer_surveys add column if not exists other_crop_land_acre numeric;
-alter table public.farmer_surveys add column if not exists extra_details jsonb not null default '{}'::jsonb;
-alter table public.survey_crop_practices add column if not exists extra_details jsonb not null default '{}'::jsonb;
 alter table public.form_fields add column if not exists crop_role text;
 alter table public.form_fields add column if not exists repeat_group text;
 alter table public.form_fields add column if not exists hint_text_hi text;
 alter table public.form_fields add column if not exists hint_text_mr text;
 alter table public.form_fields add column if not exists label_hi text;
 alter table public.form_fields add column if not exists label_mr text;
-alter table public.dropdown_options add column if not exists label text;
 alter table public.dropdown_options add column if not exists label_hi text;
 alter table public.dropdown_options add column if not exists label_mr text;
-
 alter table public.form_sections enable row level security;
 alter table public.form_fields enable row level security;
 alter table public.dropdown_options enable row level security;
@@ -208,23 +189,18 @@ alter table public.farmer_surveys enable row level security;
 alter table public.survey_kharif_crops enable row level security;
 alter table public.survey_main_crop_yearly enable row level security;
 alter table public.survey_crop_practices enable row level security;
-
 create policy "public can read form sections" on public.form_sections
   for select using (is_active = true);
 create policy "public can read form fields" on public.form_fields
   for select using (is_active = true);
 create policy "public can read dropdown options" on public.dropdown_options
   for select using (is_active = true);
-
 create policy "farmers select own surveys" on public.farmer_surveys
   for select using (auth.uid() = user_id);
 create policy "farmers insert own surveys" on public.farmer_surveys
-  for insert with check (auth.uid() = user_id);
+  for insert with check (auth.uid() = user_id or user_id is null);
 create policy "farmers update own surveys" on public.farmer_surveys
   for update using (auth.uid() = user_id);
-create policy "farmers delete own surveys" on public.farmer_surveys
-  for delete using (auth.uid() = user_id);
-
 create policy "farmers select own kharif crops" on public.survey_kharif_crops
   for select using (exists (
     select 1 from public.farmer_surveys s
@@ -233,9 +209,8 @@ create policy "farmers select own kharif crops" on public.survey_kharif_crops
 create policy "farmers insert own kharif crops" on public.survey_kharif_crops
   for insert with check (exists (
     select 1 from public.farmer_surveys s
-    where s.id = survey_id and s.user_id = auth.uid()
+    where s.id = survey_id and (s.user_id = auth.uid() or s.user_id is null)
   ));
-
 create policy "farmers select own yearly production" on public.survey_main_crop_yearly
   for select using (exists (
     select 1 from public.farmer_surveys s
@@ -244,9 +219,8 @@ create policy "farmers select own yearly production" on public.survey_main_crop_
 create policy "farmers insert own yearly production" on public.survey_main_crop_yearly
   for insert with check (exists (
     select 1 from public.farmer_surveys s
-    where s.id = survey_id and s.user_id = auth.uid()
+    where s.id = survey_id and (s.user_id = auth.uid() or s.user_id is null)
   ));
-
 create policy "farmers select own crop practices" on public.survey_crop_practices
   for select using (exists (
     select 1 from public.farmer_surveys s
@@ -255,14 +229,13 @@ create policy "farmers select own crop practices" on public.survey_crop_practice
 create policy "farmers insert own crop practices" on public.survey_crop_practices
   for insert with check (exists (
     select 1 from public.farmer_surveys s
-    where s.id = survey_id and s.user_id = auth.uid()
+    where s.id = survey_id and (s.user_id = auth.uid() or s.user_id is null)
   ));
-
 grant usage on schema public to anon, authenticated;
 grant select on public.form_sections to anon, authenticated;
 grant select on public.form_fields to anon, authenticated;
 grant select on public.dropdown_options to anon, authenticated;
-grant select, insert, update, delete on public.farmer_surveys to anon, authenticated;
+grant select, insert, update on public.farmer_surveys to anon, authenticated;
 grant select, insert on public.survey_kharif_crops to anon, authenticated;
 grant select, insert on public.survey_main_crop_yearly to anon, authenticated;
 grant select, insert on public.survey_crop_practices to anon, authenticated;

@@ -199,7 +199,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
               const OfflineMapBackground(
                 message: 'Offline map\nPan to your farm and draw',
               ),
-              const OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
+              OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
               if (_ring.length >= 3)
                 PolygonLayer(
                   polygons: [

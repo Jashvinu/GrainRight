@@ -59,7 +59,7 @@ class SurveyService {
   }
 
   Future<void> insert(Map<String, dynamic> survey) async {
-    await _table.insert(_storageParent(survey));
+    await insertWithChildren(survey, const [], const [], const []);
   }
 
   Future<String> insertWithChildren(
@@ -69,11 +69,34 @@ class SurveyService {
     List<Map<String, dynamic>> practices,
   ) async {
     String? surveyId;
+    final storageParent = _storageParent(parent);
+    final clientUuid = storageParent['client_uuid']?.toString();
+    surveyId = await _findSurveyIdByClientUuid(clientUuid);
+    if (surveyId != null) {
+      await _table.update(storageParent).eq('id', surveyId);
+      await _replaceRows(
+        table: 'survey_kharif_crops',
+        surveyId: surveyId,
+        rows: kharif,
+        columns: _kharifCropColumns,
+      );
+      await _replaceRows(
+        table: 'survey_main_crop_yearly',
+        surveyId: surveyId,
+        rows: yearly,
+        columns: _yearlyCropColumns,
+      );
+      await _replaceRows(
+        table: 'survey_crop_practices',
+        surveyId: surveyId,
+        rows: practices,
+        columns: _cropPracticeColumns,
+      );
+      return surveyId;
+    }
+
     try {
-      final inserted = await _table
-          .insert(_storageParent(parent))
-          .select('id')
-          .single();
+      final inserted = await _table.insert(storageParent).select('id').single();
       surveyId = inserted['id'] as String;
 
       if (kharif.isNotEmpty) {
@@ -108,6 +131,34 @@ class SurveyService {
       }
 
       return surveyId;
+    } on PostgrestException catch (e) {
+      final existingId = await _findSurveyIdAfterConflict(e, clientUuid);
+      if (existingId != null) {
+        await _table.update(storageParent).eq('id', existingId);
+        await _replaceRows(
+          table: 'survey_kharif_crops',
+          surveyId: existingId,
+          rows: kharif,
+          columns: _kharifCropColumns,
+        );
+        await _replaceRows(
+          table: 'survey_main_crop_yearly',
+          surveyId: existingId,
+          rows: yearly,
+          columns: _yearlyCropColumns,
+        );
+        await _replaceRows(
+          table: 'survey_crop_practices',
+          surveyId: existingId,
+          rows: practices,
+          columns: _cropPracticeColumns,
+        );
+        return existingId;
+      }
+      if (surveyId != null) {
+        await _table.delete().eq('id', surveyId);
+      }
+      rethrow;
     } catch (_) {
       if (surveyId != null) {
         await _table.delete().eq('id', surveyId);
@@ -167,6 +218,29 @@ class SurveyService {
     if (storageRows.isNotEmpty) {
       await _client.from(table).insert(storageRows);
     }
+  }
+
+  Future<String?> _findSurveyIdAfterConflict(
+    PostgrestException error,
+    String? clientUuid,
+  ) async {
+    if (clientUuid == null || clientUuid.isEmpty) return null;
+    if (error.code != '23505' && !error.message.contains('client_uuid')) {
+      return null;
+    }
+    return _findSurveyIdByClientUuid(clientUuid);
+  }
+
+  Future<String?> _findSurveyIdByClientUuid(String? clientUuid) async {
+    if (clientUuid == null || clientUuid.isEmpty) return null;
+    final rows = await _table
+        .select('id')
+        .eq('client_uuid', clientUuid)
+        .limit(1);
+    if (rows is! List || rows.isEmpty) return null;
+    final first = rows.first;
+    if (first is! Map) return null;
+    return first['id']?.toString();
   }
 
   List<Map<String, dynamic>> _storageRows(
@@ -292,6 +366,7 @@ const _systemRowKeys = {'id', 'survey_id', 'created_at', 'updated_at'};
 const _systemParentKeys = {'id', 'created_at', 'updated_at'};
 
 const _farmerSurveyColumns = {
+  'client_uuid',
   'user_id',
   'survey_date',
   'language',

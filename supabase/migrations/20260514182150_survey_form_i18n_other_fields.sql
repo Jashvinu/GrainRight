@@ -1,11 +1,9 @@
 alter table public.form_sections
   add column if not exists title_hi text,
   add column if not exists title_mr text;
-
 alter table public.farmer_surveys
   add column if not exists income_sources_other text,
   add column if not exists farming_type_other text;
-
 update public.form_sections
 set
   title_hi = case title
@@ -50,12 +48,10 @@ where title in (
   'Main Crop 3-Year Production',
   'Income & Food Products'
 );
-
 update public.form_sections
 set is_active = false,
     updated_at = now()
 where title = 'Other Crops';
-
 with land_section as (
   select id from public.form_sections where title = 'Land / Farming' limit 1
 )
@@ -114,7 +110,6 @@ on conflict (field_key) do update set
   hint_text_mr = excluded.hint_text_mr,
   is_active = true,
   updated_at = now();
-
 with land_section as (
   select id from public.form_sections where title = 'Land / Farming' limit 1
 )
@@ -173,19 +168,16 @@ on conflict (field_key) do update set
   hint_text_mr = excluded.hint_text_mr,
   is_active = true,
   updated_at = now();
-
 update public.form_fields
 set label_hi = 'क्या वन अधिकार पट्टा है?',
     label_mr = 'वन हक्क पट्टा आहे का?',
     updated_at = now()
 where field_key = 'has_forest_patta';
-
 update public.form_fields
 set label_hi = 'वन अधिकार पट्टा क्षेत्र',
     label_mr = 'वन हक्क पट्टा क्षेत्र',
     updated_at = now()
 where field_key = 'forest_patta_acre';
-
 update public.form_fields
 set label_hi = 'क्या वन अधिकार पट्टा के लिए आवेदन किया?',
     label_mr = 'वन हक्क पट्ट्यासाठी अर्ज केला आहे का?',

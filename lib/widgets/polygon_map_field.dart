@@ -223,9 +223,7 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                     const OfflineMapBackground(
                       message: 'Offline map\nTap points to mark boundary',
                     ),
-                    const OfflineAwareTileLayer(
-                      urlTemplate: arcGisWorldImageryUrl,
-                    ),
+                    OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
                     if (_currentPoints.length >= 3)
                       PolygonLayer(
                         polygons: [

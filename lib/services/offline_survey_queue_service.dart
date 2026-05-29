@@ -3,10 +3,14 @@ import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'local_app_database.dart';
 import 'secure_app_storage.dart';
 
 class PendingSurveySubmission {
   final String localId;
+  final String? remoteId;
+  final String clientUuid;
   final String createdAt;
   final String expiresAt;
   final String status;
@@ -19,6 +23,7 @@ class PendingSurveySubmission {
 
   const PendingSurveySubmission({
     required this.localId,
+    required this.clientUuid,
     required this.createdAt,
     required this.expiresAt,
     required this.status,
@@ -27,6 +32,7 @@ class PendingSurveySubmission {
     required this.kharifRows,
     required this.yearlyRows,
     required this.practiceRows,
+    this.remoteId,
     this.lastError,
   });
 
@@ -55,12 +61,15 @@ class PendingSurveySubmission {
   }
 
   PendingSurveySubmission copyWith({
+    String? remoteId,
     String? status,
     int? attemptCount,
     String? lastError,
   }) {
     return PendingSurveySubmission(
       localId: localId,
+      remoteId: remoteId ?? this.remoteId,
+      clientUuid: clientUuid,
       createdAt: createdAt,
       expiresAt: expiresAt,
       status: status ?? this.status,
@@ -74,15 +83,23 @@ class PendingSurveySubmission {
   }
 
   factory PendingSurveySubmission.fromJson(Map<String, dynamic> json) {
+    final parent = _map(json['parent']);
+    final clientUuid =
+        json['client_uuid']?.toString() ??
+        parent['client_uuid']?.toString() ??
+        const Uuid().v4();
+    parent['client_uuid'] = clientUuid;
     return PendingSurveySubmission(
       localId: json['local_id']?.toString() ?? '',
+      remoteId: json['remote_id']?.toString(),
+      clientUuid: clientUuid,
       createdAt: json['created_at']?.toString() ?? '',
       expiresAt: _expiresAt(json),
       status:
           json['status']?.toString() ?? OfflineSurveyQueueService.statusPending,
       attemptCount: _toInt(json['attempt_count']),
       lastError: json['last_error']?.toString(),
-      parent: _map(json['parent']),
+      parent: parent,
       kharifRows: _rows(json['kharif_rows']),
       yearlyRows: _rows(json['yearly_rows']),
       practiceRows: _rows(json['practice_rows']),
@@ -92,6 +109,8 @@ class PendingSurveySubmission {
   Map<String, dynamic> toJson() {
     return {
       'local_id': localId,
+      if (remoteId != null) 'remote_id': remoteId,
+      'client_uuid': clientUuid,
       'created_at': createdAt,
       'expires_at': expiresAt,
       'status': status,
@@ -138,10 +157,13 @@ class OfflineSurveyQueueService {
   static const statusPending = 'pending';
   static const statusSyncing = 'syncing';
   static const statusFailed = 'failed';
+  static const statusSynced = 'synced';
   static const retention = Duration(days: 30);
 
   final Connectivity _connectivity = Connectivity();
   final _secureStorage = SecureAppStorage();
+  final _db = LocalAppDatabase.instance;
+  bool _legacyMigrationChecked = false;
 
   Stream<Object> get connectivityChanges =>
       _connectivity.onConnectivityChanged.map((event) => event as Object);
@@ -162,29 +184,57 @@ class OfflineSurveyQueueService {
     required List<Map<String, dynamic>> yearlyRows,
     required List<Map<String, dynamic>> practiceRows,
   }) async {
-    final queue = await loadQueue();
     final now = DateTime.now().toUtc();
+    final parentPayload = Map<String, dynamic>.from(parent);
+    final clientUuid =
+        parentPayload['client_uuid']?.toString().trim().isNotEmpty == true
+        ? parentPayload['client_uuid'].toString()
+        : const Uuid().v4();
+    parentPayload['client_uuid'] = clientUuid;
     final item = PendingSurveySubmission(
       localId: 'local-${now.microsecondsSinceEpoch}',
+      clientUuid: clientUuid,
       createdAt: now.toIso8601String(),
       expiresAt: now.add(retention).toIso8601String(),
       status: statusPending,
       attemptCount: 0,
-      parent: Map<String, dynamic>.from(parent),
+      parent: parentPayload,
       kharifRows: _copyRows(kharifRows),
       yearlyRows: _copyRows(yearlyRows),
       practiceRows: _copyRows(practiceRows),
     );
-    await _saveQueue([item, ...queue]);
+    await _saveItem(item);
     return item;
   }
 
   Future<List<PendingSurveySubmission>> loadQueue() async {
+    await _migrateLegacyQueue();
+    try {
+      final loaded = await _db.loadLocalSurveys();
+      final active = <PendingSurveySubmission>[];
+      for (final record in loaded) {
+        final item = _fromRecord(record);
+        if (!item.isSyncing && item.isExpired) {
+          await _db.deleteLocalSurvey(item.localId);
+          continue;
+        }
+        active.add(item);
+      }
+      return active;
+    } catch (e) {
+      debugPrint('[OfflineSurveyQueueService.loadQueue.db] $e');
+      return const [];
+    }
+  }
+
+  Future<void> _migrateLegacyQueue() async {
+    if (_legacyMigrationChecked) return;
+    _legacyMigrationChecked = true;
     final raw = await _secureStorage.readString(queueKey);
-    if (raw == null || raw.isEmpty) return const [];
+    if (raw == null || raw.isEmpty) return;
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is! List) return const [];
+      if (decoded is! List) return;
       final loaded = decoded
           .whereType<Map>()
           .map(
@@ -194,43 +244,47 @@ class OfflineSurveyQueueService {
           )
           .where((item) => item.localId.isNotEmpty)
           .toList();
-      final active = loaded
-          .where((item) => item.isSyncing || !item.isExpired)
-          .toList();
-      if (active.length != loaded.length) {
-        await _saveQueue(active);
+      for (final item in loaded.where((item) => !item.isExpired)) {
+        await _saveItem(item);
       }
-      return active;
+      await _secureStorage.remove(queueKey);
     } catch (e) {
-      debugPrint('[OfflineSurveyQueueService.loadQueue] $e');
-      return const [];
+      debugPrint('[OfflineSurveyQueueService._migrateLegacyQueue] $e');
     }
   }
 
   Future<void> remove(String localId) async {
-    final queue = await loadQueue();
-    await _saveQueue(queue.where((item) => item.localId != localId).toList());
+    await _db.deleteLocalSurvey(localId);
   }
 
   Future<void> markSyncing(String localId) async {
-    await _update(localId, (item) {
-      return item.copyWith(
-        status: statusSyncing,
-        attemptCount: item.attemptCount + 1,
-      );
-    });
+    await _db.markSurveySyncing(
+      localId,
+      DateTime.now().toUtc().toIso8601String(),
+    );
   }
 
   Future<void> markFailed(String localId, Object error) async {
-    await _update(localId, (item) {
-      return item.copyWith(status: statusFailed, lastError: _shortError(error));
-    });
+    await _db.markSurveyFailed(
+      localId: localId,
+      updatedAt: DateTime.now().toUtc().toIso8601String(),
+      lastError: _shortError(error),
+    );
   }
 
   Future<void> markPending(String localId) async {
-    await _update(localId, (item) {
-      return item.copyWith(status: statusPending);
-    });
+    await _db.markSurveyPending(
+      localId,
+      DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  Future<void> markSynced(String localId, String remoteId) async {
+    await _db.markSurveySynced(
+      localId: localId,
+      remoteId: remoteId,
+      syncedAt: DateTime.now().toUtc().toIso8601String(),
+    );
   }
 
   bool shouldQueueAfterError(Object error) {
@@ -256,22 +310,39 @@ class OfflineSurveyQueueService {
     return result is ConnectivityResult && result != ConnectivityResult.none;
   }
 
-  Future<void> _update(
-    String localId,
-    PendingSurveySubmission Function(PendingSurveySubmission item) update,
-  ) async {
-    final queue = await loadQueue();
-    await _saveQueue(
-      queue
-          .map((item) => item.localId == localId ? update(item) : item)
-          .toList(),
+  PendingSurveySubmission _fromRecord(LocalSurveyRecord record) {
+    return PendingSurveySubmission(
+      localId: record.localId,
+      remoteId: record.remoteId,
+      clientUuid: record.clientUuid,
+      createdAt: record.createdAt,
+      expiresAt: record.expiresAt,
+      status: record.status,
+      attemptCount: record.attemptCount,
+      lastError: record.lastError,
+      parent: record.parent,
+      kharifRows: record.kharifRows,
+      yearlyRows: record.yearlyRows,
+      practiceRows: record.practiceRows,
     );
   }
 
-  Future<void> _saveQueue(List<PendingSurveySubmission> queue) async {
-    await _secureStorage.writeString(
-      queueKey,
-      jsonEncode(queue.map((item) => item.toJson()).toList()),
+  Future<void> _saveItem(PendingSurveySubmission item) async {
+    await _db.upsertLocalSurvey(
+      localId: item.localId,
+      remoteId: item.remoteId,
+      clientUuid: item.clientUuid,
+      userId: item.parent['user_id']?.toString(),
+      parent: item.parent,
+      kharifRows: item.kharifRows,
+      yearlyRows: item.yearlyRows,
+      practiceRows: item.practiceRows,
+      status: item.status,
+      attemptCount: item.attemptCount,
+      createdAt: item.createdAt,
+      updatedAt: DateTime.now().toUtc().toIso8601String(),
+      expiresAt: item.expiresAt,
+      lastError: item.lastError,
     );
   }
 

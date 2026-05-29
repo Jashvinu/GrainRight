@@ -23,22 +23,12 @@ class SurveyController extends GetxController {
   final hasError = false.obs;
   final errorMessage = ''.obs;
   final deletingSurveyIds = <String>{}.obs;
-  StreamSubscription<Object>? _connectivitySubscription;
 
   @override
   void onInit() {
     super.onInit();
     loadSurveys();
-    _connectivitySubscription = _offlineQueueService.connectivityChanges.listen(
-      (_) => syncPendingSurveys(),
-    );
     unawaited(syncPendingSurveys());
-  }
-
-  @override
-  void onClose() {
-    _connectivitySubscription?.cancel();
-    super.onClose();
   }
 
   Future<void> loadSurveys() async {
@@ -116,7 +106,7 @@ class SurveyController extends GetxController {
           unawaited(
             _sheetsService.syncToSheet({...item.parent, '_id': remoteId}),
           );
-          await _offlineQueueService.remove(item.localId);
+          await _offlineQueueService.markSynced(item.localId, remoteId);
           syncedAny = true;
         } catch (e, st) {
           debugPrint('[SurveyController.syncPendingSurveys] $e\n$st');
