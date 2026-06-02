@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 
 class PolygonGeometry {
   static const double _earthRadiusM = 6371008.8;
@@ -42,12 +42,7 @@ class PolygonGeometry {
       minLng = math.min(minLng, point.longitude);
       maxLng = math.max(maxLng, point.longitude);
     }
-    return {
-      'south': minLat,
-      'west': minLng,
-      'north': maxLat,
-      'east': maxLng,
-    };
+    return {'south': minLat, 'west': minLng, 'north': maxLat, 'east': maxLng};
   }
 
   static List<LatLng> _closed(List<LatLng> ring) {

@@ -13,11 +13,19 @@ class OfflinePlacePrediction {
   final String placeId;
   final String title;
   final String subtitle;
+  final String provider;
+  final String? address;
+  final double? latitude;
+  final double? longitude;
 
   const OfflinePlacePrediction({
     required this.placeId,
     required this.title,
     required this.subtitle,
+    this.provider = OfflineMapService.mapTilerProvider,
+    this.address,
+    this.latitude,
+    this.longitude,
   });
 }
 
@@ -62,106 +70,129 @@ class _TileCoord {
   const _TileCoord(this.z, this.x, this.y);
 }
 
+class _ZoomRange {
+  final int minZoom;
+  final int maxZoom;
+
+  const _ZoomRange(this.minZoom, this.maxZoom);
+}
+
 class OfflineMapService {
-  static const defaultRadiusKm = 15.0;
-  static const defaultMinZoom = 10;
-  static const defaultMaxZoom = 16;
-  static const _maxTilesPerRegion = 6500;
+  static const mapTilerProvider = 'maptiler';
+  static const defaultRadiusKm = 2.0;
+  static const defaultMaxRadiusKm = 20.0;
+  static const defaultMinZoom = 15;
+  static const defaultMaxZoom = 20;
+  static const minDownloadZoom = 3;
+  static const maxDownloadZoom = 20;
+  static const _maxTilesPerRegion = 12000;
+  static const _defaultTileRetryDelay = Duration(seconds: 20);
+  static const _defaultTileMaxRetries = 4;
 
   final http.Client _client;
-  final LocalAppDatabase _db;
+  final LocalAppDatabase? _db;
+  final FutureOr<String> Function() _mapTilerApiKeyProvider;
+  final FutureOr<String> Function() _offlineTileUrlTemplateProvider;
+  final FutureOr<String> Function() _offlineTileSourceLabelProvider;
+  final Duration? _tileRequestIntervalOverride;
+  final Duration _tileRetryDelay;
+  final int _tileMaxRetries;
 
-  OfflineMapService({http.Client? client, LocalAppDatabase? database})
-    : _client = client ?? http.Client(),
-      _db = database ?? LocalAppDatabase.instance;
+  OfflineMapService({
+    http.Client? client,
+    LocalAppDatabase? database,
+    FutureOr<String> Function()? mapTilerApiKeyProvider,
+    FutureOr<String> Function()? offlineTileUrlTemplateProvider,
+    FutureOr<String> Function()? offlineTileSourceLabelProvider,
+    Duration? tileRequestInterval,
+    Duration tileRetryDelay = _defaultTileRetryDelay,
+    int tileMaxRetries = _defaultTileMaxRetries,
+  }) : _client = client ?? http.Client(),
+       _db = database ?? LocalAppDatabase.maybeInstance,
+       _mapTilerApiKeyProvider =
+           mapTilerApiKeyProvider ?? RuntimeConfig.mapTilerApiKeyRuntime,
+       _offlineTileUrlTemplateProvider =
+           offlineTileUrlTemplateProvider ??
+           RuntimeConfig.offlineTileUrlTemplateRuntime,
+       _offlineTileSourceLabelProvider =
+           offlineTileSourceLabelProvider ??
+           RuntimeConfig.offlineTileSourceLabelRuntime,
+       _tileRequestIntervalOverride = tileRequestInterval,
+       _tileRetryDelay = tileRetryDelay,
+       _tileMaxRetries = tileMaxRetries;
 
-  bool get hasOfflineTileSource =>
-      RuntimeConfig.offlineTileUrlTemplate.trim().isNotEmpty;
+  bool get supportsOfflineDownloads => _db != null;
 
-  String get offlineTileSourceLabel => RuntimeConfig.offlineTileSourceLabel;
+  Future<bool> hasOfflineTileSource() async =>
+      (await _offlineTileUrlTemplate()).isNotEmpty;
+
+  Future<String> offlineTileSourceLabel() async {
+    final label = (await _offlineTileSourceLabelProvider()).trim();
+    return label.isNotEmpty ? label : RuntimeConfig.offlineTileSourceLabel;
+  }
 
   Future<List<OfflinePlacePrediction>> searchPlaces(String input) async {
     final query = input.trim();
     if (query.length < 2) return const [];
-    final apiKey = await RuntimeConfig.googleMapsApiKey();
-    if (apiKey.trim().isEmpty) return const [];
 
-    final uri = Uri.https(
-      'maps.googleapis.com',
-      '/maps/api/place/autocomplete/json',
-      {
-        'input': query,
-        'components': 'country:in',
-        'types': 'geocode',
+    final mapTilerKey = (await _mapTilerApiKeyProvider()).trim();
+    if (mapTilerKey.isEmpty) {
+      throw StateError(
+        'MapTiler search is not configured. Set MAPTILER_API_KEY.',
+      );
+    }
+    return _searchMapTilerPlaces(query, mapTilerKey);
+  }
+
+  Future<List<OfflinePlacePrediction>> _searchMapTilerPlaces(
+    String query,
+    String apiKey,
+  ) async {
+    final uri = Uri(
+      scheme: 'https',
+      host: 'api.maptiler.com',
+      pathSegments: ['geocoding', '$query.json'],
+      queryParameters: {
         'key': apiKey,
+        'country': 'in',
+        'language': 'en,hi,mr',
+        'limit': '8',
+        'types': 'place,locality,neighbourhood,municipality,address,poi',
+        'autocomplete': 'true',
       },
     );
     final response = await _client.get(uri);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw http.ClientException(
-        'Places search failed with ${response.statusCode}',
+        'MapTiler place search failed with ${response.statusCode}',
         uri,
       );
     }
     final decoded = jsonDecode(response.body);
-    final predictions = decoded is Map ? decoded['predictions'] : null;
-    if (predictions is! List) return const [];
-    return predictions
+    final features = decoded is Map ? decoded['features'] : null;
+    if (features is! List) return const [];
+    return features
         .whereType<Map>()
-        .map((raw) {
-          final formatting = raw['structured_formatting'];
-          final title = formatting is Map
-              ? formatting['main_text']?.toString()
-              : null;
-          final subtitle = formatting is Map
-              ? formatting['secondary_text']?.toString()
-              : null;
-          return OfflinePlacePrediction(
-            placeId: raw['place_id']?.toString() ?? '',
-            title: title?.isNotEmpty == true
-                ? title!
-                : raw['description']?.toString() ?? 'Place',
-            subtitle: subtitle ?? raw['description']?.toString() ?? '',
-          );
-        })
-        .where((place) => place.placeId.isNotEmpty)
+        .map(_mapTilerFeatureToPrediction)
+        .whereType<OfflinePlacePrediction>()
         .toList();
   }
 
   Future<OfflinePlaceResult?> resolvePrediction(
     OfflinePlacePrediction prediction,
   ) async {
-    final apiKey = await RuntimeConfig.googleMapsApiKey();
-    if (apiKey.trim().isEmpty) return null;
-
-    final uri =
-        Uri.https('maps.googleapis.com', '/maps/api/place/details/json', {
-          'place_id': prediction.placeId,
-          'fields': 'place_id,name,formatted_address,geometry',
-          'key': apiKey,
-        });
-    final response = await _client.get(uri);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw http.ClientException(
-        'Place details failed with ${response.statusCode}',
-        uri,
+    if (prediction.provider == mapTilerProvider &&
+        prediction.latitude != null &&
+        prediction.longitude != null) {
+      return OfflinePlaceResult(
+        placeId: prediction.placeId,
+        title: prediction.title,
+        address: prediction.address ?? prediction.subtitle,
+        latitude: prediction.latitude!,
+        longitude: prediction.longitude!,
       );
     }
-    final decoded = jsonDecode(response.body);
-    final result = decoded is Map ? decoded['result'] : null;
-    final geometry = result is Map ? result['geometry'] : null;
-    final location = geometry is Map ? geometry['location'] : null;
-    if (result is! Map || location is! Map) return null;
-    final lat = (location['lat'] as num?)?.toDouble();
-    final lng = (location['lng'] as num?)?.toDouble();
-    if (lat == null || lng == null) return null;
-    return OfflinePlaceResult(
-      placeId: result['place_id']?.toString() ?? prediction.placeId,
-      title: result['name']?.toString() ?? prediction.title,
-      address: result['formatted_address']?.toString() ?? prediction.subtitle,
-      latitude: lat,
-      longitude: lng,
-    );
+    return null;
   }
 
   Stream<OfflineMapDownloadProgress> downloadRegion({
@@ -170,82 +201,123 @@ class OfflineMapService {
     int minZoom = defaultMinZoom,
     int maxZoom = defaultMaxZoom,
   }) async* {
-    final template = RuntimeConfig.offlineTileUrlTemplate.trim();
+    final template = await _offlineTileUrlTemplate();
     if (template.isEmpty) {
       throw StateError(
-        'Offline tile source is not configured. Set OFFLINE_TILE_URL_TEMPLATE.',
+        'Offline tile source is not configured. Set MAPTILER_API_KEY or OFFLINE_TILE_URL_TEMPLATE.',
       );
     }
-    final tiles = _tilesForRadius(
+    final db = _db;
+    if (db == null) {
+      throw UnsupportedError(
+        'Offline map downloads are not available on this platform.',
+      );
+    }
+    final zoomRange = _normalizedZoomRange(minZoom: minZoom, maxZoom: maxZoom);
+    final regionId = _regionIdForPlace(place);
+    final sourceId = _sourceId(template, regionId);
+    final tiles = _tilesForAdaptiveFieldDetail(
       latitude: place.latitude,
       longitude: place.longitude,
       radiusKm: radiusKm,
-      minZoom: minZoom,
-      maxZoom: maxZoom,
+      minZoom: zoomRange.minZoom,
+      maxZoom: zoomRange.maxZoom,
     );
     if (tiles.length > _maxTilesPerRegion) {
       throw StateError(
-        'This region has ${tiles.length} tiles. Lower the zoom range or radius.',
+        'This region still needs ${tiles.length} tiles. Use a smaller radius or download this village in two parts.',
       );
     }
 
     var downloaded = 0;
     var bytes = 0;
     var region = _region(
+      regionId: regionId,
       place: place,
       radiusKm: radiusKm,
-      minZoom: minZoom,
-      maxZoom: maxZoom,
+      minZoom: zoomRange.minZoom,
+      maxZoom: zoomRange.maxZoom,
       status: 'downloading',
       tileCount: tiles.length,
       downloadedTileCount: 0,
       sizeBytes: 0,
-      sourceId: template,
+      sourceId: sourceId,
     );
-    await _db.upsertOfflineMapRegion(region: region);
+    await db.upsertOfflineMapRegion(region: region);
     yield OfflineMapDownloadProgress(
       region: region,
       downloadedTiles: downloaded,
       totalTiles: tiles.length,
     );
 
+    final throttle = _TileRequestThrottle(
+      _tileRequestIntervalOverride ?? Duration.zero,
+    );
     try {
       for (final tile in tiles) {
-        final tileUrl = _tileUrl(template, tile);
-        final response = await _client.get(
-          Uri.parse(tileUrl),
-          headers: const {'User-Agent': 'grainright.wrkfarm'},
+        final cached = await db.readTile(
+          sourceId: sourceId,
+          z: tile.z,
+          x: tile.x,
+          y: tile.y,
         );
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          throw http.ClientException(
-            'Tile ${tile.z}/${tile.x}/${tile.y} failed with ${response.statusCode}',
-            Uri.parse(tileUrl),
-          );
+        if (cached != null) {
+          downloaded += 1;
+          bytes += cached.bytes.lengthInBytes;
+          if (downloaded == tiles.length || downloaded % 12 == 0) {
+            region = _region(
+              regionId: regionId,
+              place: place,
+              radiusKm: radiusKm,
+              minZoom: zoomRange.minZoom,
+              maxZoom: zoomRange.maxZoom,
+              status: 'downloading',
+              tileCount: tiles.length,
+              downloadedTileCount: downloaded,
+              sizeBytes: bytes,
+              sourceId: sourceId,
+            );
+            await db.upsertOfflineMapRegion(region: region);
+            yield OfflineMapDownloadProgress(
+              region: region,
+              downloadedTiles: downloaded,
+              totalTiles: tiles.length,
+            );
+          }
+          continue;
         }
-        final body = Uint8List.fromList(response.bodyBytes);
-        await _db.writeTile(
-          sourceId: template,
+
+        final tileUrl = _tileUrl(template, tile);
+        final downloadedTile = await _downloadTileWithRetry(
+          tile: tile,
+          uri: Uri.parse(tileUrl),
+          throttle: throttle,
+        );
+        final body = downloadedTile.bytes;
+        await db.writeTile(
+          sourceId: sourceId,
           z: tile.z,
           x: tile.x,
           y: tile.y,
           bytes: body,
-          contentType: response.headers['content-type'] ?? 'image/png',
+          contentType: downloadedTile.contentType,
         );
         downloaded += 1;
         bytes += body.lengthInBytes;
         if (downloaded == tiles.length || downloaded % 12 == 0) {
           region = _region(
+            regionId: regionId,
             place: place,
             radiusKm: radiusKm,
-            minZoom: minZoom,
-            maxZoom: maxZoom,
+            minZoom: zoomRange.minZoom,
+            maxZoom: zoomRange.maxZoom,
             status: 'downloading',
             tileCount: tiles.length,
             downloadedTileCount: downloaded,
             sizeBytes: bytes,
-            sourceId: template,
+            sourceId: sourceId,
           );
-          await _db.upsertOfflineMapRegion(region: region);
+          await db.upsertOfflineMapRegion(region: region);
           yield OfflineMapDownloadProgress(
             region: region,
             downloadedTiles: downloaded,
@@ -255,18 +327,19 @@ class OfflineMapService {
       }
 
       final readyRegion = _region(
+        regionId: regionId,
         place: place,
         radiusKm: radiusKm,
-        minZoom: minZoom,
-        maxZoom: maxZoom,
+        minZoom: zoomRange.minZoom,
+        maxZoom: zoomRange.maxZoom,
         status: 'ready',
         tileCount: tiles.length,
         downloadedTileCount: downloaded,
         sizeBytes: bytes,
-        sourceId: template,
+        sourceId: sourceId,
         downloadedAt: DateTime.now().toUtc().toIso8601String(),
       );
-      await _db.upsertOfflineMapRegion(region: readyRegion);
+      await db.upsertOfflineMapRegion(region: readyRegion);
       yield OfflineMapDownloadProgress(
         region: readyRegion,
         downloadedTiles: downloaded,
@@ -274,18 +347,19 @@ class OfflineMapService {
       );
     } catch (e) {
       final failedRegion = _region(
+        regionId: regionId,
         place: place,
         radiusKm: radiusKm,
-        minZoom: minZoom,
-        maxZoom: maxZoom,
-        status: 'failed',
+        minZoom: zoomRange.minZoom,
+        maxZoom: zoomRange.maxZoom,
+        status: _downloadStatusFor(e),
         tileCount: tiles.length,
         downloadedTileCount: downloaded,
         sizeBytes: bytes,
-        sourceId: template,
+        sourceId: sourceId,
         lastError: _shortError(e),
       );
-      await _db.upsertOfflineMapRegion(region: failedRegion);
+      await db.upsertOfflineMapRegion(region: failedRegion);
       yield OfflineMapDownloadProgress(
         region: failedRegion,
         downloadedTiles: downloaded,
@@ -296,14 +370,21 @@ class OfflineMapService {
   }
 
   Future<List<OfflineMapRegionRecord>> listRegions() {
-    return _db.loadOfflineMapRegions();
+    final db = _db;
+    if (db == null) return Future.value(const []);
+    return db.loadOfflineMapRegions().then(
+      (regions) => regions.map(_sanitizeRegion).toList(),
+    );
   }
 
   Future<void> deleteRegion(OfflineMapRegionRecord region) {
-    return _db.deleteOfflineMapRegion(region.regionId, region.sourceId);
+    final db = _db;
+    if (db == null) return Future.value();
+    return db.deleteOfflineMapRegion(region.regionId, region.sourceId);
   }
 
   OfflineMapRegionRecord _region({
+    required String regionId,
     required OfflinePlaceResult place,
     required double radiusKm,
     required int minZoom,
@@ -317,12 +398,8 @@ class OfflineMapService {
     String? lastError,
   }) {
     final now = DateTime.now().toUtc().toIso8601String();
-    final normalizedId = place.placeId.replaceAll(
-      RegExp(r'[^A-Za-z0-9_-]'),
-      '',
-    );
     return OfflineMapRegionRecord(
-      regionId: normalizedId.isNotEmpty ? normalizedId : const Uuid().v4(),
+      regionId: regionId,
       label: place.title,
       centerLat: place.latitude,
       centerLng: place.longitude,
@@ -338,6 +415,94 @@ class OfflineMapService {
       sourceId: sourceId,
       lastError: lastError,
     );
+  }
+
+  String _regionIdForPlace(OfflinePlaceResult place) {
+    final normalizedId = place.placeId.replaceAll(
+      RegExp(r'[^A-Za-z0-9_-]'),
+      '',
+    );
+    return normalizedId.isNotEmpty ? normalizedId : const Uuid().v4();
+  }
+
+  String _sourceId(String template, String regionId) {
+    return '$template#region=$regionId';
+  }
+
+  OfflineMapRegionRecord _sanitizeRegion(OfflineMapRegionRecord region) {
+    final zoomRange = _normalizedZoomRange(
+      minZoom: region.minZoom,
+      maxZoom: region.maxZoom,
+    );
+    final lastError = region.lastError;
+    if (lastError == null &&
+        zoomRange.minZoom == region.minZoom &&
+        zoomRange.maxZoom == region.maxZoom) {
+      return region;
+    }
+    return OfflineMapRegionRecord(
+      regionId: region.regionId,
+      label: region.label,
+      centerLat: region.centerLat,
+      centerLng: region.centerLng,
+      radiusKm: region.radiusKm,
+      minZoom: zoomRange.minZoom,
+      maxZoom: zoomRange.maxZoom,
+      status: region.status,
+      downloadedAt: region.downloadedAt,
+      updatedAt: region.updatedAt,
+      tileCount: region.tileCount,
+      downloadedTileCount: region.downloadedTileCount,
+      sizeBytes: region.sizeBytes,
+      sourceId: region.sourceId,
+      lastError: lastError == null ? null : _shortError(lastError),
+    );
+  }
+
+  _ZoomRange _normalizedZoomRange({
+    required int minZoom,
+    required int maxZoom,
+  }) {
+    final safeMin = minZoom.clamp(minDownloadZoom, maxDownloadZoom).toInt();
+    final safeMax = maxZoom.clamp(minDownloadZoom, maxDownloadZoom).toInt();
+    if (safeMin <= safeMax) {
+      return _ZoomRange(safeMin, safeMax);
+    }
+    return _ZoomRange(safeMax, safeMax);
+  }
+
+  List<_TileCoord> _tilesForAdaptiveFieldDetail({
+    required double latitude,
+    required double longitude,
+    required double radiusKm,
+    required int minZoom,
+    required int maxZoom,
+  }) {
+    final seen = <String>{};
+    final tiles = <_TileCoord>[];
+    for (var z = minZoom; z <= maxZoom; z++) {
+      final effectiveRadius = _effectiveRadiusForZoom(radiusKm, z);
+      for (final tile in _tilesForRadius(
+        latitude: latitude,
+        longitude: longitude,
+        radiusKm: effectiveRadius,
+        minZoom: z,
+        maxZoom: z,
+      )) {
+        final key = '${tile.z}/${tile.x}/${tile.y}';
+        if (seen.add(key)) tiles.add(tile);
+      }
+    }
+    return tiles;
+  }
+
+  double _effectiveRadiusForZoom(double radiusKm, int zoom) {
+    if (zoom <= 15) return radiusKm;
+    if (zoom == 16) return min(radiusKm, 12);
+    if (zoom == 17) return min(radiusKm, 6);
+    if (zoom == 18) return min(radiusKm, 3);
+    if (zoom == 19) return min(radiusKm, 1.5);
+    return min(radiusKm, 0.75);
   }
 
   List<_TileCoord> _tilesForRadius({
@@ -383,15 +548,180 @@ class OfflineMapService {
         .replaceAll('{y}', tile.y.toString());
   }
 
+  Future<_DownloadedTile> _downloadTileWithRetry({
+    required _TileCoord tile,
+    required Uri uri,
+    required _TileRequestThrottle throttle,
+  }) async {
+    http.Response? lastResponse;
+    for (var attempt = 0; attempt <= _tileMaxRetries; attempt++) {
+      await throttle.wait();
+      final response = await _client.get(
+        uri,
+        headers: const {'User-Agent': 'grainright.wrkfarm'},
+      );
+      lastResponse = response;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        return _DownloadedTile(
+          bytes: Uint8List.fromList(response.bodyBytes),
+          contentType: response.headers['content-type'] ?? 'image/png',
+        );
+      }
+
+      final retryable = _isRetryableTileStatus(response.statusCode);
+      if (!retryable || attempt == _tileMaxRetries) break;
+      await Future<void>.delayed(_retryDelay(response, attempt));
+    }
+
+    final statusCode = lastResponse?.statusCode ?? 0;
+    throw _TileDownloadException(
+      tile: tile,
+      statusCode: statusCode,
+      rateLimited: statusCode == 429,
+    );
+  }
+
+  Duration _retryDelay(http.Response response, int attempt) {
+    final retryAfter = response.headers['retry-after'];
+    final retryAfterSeconds = retryAfter == null
+        ? null
+        : int.tryParse(retryAfter.trim());
+    if (retryAfterSeconds != null && retryAfterSeconds > 0) {
+      return Duration(seconds: retryAfterSeconds);
+    }
+    final multiplier = 1 << min(attempt, 4);
+    return _tileRetryDelay * multiplier;
+  }
+
+  bool _isRetryableTileStatus(int statusCode) {
+    return statusCode == 429 || statusCode == 408 || statusCode >= 500;
+  }
+
+  OfflinePlacePrediction? _mapTilerFeatureToPrediction(Map raw) {
+    final center = raw['center'];
+    final geometry = raw['geometry'];
+    final geometryCoordinates = geometry is Map
+        ? geometry['coordinates']
+        : null;
+    final coordinates = center is List ? center : geometryCoordinates;
+    if (coordinates is! List || coordinates.length < 2) return null;
+
+    final lng = _toDouble(coordinates[0]);
+    final lat = _toDouble(coordinates[1]);
+    if (lat == null || lng == null) return null;
+
+    final title = _firstText([
+      raw['text'],
+      raw['matching_text'],
+      raw['place_name'],
+    ]);
+    final address = _firstText([
+      raw['place_name'],
+      raw['matching_place_name'],
+      raw['text'],
+    ]);
+    if (title == null || title.isEmpty) return null;
+
+    return OfflinePlacePrediction(
+      provider: mapTilerProvider,
+      placeId: 'maptiler:${raw['id'] ?? '$lat,$lng'}',
+      title: title,
+      subtitle: address == title ? '' : address ?? '',
+      address: address ?? title,
+      latitude: lat,
+      longitude: lng,
+    );
+  }
+
+  Future<String> _offlineTileUrlTemplate() async {
+    return (await _offlineTileUrlTemplateProvider()).trim();
+  }
+
+  String? _firstText(List<Object?> values) {
+    for (final value in values) {
+      final text = value?.toString().trim();
+      if (text != null && text.isNotEmpty) return text;
+    }
+    return null;
+  }
+
+  double? _toDouble(Object? value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   double _degToRad(double value) => value * pi / 180.0;
 
+  String _downloadStatusFor(Object error) {
+    if (error is _TileDownloadException && error.rateLimited) return 'paused';
+    return 'failed';
+  }
+
   String _shortError(Object error) {
-    final text = error.toString();
+    final text = _sanitizeErrorText(error.toString());
     return text.length <= 240 ? text : '${text.substring(0, 240)}...';
+  }
+
+  String _sanitizeErrorText(String text) {
+    return text
+        .replaceAll(RegExp(r'api_key=[^&\s,)]+'), 'api_key=REDACTED')
+        .replaceAll(RegExp(r'key=[^&\s,)]+'), 'key=REDACTED')
+        .replaceAll(RegExp(r'access_token=[^&\s,)]+'), 'access_token=REDACTED');
   }
 
   @mustCallSuper
   void dispose() {
     _client.close();
+  }
+}
+
+class _DownloadedTile {
+  final Uint8List bytes;
+  final String contentType;
+
+  const _DownloadedTile({required this.bytes, required this.contentType});
+}
+
+class _TileRequestThrottle {
+  final Duration interval;
+  DateTime? _lastRequestAt;
+
+  _TileRequestThrottle(this.interval);
+
+  Future<void> wait() async {
+    if (interval <= Duration.zero) {
+      _lastRequestAt = DateTime.now();
+      return;
+    }
+
+    final lastRequestAt = _lastRequestAt;
+    if (lastRequestAt != null) {
+      final elapsed = DateTime.now().difference(lastRequestAt);
+      if (elapsed < interval) {
+        await Future<void>.delayed(interval - elapsed);
+      }
+    }
+    _lastRequestAt = DateTime.now();
+  }
+}
+
+class _TileDownloadException implements Exception {
+  final _TileCoord tile;
+  final int statusCode;
+  final bool rateLimited;
+
+  const _TileDownloadException({
+    required this.tile,
+    required this.statusCode,
+    required this.rateLimited,
+  });
+
+  @override
+  String toString() {
+    if (rateLimited) {
+      return 'Tile server rate limit reached while downloading tile ${tile.z}/${tile.x}/${tile.y}. Download paused; tap Resume later or reduce radius/zoom.';
+    }
+    return 'Tile ${tile.z}/${tile.x}/${tile.y} failed with HTTP $statusCode.';
   }
 }

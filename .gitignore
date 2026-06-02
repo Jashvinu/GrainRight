@@ -46,5 +46,12 @@ app.*.map.json
 
 # Environment secrets
 .env
+**/.env
+**/node_modules/
+**/dist/
+**/exports/*.csv
 wrkfarm-415118-f4e4c633fc0a.json
+key.properties
+*.jks
 supabase/.temp/
+.render-cli/

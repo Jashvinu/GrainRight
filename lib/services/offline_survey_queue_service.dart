@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'local_app_database.dart';
+import 'network_status_service.dart';
 import 'secure_app_storage.dart';
 
 class PendingSurveySubmission {
@@ -89,6 +90,9 @@ class PendingSurveySubmission {
         parent['client_uuid']?.toString() ??
         const Uuid().v4();
     parent['client_uuid'] = clientUuid;
+    parent['total_cultivation_cost'] = _toNumericOrZero(
+      parent['total_cultivation_cost'],
+    );
     return PendingSurveySubmission(
       localId: json['local_id']?.toString() ?? '',
       remoteId: json['remote_id']?.toString(),
@@ -129,6 +133,13 @@ class PendingSurveySubmission {
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
 
+  static double _toNumericOrZero(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim()) ?? 0.0;
+    return 0.0;
+  }
+
   static String _expiresAt(Map<String, dynamic> json) {
     final raw = json['expires_at']?.toString();
     if (raw != null && raw.isNotEmpty) return raw;
@@ -161,8 +172,9 @@ class OfflineSurveyQueueService {
   static const retention = Duration(days: 30);
 
   final Connectivity _connectivity = Connectivity();
+  final _networkStatusService = NetworkStatusService();
   final _secureStorage = SecureAppStorage();
-  final _db = LocalAppDatabase.instance;
+  LocalAppDatabase? get _db => LocalAppDatabase.maybeInstance;
   bool _legacyMigrationChecked = false;
 
   Stream<Object> get connectivityChanges =>
@@ -170,11 +182,10 @@ class OfflineSurveyQueueService {
 
   Future<bool> isOnline() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      return _hasConnection(result);
+      return _networkStatusService.isOnline();
     } catch (e) {
       debugPrint('[OfflineSurveyQueueService.isOnline] $e');
-      return true;
+      return false;
     }
   }
 
@@ -191,6 +202,10 @@ class OfflineSurveyQueueService {
         ? parentPayload['client_uuid'].toString()
         : const Uuid().v4();
     parentPayload['client_uuid'] = clientUuid;
+    parentPayload['total_cultivation_cost'] =
+        PendingSurveySubmission._toNumericOrZero(
+          parentPayload['total_cultivation_cost'],
+        );
     final item = PendingSurveySubmission(
       localId: 'local-${now.microsecondsSinceEpoch}',
       clientUuid: clientUuid,
@@ -208,14 +223,17 @@ class OfflineSurveyQueueService {
   }
 
   Future<List<PendingSurveySubmission>> loadQueue() async {
-    await _migrateLegacyQueue();
+    final db = _db;
+    if (db == null) return _loadLegacyQueue();
+
+    await _migrateLegacyQueue(db);
     try {
-      final loaded = await _db.loadLocalSurveys();
+      final loaded = await db.loadLocalSurveys();
       final active = <PendingSurveySubmission>[];
       for (final record in loaded) {
         final item = _fromRecord(record);
         if (!item.isSyncing && item.isExpired) {
-          await _db.deleteLocalSurvey(item.localId);
+          await db.deleteLocalSurvey(item.localId);
           continue;
         }
         active.add(item);
@@ -227,7 +245,7 @@ class OfflineSurveyQueueService {
     }
   }
 
-  Future<void> _migrateLegacyQueue() async {
+  Future<void> _migrateLegacyQueue(LocalAppDatabase db) async {
     if (_legacyMigrationChecked) return;
     _legacyMigrationChecked = true;
     final raw = await _secureStorage.readString(queueKey);
@@ -245,7 +263,7 @@ class OfflineSurveyQueueService {
           .where((item) => item.localId.isNotEmpty)
           .toList();
       for (final item in loaded.where((item) => !item.isExpired)) {
-        await _saveItem(item);
+        await _saveItemInDatabase(db, item);
       }
       await _secureStorage.remove(queueKey);
     } catch (e) {
@@ -254,18 +272,46 @@ class OfflineSurveyQueueService {
   }
 
   Future<void> remove(String localId) async {
-    await _db.deleteLocalSurvey(localId);
+    final db = _db;
+    if (db == null) {
+      await _removeLegacyItem(localId);
+      return;
+    }
+    await db.deleteLocalSurvey(localId);
   }
 
   Future<void> markSyncing(String localId) async {
-    await _db.markSurveySyncing(
+    final db = _db;
+    if (db == null) {
+      await _updateLegacyItem(localId, (item) {
+        return _copySubmission(
+          item,
+          status: statusSyncing,
+          attemptCount: item.attemptCount + 1,
+          clearLastError: true,
+        );
+      });
+      return;
+    }
+    await db.markSurveySyncing(
       localId,
       DateTime.now().toUtc().toIso8601String(),
     );
   }
 
   Future<void> markFailed(String localId, Object error) async {
-    await _db.markSurveyFailed(
+    final db = _db;
+    if (db == null) {
+      await _updateLegacyItem(localId, (item) {
+        return _copySubmission(
+          item,
+          status: statusFailed,
+          lastError: _shortError(error),
+        );
+      });
+      return;
+    }
+    await db.markSurveyFailed(
       localId: localId,
       updatedAt: DateTime.now().toUtc().toIso8601String(),
       lastError: _shortError(error),
@@ -273,14 +319,30 @@ class OfflineSurveyQueueService {
   }
 
   Future<void> markPending(String localId) async {
-    await _db.markSurveyPending(
+    final db = _db;
+    if (db == null) {
+      await _updateLegacyItem(localId, (item) {
+        return _copySubmission(
+          item,
+          status: statusPending,
+          clearLastError: true,
+        );
+      });
+      return;
+    }
+    await db.markSurveyPending(
       localId,
       DateTime.now().toUtc().toIso8601String(),
     );
   }
 
   Future<void> markSynced(String localId, String remoteId) async {
-    await _db.markSurveySynced(
+    final db = _db;
+    if (db == null) {
+      await _removeLegacyItem(localId);
+      return;
+    }
+    await db.markSurveySynced(
       localId: localId,
       remoteId: remoteId,
       syncedAt: DateTime.now().toUtc().toIso8601String(),
@@ -299,18 +361,12 @@ class OfflineSurveyQueueService {
         text.contains('timeout');
   }
 
-  bool _hasConnection(Object? result) {
-    if (result is Iterable) {
-      return result.any(_isConnectedResult);
-    }
-    return _isConnectedResult(result);
-  }
-
-  bool _isConnectedResult(Object? result) {
-    return result is ConnectivityResult && result != ConnectivityResult.none;
-  }
-
   PendingSurveySubmission _fromRecord(LocalSurveyRecord record) {
+    final parent = Map<String, dynamic>.from(record.parent);
+    parent['total_cultivation_cost'] =
+        PendingSurveySubmission._toNumericOrZero(
+          parent['total_cultivation_cost'],
+        );
     return PendingSurveySubmission(
       localId: record.localId,
       remoteId: record.remoteId,
@@ -320,7 +376,7 @@ class OfflineSurveyQueueService {
       status: record.status,
       attemptCount: record.attemptCount,
       lastError: record.lastError,
-      parent: record.parent,
+      parent: parent,
       kharifRows: record.kharifRows,
       yearlyRows: record.yearlyRows,
       practiceRows: record.practiceRows,
@@ -328,7 +384,19 @@ class OfflineSurveyQueueService {
   }
 
   Future<void> _saveItem(PendingSurveySubmission item) async {
-    await _db.upsertLocalSurvey(
+    final db = _db;
+    if (db == null) {
+      await _upsertLegacyItem(item);
+      return;
+    }
+    await _saveItemInDatabase(db, item);
+  }
+
+  Future<void> _saveItemInDatabase(
+    LocalAppDatabase db,
+    PendingSurveySubmission item,
+  ) async {
+    await db.upsertLocalSurvey(
       localId: item.localId,
       remoteId: item.remoteId,
       clientUuid: item.clientUuid,
@@ -343,6 +411,109 @@ class OfflineSurveyQueueService {
       updatedAt: DateTime.now().toUtc().toIso8601String(),
       expiresAt: item.expiresAt,
       lastError: item.lastError,
+    );
+  }
+
+  Future<List<PendingSurveySubmission>> _loadLegacyQueue() async {
+    try {
+      final loaded = await _readLegacyQueue();
+      final active = loaded
+          .where((item) => item.status != statusSynced && !item.isExpired)
+          .toList();
+      if (active.length != loaded.length) {
+        await _writeLegacyQueue(active);
+      }
+      return active;
+    } catch (e) {
+      debugPrint('[OfflineSurveyQueueService.loadQueue.legacy] $e');
+      return const [];
+    }
+  }
+
+  Future<List<PendingSurveySubmission>> _readLegacyQueue() async {
+    final raw = await _secureStorage.readString(queueKey);
+    if (raw == null || raw.isEmpty) return const [];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map>()
+        .map(
+          (item) =>
+              PendingSurveySubmission.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .where((item) => item.localId.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _writeLegacyQueue(List<PendingSurveySubmission> items) async {
+    if (items.isEmpty) {
+      await _secureStorage.remove(queueKey);
+      return;
+    }
+    await _secureStorage.writeString(
+      queueKey,
+      jsonEncode(items.map((item) => item.toJson()).toList()),
+    );
+  }
+
+  Future<void> _upsertLegacyItem(PendingSurveySubmission item) async {
+    final items = await _readLegacyQueue();
+    final index = items.indexWhere(
+      (existing) => existing.localId == item.localId,
+    );
+    if (index == -1) {
+      items.add(item);
+    } else {
+      items[index] = item;
+    }
+    await _writeLegacyQueue(
+      items
+          .where((queued) => queued.status != statusSynced && !queued.isExpired)
+          .toList(),
+    );
+  }
+
+  Future<void> _removeLegacyItem(String localId) async {
+    final items = await _readLegacyQueue();
+    items.removeWhere((item) => item.localId == localId);
+    await _writeLegacyQueue(items);
+  }
+
+  Future<void> _updateLegacyItem(
+    String localId,
+    PendingSurveySubmission Function(PendingSurveySubmission item) update,
+  ) async {
+    final items = await _readLegacyQueue();
+    final index = items.indexWhere((item) => item.localId == localId);
+    if (index == -1) return;
+    items[index] = update(items[index]);
+    await _writeLegacyQueue(
+      items
+          .where((queued) => queued.status != statusSynced && !queued.isExpired)
+          .toList(),
+    );
+  }
+
+  PendingSurveySubmission _copySubmission(
+    PendingSurveySubmission item, {
+    String? status,
+    int? attemptCount,
+    String? lastError,
+    bool clearLastError = false,
+  }) {
+    return PendingSurveySubmission(
+      localId: item.localId,
+      remoteId: item.remoteId,
+      clientUuid: item.clientUuid,
+      createdAt: item.createdAt,
+      expiresAt: item.expiresAt,
+      status: status ?? item.status,
+      attemptCount: attemptCount ?? item.attemptCount,
+      lastError: clearLastError ? null : lastError ?? item.lastError,
+      parent: item.parent,
+      kharifRows: item.kharifRows,
+      yearlyRows: item.yearlyRows,
+      practiceRows: item.practiceRows,
     );
   }
 

@@ -5,7 +5,9 @@ import '../config/theme.dart';
 import '../config/translations.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
+import '../models/survey_launch.dart';
 import '../services/location_service.dart';
+import '../services/secure_app_storage.dart';
 import '../widgets/dynamic_step.dart';
 
 class SurveyFormScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
     with WidgetsBindingObserver {
   late final FormController c;
   late final LanguageController lang;
+  final _secureStorage = SecureAppStorage();
   final _scrollController = ScrollController();
   List<GlobalKey> _chipKeys = [];
   int _previousStep = 0;
@@ -39,14 +42,23 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
   }
 
   Future<void> _loadData() async {
-    final surveyId = Get.arguments as String?;
+    final launch = SurveyLaunchArgs.from(Get.arguments);
+    final surveyId = launch.mode == SurveyLaunchMode.edit
+        ? launch.surveyId
+        : null;
     if (surveyId != null) c.prepareEdit(surveyId);
+    if (launch.mode == SurveyLaunchMode.newSurvey) {
+      await _clearStoredDraft();
+    }
     await c.loadConfig();
     if (!c.isConfigLoaded.value) return;
+    if (launch.mode == SurveyLaunchMode.newSurvey) {
+      c.startFreshSurvey();
+    }
     _chipKeys = List.generate(c.totalSteps, (_) => GlobalKey());
     if (surveyId != null) {
       await c.loadSurvey(surveyId);
-    } else {
+    } else if (launch.mode == SurveyLaunchMode.resumeDraft) {
       final hasDraft = await c.hasDraft();
       if (hasDraft && mounted) {
         await c.loadDraft();
@@ -80,8 +92,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
   }
 
   void _scrollToActiveChip() {
-    if (c.currentStep.value >= _chipKeys.length) return;
-    final key = _chipKeys[c.currentStep.value];
+    final step = _safeStep(_chipKeys.length);
+    if (step == null) return;
+    final key = _chipKeys[step];
     final ctx = key.currentContext;
     if (ctx != null) {
       Scrollable.ensureVisible(
@@ -116,6 +129,39 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
     return AppTranslations.translate(text);
   }
 
+  Future<void> _switchToChat() async {
+    await c.saveDraft();
+    Get.offNamed('/form', arguments: _switchArguments());
+  }
+
+  Future<void> _clearStoredDraft() async {
+    await c.clearDraft(suppressAutosave: true);
+    await _secureStorage.remove('chat_form_cursor');
+  }
+
+  SurveyLaunchArgs _switchArguments() {
+    return SurveyLaunchArgs.from(Get.arguments).forModeSwitch();
+  }
+
+  int? _safeStep(int totalSteps) {
+    if (totalSteps <= 0) return null;
+    final current = c.currentStep.value;
+    final safe = current.clamp(0, totalSteps - 1).toInt();
+    if (safe != current) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && c.currentStep.value != safe) {
+          c.currentStep.value = safe;
+        }
+      });
+    }
+    return safe;
+  }
+
+  void _goToStep(int step, int totalSteps) {
+    if (totalSteps <= 0) return;
+    c.currentStep.value = step.clamp(0, totalSteps - 1).toInt();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -126,7 +172,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
         return Scaffold(
           appBar: AppBar(
             title: Text(_tr('Error')),
-            actions: [_buildLanguageToggle()],
+            actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
           body: Center(
             child: Padding(
@@ -162,7 +208,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
         return Scaffold(
           appBar: AppBar(
             title: Text(_tr('Loading...')),
-            actions: [_buildLanguageToggle()],
+            actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
           body: const Center(
             child: CircularProgressIndicator(color: AppTheme.green),
@@ -175,7 +221,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
         return Scaffold(
           appBar: AppBar(
             title: Text(_tr('Error')),
-            actions: [_buildLanguageToggle()],
+            actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
           body: Center(child: Text(_tr('No form configuration found.'))),
         );
@@ -184,7 +230,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
       return Scaffold(
         appBar: AppBar(
           title: Text(c.isEditMode ? _tr('Edit Survey') : _tr('New Survey')),
-          actions: [_buildLanguageToggle()],
+          actions: [_buildLanguageToggle(), _buildChatModeButton()],
         ),
         body: Column(
           children: [
@@ -193,7 +239,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
               color: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Obx(() {
-                final current = c.currentStep.value;
+                final current = _safeStep(totalSteps) ?? 0;
                 // Snapshot the visited set to ensure reactive rebuild
                 final visited = c.visitedSteps.toSet();
                 return SingleChildScrollView(
@@ -208,7 +254,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                       final title = section.localizedTitle(context);
                       return GestureDetector(
                         key: i < _chipKeys.length ? _chipKeys[i] : null,
-                        onTap: () => c.currentStep.value = i,
+                        onTap: () => _goToStep(i, totalSteps),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 250),
                           curve: Curves.easeOutCubic,
@@ -354,7 +400,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
               child: Form(
                 key: c.formKey,
                 child: Obx(() {
-                  final step = c.currentStep.value;
+                  final step = _safeStep(totalSteps) ?? 0;
                   final section = c.sections[step];
                   final icon = resolveIcon(section.iconName);
                   final forward = _isForward;
@@ -471,8 +517,9 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                 border: Border(top: BorderSide(color: Colors.grey.shade200)),
               ),
               child: Obx(() {
-                final isFirst = c.currentStep.value == 0;
-                final isLast = c.currentStep.value == totalSteps - 1;
+                final step = _safeStep(totalSteps) ?? 0;
+                final isFirst = step == 0;
+                final isLast = step == totalSteps - 1;
                 return SafeArea(
                   top: false,
                   child: Row(
@@ -480,7 +527,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                       if (!isFirst)
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: () => c.currentStep.value--,
+                            onPressed: () => _goToStep(step - 1, totalSteps),
                             icon: const Icon(
                               Icons.arrow_back_rounded,
                               size: 18,
@@ -505,7 +552,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                                   if (isLast) {
                                     c.submit();
                                   } else {
-                                    c.currentStep.value++;
+                                    _goToStep(step + 1, totalSteps);
                                   }
                                 },
                           icon: isLast
@@ -583,6 +630,17 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
         ),
       );
     });
+  }
+
+  Widget _buildChatModeButton() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: IconButton(
+        tooltip: 'Use chat form',
+        onPressed: _switchToChat,
+        icon: const Icon(Icons.chat_bubble_outline_rounded),
+      ),
+    );
   }
 }
 

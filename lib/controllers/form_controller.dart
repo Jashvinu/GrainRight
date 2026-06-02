@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../controllers/language_controller.dart';
+import '../controllers/main_auth_controller.dart';
 import '../controllers/survey_controller.dart';
+import '../config/offline_form_seed.dart';
 import '../models/form_config.dart';
 import '../services/form_config_service.dart';
 import '../services/location_service.dart';
+import '../services/map_tile_cache_service.dart';
 import '../services/offline_survey_queue_service.dart';
 import '../services/secure_app_storage.dart';
 import '../services/sheets_sync_service.dart';
@@ -34,6 +38,7 @@ class FormController extends GetxController {
   final _configService = FormConfigService();
   final _sheetsSyncService = SheetsSyncService();
   final _locationService = LocationService();
+  final _mapTileCacheService = MapTileCacheService();
   final _offlineQueueService = OfflineSurveyQueueService();
   final _secureStorage = SecureAppStorage();
 
@@ -239,6 +244,58 @@ class FormController extends GetxController {
     editId = id;
   }
 
+  void startFreshSurvey() {
+    final previousSuppressDraftSave = _suppressDraftSave;
+    _suppressDraftSave = true;
+    try {
+      editId = null;
+      currentStep.value = 0;
+      visitedSteps
+        ..clear()
+        ..add(0);
+
+      for (final controller in _textControllers.values) {
+        controller.clear();
+      }
+      for (final value in _boolValues.values) {
+        value.value = null;
+      }
+      for (final value in _stringValues.values) {
+        value.value = null;
+      }
+      for (final value in _dateValues.values) {
+        value.value = null;
+      }
+      for (final value in _autoCalcValues.values) {
+        value.value = 0;
+      }
+      for (final value in _polygonValues.values) {
+        value.value = null;
+      }
+      for (final value in _multiSelectValues.values) {
+        value.clear();
+      }
+
+      kharifRows.clear();
+      yearlyRows.clear();
+      practiceRows.clear();
+
+      milletLandMode.value = 'total';
+      milletLandTotal.value = 0;
+      for (final controller in _milletLandControllers.values) {
+        controller.clear();
+      }
+
+      _capturedLocation = null;
+      if (locationStatus.value != LocationStatus.fetching) {
+        locationStatus.value = LocationStatus.idle;
+      }
+      _formStartedAt = DateTime.now().toUtc();
+    } finally {
+      _suppressDraftSave = previousSuppressDraftSave;
+    }
+  }
+
   Future<void> loadConfig() async {
     hasError.value = false;
     isConfigLoaded.value = false;
@@ -263,7 +320,9 @@ class FormController extends GetxController {
       _normalizeIncomeSourceOptions(loadedOptions, loadedOptionLabels);
       _ensureDiseaseDropdownOptionsFallback(loadedOptions, loadedOptionLabels);
 
-      sections.value = _ensureDiseaseSectionFallback(loadedSections);
+      sections.value = _ensureRequiredFormFieldsFallback(
+        _ensureDiseaseSectionFallback(loadedSections),
+      );
       dropdownOptions.value = loadedOptions;
       dropdownOptionLabels.value = loadedOptionLabels;
       _initializeFieldControllers();
@@ -281,6 +340,12 @@ class FormController extends GetxController {
     if (result != null) {
       _capturedLocation = result;
       locationStatus.value = LocationStatus.acquired;
+      unawaited(
+        _mapTileCacheService.prefetchWideRegion(
+          latitude: result.latitude,
+          longitude: result.longitude,
+        ),
+      );
     } else {
       // Distinguish denied vs unavailable by re-checking
       final permission = await _locationService.getPermissionStatus();
@@ -352,7 +417,19 @@ class FormController extends GetxController {
 
     final result = switch (op) {
       'sum' => values.fold(0.0, (a, b) => a + b),
-      'subtract' => values.length >= 2 ? values[0] - values[1] : 0.0,
+      'subtract' =>
+        values.isEmpty
+            ? 0.0
+            : values.length == 1
+            ? values[0]
+            : values.skip(1).fold(values[0], (a, b) => a - b),
+      'sum_then_subtract_last' =>
+        values.isEmpty
+            ? 0.0
+            : values.length == 1
+            ? values[0]
+            : values.take(values.length - 1).fold(0.0, (a, b) => a + b) -
+                  values.last,
       'multiply' => values.fold(1.0, (a, b) => a * b),
       'divide' =>
         values.length >= 2 && values[1] != 0 ? values[0] / values[1] : 0.0,
@@ -562,7 +639,6 @@ class FormController extends GetxController {
           practices.cast<Map>().map((row) => row.cast<String, dynamic>()),
         );
       }
-
       final step = draft['__current_step'] as int?;
       if (step != null && step > 0 && step < totalSteps) {
         currentStep.value = step;
@@ -577,7 +653,10 @@ class FormController extends GetxController {
     try {
       if (suppressAutosave) _suppressDraftSave = true;
       await _secureStorage.remove(_draftKey);
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      if (suppressAutosave) _suppressDraftSave = false;
+    }
   }
 
   // --- Edit mode ---
@@ -812,6 +891,9 @@ class FormController extends GetxController {
       map.addAll(diseasePayload);
     }
 
+    map['total_cultivation_cost'] =
+        _toDouble(map['total_cultivation_cost']) ?? 0.0;
+
     if (extraDetails.isNotEmpty) map['extra_details'] = extraDetails;
     // Attach location + start time (only on new submissions)
     if (!isEditMode) {
@@ -897,7 +979,12 @@ class FormController extends GetxController {
       return false;
     }
 
-    if (!isEditMode && Supabase.instance.client.auth.currentUser == null) {
+    final hasLocalGuest =
+        Get.isRegistered<MainAuthController>() &&
+        Get.find<MainAuthController>().hasLocalGuest.value;
+    if (!isEditMode &&
+        Supabase.instance.client.auth.currentUser == null &&
+        !hasLocalGuest) {
       Get.snackbar(
         'Sign in required',
         'Please sign in before submitting a survey',
@@ -908,6 +995,32 @@ class FormController extends GetxController {
 
     isSubmitting.value = true;
     try {
+      final isOnline = await _offlineQueueService.isOnline();
+      if (!isEditMode &&
+          isOnline &&
+          Supabase.instance.client.auth.currentUser == null &&
+          hasLocalGuest &&
+          Get.isRegistered<MainAuthController>()) {
+        final ready = await Get.find<MainAuthController>()
+            .ensureRemoteGuestSession();
+        if (!ready) {
+          final json = _buildJson();
+          await _queueOfflineSubmission(
+            json,
+            kharifRows.toList(),
+            yearlyRows.toList(),
+            practiceRows.toList(),
+          );
+          isSubmitting.value = false;
+          if (popOnSuccess) Get.back();
+          Get.snackbar(
+            'Saved offline',
+            'Survey saved on this device and will sync when internet returns.',
+          );
+          return true;
+        }
+      }
+
       final json = _buildJson();
       if (!isEditMode) {
         json['client_uuid'] =
@@ -918,7 +1031,6 @@ class FormController extends GetxController {
       final kharif = kharifRows.toList();
       final yearly = yearlyRows.toList();
       final practices = practiceRows.toList();
-      final isOnline = await _offlineQueueService.isOnline();
 
       if (isEditMode && !isOnline) {
         isSubmitting.value = false;
@@ -1038,6 +1150,10 @@ class FormController extends GetxController {
       'total_production',
       'total_production_unit',
     );
+    sheetPayload['main_crop_yearly_yield_avg_per_acre_units'] = yearlySummary(
+      'yield_avg_per_acre',
+      'yield_avg_per_acre_unit',
+    );
     sheetPayload['main_crop_yearly_home_consumption_units'] = yearlySummary(
       'home_consumption',
       'home_consumption_unit',
@@ -1083,6 +1199,8 @@ class FormController extends GetxController {
     List<Map<String, dynamic>> yearly,
     List<Map<String, dynamic>> practices,
   ) async {
+    parent['total_cultivation_cost'] =
+        _toDouble(parent['total_cultivation_cost']) ?? 0.0;
     await _offlineQueueService.enqueue(
       parent: parent,
       kharifRows: kharif,
@@ -1256,6 +1374,91 @@ class FormController extends GetxController {
 
     sections.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return sections;
+  }
+
+  List<FormSectionConfig> _ensureRequiredFormFieldsFallback(
+    List<FormSectionConfig> loadedSections,
+  ) {
+    final sections = [...loadedSections];
+    final fallbackIncome = OfflineFormSeed.sections().firstWhereOrNull(
+      (section) => section.title == 'Income & Food Products',
+    );
+    if (fallbackIncome == null) return sections;
+
+    final incomeIndex = sections.indexWhere(
+      (section) => section.title == 'Income & Food Products',
+    );
+    if (incomeIndex == -1) {
+      sections.add(fallbackIncome);
+      sections.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+      return sections;
+    }
+
+    final existing = sections[incomeIndex];
+    final fallbackByKey = {
+      for (final field in fallbackIncome.fields) field.fieldKey: field,
+    };
+    final existingByKey = {
+      for (final field in existing.fields) field.fieldKey: field,
+    };
+
+    final repairedFields = [
+      for (final field in existing.fields)
+        field.fieldKey == 'total_cultivation_cost'
+            ? _mergeFormField(
+                field,
+                fallbackByKey['total_cultivation_cost'] ?? field,
+              )
+            : field.fieldKey == 'total_annual_income'
+            ? _mergeFormField(
+                field,
+                fallbackByKey['total_annual_income'] ?? field,
+              )
+            : field,
+      if (!existingByKey.containsKey('total_cultivation_cost') &&
+          fallbackByKey['total_cultivation_cost'] != null)
+        fallbackByKey['total_cultivation_cost']!,
+      if (!existingByKey.containsKey('total_annual_income') &&
+          fallbackByKey['total_annual_income'] != null)
+        fallbackByKey['total_annual_income']!,
+    ]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+    sections[incomeIndex] = FormSectionConfig(
+      id: existing.id,
+      sortOrder: existing.sortOrder,
+      title: existing.title,
+      titleHi: existing.titleHi,
+      titleMr: existing.titleMr,
+      iconName: existing.iconName,
+      fields: repairedFields,
+    );
+    return sections;
+  }
+
+  FormFieldConfig _mergeFormField(
+    FormFieldConfig existing,
+    FormFieldConfig fallback,
+  ) {
+    return FormFieldConfig(
+      id: existing.id,
+      fieldKey: existing.fieldKey,
+      label: fallback.label,
+      inputType: fallback.inputType,
+      sortOrder: fallback.sortOrder,
+      isRequired: fallback.isRequired,
+      validation: fallback.validation,
+      visibilityRule: fallback.visibilityRule,
+      autoCalcFormula: fallback.autoCalcFormula,
+      dropdownOptionsKey: fallback.dropdownOptionsKey,
+      hintText: fallback.hintText,
+      labelHi: fallback.labelHi,
+      labelMr: fallback.labelMr,
+      hintTextHi: fallback.hintTextHi,
+      hintTextMr: fallback.hintTextMr,
+      suffixText: fallback.suffixText,
+      cropRole: fallback.cropRole,
+      repeatGroup: fallback.repeatGroup,
+    );
   }
 
   List<FormFieldConfig> _buildDiseaseFallbackFields() {

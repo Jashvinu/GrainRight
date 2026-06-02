@@ -40,12 +40,14 @@ class SatelliteMapView extends StatelessWidget {
                 initialZoom: farmPolygon?.isNotEmpty == true
                     ? 17
                     : SatelliteConfig.defaultZoom,
+                minZoom: mapTileMinZoom,
+                maxZoom: mapTileMaxZoom,
               ),
               children: [
                 const OfflineMapBackground(
                   message: 'Offline map\nSaved farm boundary visible',
                 ),
-                const OfflineAwareTileLayer(urlTemplate: openStreetMapTileUrl),
+                OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
                 if (tileUrl != null && tileUrl!.isNotEmpty)
                   OfflineAwareTileLayer(urlTemplate: tileUrl!),
                 if (rasterUrl != null &&

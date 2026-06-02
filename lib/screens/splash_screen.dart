@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
+import '../controllers/main_auth_controller.dart';
 import '../widgets/brand_text.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -25,9 +25,15 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
     _anim.forward();
-    Future.delayed(const Duration(seconds: 2), () {
-      final session = Supabase.instance.client.auth.currentSession;
-      Get.offNamed(session == null ? '/login' : '/home');
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (!mounted) return;
+      final auth = Get.find<MainAuthController>();
+      var hasSession = await auth.hasAnySession();
+      if (!hasSession) {
+        hasSession = await auth.ensureOfflineSessionWhenOffline();
+      }
+      if (!mounted) return;
+      Get.offNamed(hasSession ? '/home' : '/login');
     });
   }
 

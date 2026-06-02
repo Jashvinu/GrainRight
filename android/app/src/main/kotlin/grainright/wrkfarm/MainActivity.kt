@@ -1,6 +1,5 @@
 package grainright.wrkfarm
 
-import android.content.pm.PackageManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,26 +14,11 @@ class MainActivity : FlutterActivity() {
             configChannel
         ).setMethodCallHandler { call, result ->
             when (call.method) {
-                "googleMapsApiKey" -> result.success(googleMapsApiKey())
+                "mapTilerApiKey" -> result.success(BuildConfig.MAPTILER_API_KEY)
+                "offlineTileUrlTemplate" -> result.success(BuildConfig.OFFLINE_TILE_URL_TEMPLATE)
+                "offlineTileSourceLabel" -> result.success(BuildConfig.OFFLINE_TILE_SOURCE_LABEL)
                 else -> result.notImplemented()
             }
-        }
-    }
-
-    private fun googleMapsApiKey(): String {
-        return try {
-            val appInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                packageManager.getApplicationInfo(
-                    packageName,
-                    PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
-            }
-            appInfo.metaData?.getString("com.google.android.geo.API_KEY").orEmpty()
-        } catch (_: Exception) {
-            ""
         }
     }
 }

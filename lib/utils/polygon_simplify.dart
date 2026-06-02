@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 
 class PolygonSimplifier {
   static List<LatLng> simplify(List<LatLng> stroke, {double? tolerance}) {
@@ -15,7 +15,8 @@ class PolygonSimplifier {
     }
     if (cleaned.length < 3) return [];
 
-    final tol = tolerance ?? math.max(0.5, _bboxDiagonalMeters(cleaned) * 0.015);
+    final tol =
+        tolerance ?? math.max(0.5, _bboxDiagonalMeters(cleaned) * 0.015);
     final simplified = _rdp(cleaned, tol);
     if (simplified.length < 3) return [];
 
@@ -33,7 +34,11 @@ class PolygonSimplifier {
     var index = 0;
     var maxDistance = 0.0;
     for (var i = 1; i < points.length - 1; i++) {
-      final distance = _perpendicularDistance(points[i], points.first, points.last);
+      final distance = _perpendicularDistance(
+        points[i],
+        points.first,
+        points.last,
+      );
       if (distance > maxDistance) {
         index = i;
         maxDistance = distance;
@@ -87,7 +92,8 @@ class PolygonSimplifier {
 
   static (double, double) _metersFrom(LatLng a, LatLng b, double originLat) {
     const metersPerDegreeLat = 111320.0;
-    final metersPerDegreeLng = metersPerDegreeLat *
+    final metersPerDegreeLng =
+        metersPerDegreeLat *
         math.cos(originLat * math.pi / 180).abs().clamp(0.01, 1.0);
     return (
       (b.longitude - a.longitude) * metersPerDegreeLng,

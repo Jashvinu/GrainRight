@@ -176,7 +176,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
 
   @override
   void dispose() {
-    _emitChangedNow();
+    _changeDebounce?.cancel();
     for (final row in _kharifRows) {
       row.dispose();
     }
@@ -184,7 +184,6 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
       row.dispose();
     }
     _practiceRow.dispose();
-    _changeDebounce?.cancel();
     super.dispose();
   }
 
@@ -425,6 +424,13 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
               onUnitChanged: (value) => row.productionUnit = value,
             ),
             _quantityText(
+              row.yieldAvgPerAcre,
+              'Yield (average per acre)',
+              unitValue: row.yieldAvgPerAcreUnit,
+              units: _productionQuantityUnits,
+              onUnitChanged: (value) => row.yieldAvgPerAcreUnit = value,
+            ),
+            _quantityText(
               row.homeConsumption,
               'Home consumption',
               unitValue: row.homeConsumptionUnit,
@@ -518,7 +524,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         _singleChips(
           'Farming method',
           row.farmingMethodValue,
-          const ['Organic', 'Chemical', 'Mixed', 'Natural'],
+          const ['Organic', 'Chemical', 'Mixed', 'Traditional'],
           (v) => setState(() {
             row.farmingMethodValue = v;
             row.farmingMethod.text = v;
@@ -567,12 +573,12 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
         ),
         if (row.seedlingMethodValue == 'Other')
           _text(row.seedlingMethodOther, 'Other details'),
-        _text(
-          row.seedlingReadyDays,
-          'Seedling ready (days)',
-          keyboardType: TextInputType.number,
-        ),
-        _text(row.seedlingMethodDifference, 'Difference noticed'),
+        if (row.collectsSeedlingReadyDays)
+          _text(
+            row.seedlingReadyDays,
+            'Seedling ready (days)',
+            keyboardType: TextInputType.number,
+          ),
         _text(
           row.landPrepTractorDays,
           'Tractor days',
@@ -910,9 +916,10 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 96,
+            width: 112,
             child: DropdownButtonFormField<String>(
               initialValue: selectedUnit,
+              isExpanded: true,
               decoration: InputDecoration(
                 labelText: _tr('Unit'),
                 labelStyle: const TextStyle(fontSize: 14),
@@ -1246,12 +1253,14 @@ class _YearlyRow {
   final int year;
   final area = TextEditingController();
   final production = TextEditingController();
+  final yieldAvgPerAcre = TextEditingController();
   final homeConsumption = TextEditingController();
   final quantitySold = TextEditingController();
   final soldWhere = TextEditingController();
   final soldWhereOther = TextEditingController();
   final sellingPrice = TextEditingController();
   String productionUnit = 'qt';
+  String yieldAvgPerAcreUnit = 'qt';
   String homeConsumptionUnit = 'qt';
   String quantitySoldUnit = 'qt';
   List<String> soldWhereValues = [];
@@ -1262,6 +1271,8 @@ class _YearlyRow {
     area.text = _textFrom(json['area_acre']);
     production.text = _textFrom(json['total_production']);
     productionUnit = _unitFrom(json['total_production_unit'], 'qt');
+    yieldAvgPerAcre.text = _textFrom(json['yield_avg_per_acre']);
+    yieldAvgPerAcreUnit = _unitFrom(json['yield_avg_per_acre_unit'], 'qt');
     homeConsumption.text = _textFrom(json['home_consumption']);
     homeConsumptionUnit = _unitFrom(json['home_consumption_unit'], 'qt');
     quantitySold.text = _textFrom(json['quantity_sold']);
@@ -1295,6 +1306,8 @@ class _YearlyRow {
     'area_acre': _doubleValue(area),
     'total_production': _doubleValue(production),
     'total_production_unit': _unitValue(production, productionUnit),
+    'yield_avg_per_acre': _doubleValue(yieldAvgPerAcre),
+    'yield_avg_per_acre_unit': _unitValue(yieldAvgPerAcre, yieldAvgPerAcreUnit),
     'home_consumption': _doubleValue(homeConsumption),
     'home_consumption_unit': _unitValue(homeConsumption, homeConsumptionUnit),
     'quantity_sold': _doubleValue(quantitySold),
@@ -1302,7 +1315,7 @@ class _YearlyRow {
     'sold_where': _nullableText(
       _joinSoldWhere(soldWhereValues, soldWhereOther.text),
     ),
-    'sold_where_options': soldWhereValues.isEmpty ? null : soldWhereValues,
+    'sold_where_options': soldWhereValues,
     'sold_where_other': soldWhereValues.contains('Other')
         ? _textValue(soldWhereOther)
         : null,
@@ -1312,6 +1325,7 @@ class _YearlyRow {
   void dispose() {
     area.dispose();
     production.dispose();
+    yieldAvgPerAcre.dispose();
     homeConsumption.dispose();
     quantitySold.dispose();
     soldWhere.dispose();
@@ -1402,6 +1416,8 @@ class _PracticeRow {
 
   _PracticeRow(this.cropRole);
 
+  bool get collectsSeedlingReadyDays => cropRole != 'other';
+
   void applyJson(Map<String, dynamic> json) {
     grownOn.text = json['grown_on']?.toString() ?? '';
     grownOnValue = grownOn.text.isEmpty ? null : grownOn.text;
@@ -1415,7 +1431,9 @@ class _PracticeRow {
     seedSourceOther.text = json['seed_source_other']?.toString() ?? '';
     popTrainingReceived = _boolFrom(json['pop_training_received']);
     popTrainingSource.text = json['pop_training_source']?.toString() ?? '';
-    farmingMethod.text = json['farming_method']?.toString() ?? '';
+    farmingMethod.text = _normalizeFarmingMethod(
+      json['farming_method']?.toString() ?? '',
+    );
     farmingMethodValue = farmingMethod.text.isEmpty ? null : farmingMethod.text;
     treatsSeeds = _boolFrom(json['treats_seeds']);
     seedTreatmentMaterialsValues = _listFrom(json['seed_treatment_materials']);
@@ -1509,8 +1527,9 @@ class _PracticeRow {
     'seed_treatment_materials_other': _textValue(seedTreatmentMaterialsOther),
     'seedling_method': _textValue(seedlingMethod),
     'seedling_method_other': _textValue(seedlingMethodOther),
-    'seedling_ready_days': _intValue(seedlingReadyDays),
-    'seedling_method_difference': _textValue(seedlingMethodDifference),
+    'seedling_ready_days': collectsSeedlingReadyDays
+        ? _intValue(seedlingReadyDays)
+        : null,
     'land_prep_tractor_days': _doubleValue(landPrepTractorDays),
     'land_prep_tractor_cost': _doubleValue(landPrepTractorCost),
     'land_prep_bullock_days': _doubleValue(landPrepBullockDays),
@@ -1649,7 +1668,15 @@ bool? _boolFrom(dynamic value) {
   return null;
 }
 
-String _textFrom(dynamic value) => value == null ? '' : value.toString();
+String _textFrom(dynamic value, {String fallback = ''}) {
+  if (value == null) return fallback;
+  final text = value.toString();
+  return text.isEmpty ? fallback : text;
+}
+
+String _normalizeFarmingMethod(String value) {
+  return value == 'Natural' ? 'Traditional' : value;
+}
 
 String _unitFrom(dynamic value, String fallback) {
   final text = value?.toString().trim();

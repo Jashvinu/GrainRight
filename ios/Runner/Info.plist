@@ -24,8 +24,12 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
-	<key>GoogleMapsApiKey</key>
-	<string>$(GOOGLE_MAPS_API_KEY)</string>
+	<key>MapTilerApiKey</key>
+	<string>$(MAPTILER_API_KEY)</string>
+	<key>OfflineTileUrlTemplate</key>
+	<string>$(OFFLINE_TILE_URL_TEMPLATE)</string>
+	<key>OfflineTileSourceLabel</key>
+	<string>$(OFFLINE_TILE_SOURCE_LABEL)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

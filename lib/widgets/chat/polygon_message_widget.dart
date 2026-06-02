@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:get/get.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:latlong2/latlong.dart' as ll;
 import '../../config/theme.dart';
 import '../../models/form_config.dart';
-import '../../screens/pencil_polygon_screen.dart';
 import '../../services/map_tile_provider.dart';
+import '../../utils/boundary_map_launcher.dart';
 import '../../utils/polygon_geometry.dart';
 
 class PolygonPromptWidget extends StatelessWidget {
@@ -39,7 +37,7 @@ class PolygonPromptWidget extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tap and drag on the map to draw your farm boundary.',
+              'Pan to the farm and mark the boundary points on the map.',
               style: TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 14),
@@ -47,9 +45,7 @@ class PolygonPromptWidget extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () async {
-                  final result = await Get.to<List<List<double>>>(
-                    () => const PencilPolygonScreen(),
-                  );
+                  final result = await openBoundaryDrawingMap();
                   if (result != null) onSaved(result);
                 },
                 style: ElevatedButton.styleFrom(
@@ -100,7 +96,7 @@ class PolygonAnswerWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ring = PolygonGeometry.fromGeoJsonRing(coords);
-    final points = ring.map(_toMapPoint).toList();
+    final points = ring;
     return Align(
       alignment: Alignment.centerRight,
       child: SizedBox(
@@ -117,6 +113,8 @@ class PolygonAnswerWidget extends StatelessWidget {
                       ? const ll.LatLng(20.5937, 78.9629)
                       : points.first,
                   initialZoom: 16,
+                  minZoom: mapTileMinZoom,
+                  maxZoom: mapTileMaxZoom,
                   initialCameraFit: points.length >= 4
                       ? CameraFit.bounds(
                           bounds: LatLngBounds.fromPoints(points),
@@ -131,7 +129,7 @@ class PolygonAnswerWidget extends StatelessWidget {
                   const OfflineMapBackground(
                     message: 'Offline boundary preview',
                   ),
-                  OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
+                  OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
                   if (points.length >= 4)
                     PolygonLayer(
                       polygons: [
@@ -168,7 +166,4 @@ class PolygonAnswerWidget extends StatelessWidget {
       ),
     );
   }
-
-  static ll.LatLng _toMapPoint(gmaps.LatLng point) =>
-      ll.LatLng(point.latitude, point.longitude);
 }

@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import GoogleMaps
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -8,10 +7,6 @@ import GoogleMaps
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let mapsApiKey = Bundle.main.object(forInfoDictionaryKey: "GoogleMapsApiKey") as? String ?? ""
-    if !mapsApiKey.isEmpty && !mapsApiKey.hasPrefix("$(") {
-      GMSServices.provideAPIKey(mapsApiKey)
-    }
     configureConfigChannel()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -30,12 +25,20 @@ import GoogleMaps
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
-      case "googleMapsApiKey":
-        let mapsApiKey = Bundle.main.object(forInfoDictionaryKey: "GoogleMapsApiKey") as? String ?? ""
-        result(mapsApiKey.hasPrefix("$(") ? "" : mapsApiKey)
+      case "mapTilerApiKey":
+        result(Self.infoString("MapTilerApiKey"))
+      case "offlineTileUrlTemplate":
+        result(Self.infoString("OfflineTileUrlTemplate"))
+      case "offlineTileSourceLabel":
+        result(Self.infoString("OfflineTileSourceLabel"))
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  private static func infoString(_ key: String) -> String {
+    let value = Bundle.main.object(forInfoDictionaryKey: key) as? String ?? ""
+    return value.hasPrefix("$(") ? "" : value
   }
 }

@@ -5,6 +5,7 @@ import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/chat_message.dart';
 import '../models/form_config.dart';
+import '../models/survey_launch.dart';
 import '../services/secure_app_storage.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/pii_masking.dart';
@@ -36,8 +37,12 @@ class _RepeatStep extends _ChatStep {
   });
 }
 
+enum _CropGroup { riceRagi, bajraOther }
+
 class ChatSurveyController extends GetxController {
-  static const _cursorDraftKey = 'chat_form_cursor';
+  static const cursorDraftKey = 'chat_form_cursor';
+  static const _riceRagiCrops = {'paddy', 'nachani'};
+  static const _bajraOtherCrops = {'bajra', 'other'};
 
   final FormController formController;
   final LanguageController languageController;
@@ -64,14 +69,34 @@ class ChatSurveyController extends GetxController {
   }
 
   Future<void> _start() async {
-    final id = Get.arguments as String?;
+    final launch = SurveyLaunchArgs.from(Get.arguments);
+    final id = launch.mode == SurveyLaunchMode.edit ? launch.surveyId : null;
     if (id != null) formController.prepareEdit(id);
+    if (launch.mode == SurveyLaunchMode.newSurvey) {
+      await _clearStoredDraft();
+    }
     await formController.loadConfig();
+    if (!formController.isConfigLoaded.value) {
+      isReady.value = true;
+      messages.add(
+        BotTextMessage(
+          formController.errorMessage.value.isEmpty
+              ? 'The form could not be loaded. Please try again.'
+              : formController.errorMessage.value,
+        ),
+      );
+      return;
+    }
+    if (launch.mode == SurveyLaunchMode.newSurvey) {
+      formController.startFreshSurvey();
+      await _clearDraftCursor();
+    }
     var restoredDraft = false;
     int? restoredCursor;
     if (id != null) {
       await formController.loadSurvey(id);
-    } else if (await formController.hasDraft()) {
+    } else if (launch.mode == SurveyLaunchMode.resumeDraft &&
+        await formController.hasDraft()) {
       await formController.loadDraft();
       restoredCursor = await _loadDraftCursor();
       restoredDraft = true;
@@ -86,16 +111,12 @@ class ChatSurveyController extends GetxController {
           'Your saved survey is restored. Continuing from the last question.',
         ),
       );
-      await _showNext();
+      await _showNext(immediate: true);
       return;
     }
 
-    messages.add(
-      BotTextMessage(
-        "Welcome, I'm your survey assistant",
-        quickReplies: const ['English', 'हिन्दी', 'मराठी'],
-      ),
-    );
+    _cursor = _firstFieldCursor('farmer_name') ?? _firstVisibleCursor() ?? 0;
+    await _showNext(immediate: true);
   }
 
   Future<void> chooseLanguage(String language) async {
@@ -104,13 +125,15 @@ class ChatSurveyController extends GetxController {
       'मराठी' => 'mr',
       _ => 'en',
     };
+    await setLanguageCode(code);
+    messages.add(UserTextMessage(language));
+  }
+
+  Future<void> setLanguageCode(String code) async {
     await languageController.setLanguage(code);
     formController.setValue('language', code);
     _steps = _buildSteps();
-    _cursor = 0;
     await _saveProgress();
-    messages.add(UserTextMessage(language));
-    await _showNext();
   }
 
   Future<void> continueFromField(BuildContext context) async {
@@ -157,6 +180,9 @@ class ChatSurveyController extends GetxController {
     required List<Map<String, dynamic>> rows,
   }) async {
     updateRepeatGroupRows(groupKey: groupKey, cropRole: cropRole, rows: rows);
+    if (groupKey == 'kharif_crops') {
+      _steps = _buildSteps();
+    }
     messages.add(RepeatGroupAnswerMessage(title, rows.length));
     await _advanceToNext();
   }
@@ -205,10 +231,12 @@ class ChatSurveyController extends GetxController {
     await _saveProgress();
   }
 
-  Future<void> _showNext() async {
-    messages.add(TypingIndicatorMessage());
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    messages.removeWhere((message) => message is TypingIndicatorMessage);
+  Future<void> _showNext({bool immediate = false}) async {
+    if (!immediate) {
+      messages.add(TypingIndicatorMessage());
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      messages.removeWhere((message) => message is TypingIndicatorMessage);
+    }
 
     while (_cursor < _steps.length) {
       final step = _steps[_cursor];
@@ -246,23 +274,49 @@ class ChatSurveyController extends GetxController {
     }
 
     await _saveProgress();
-    messages.add(SummaryMessage(formController.toFlatJson()));
+    _cursor = _steps.length;
+    activeField.value = null;
+    final hasSummary = messages.any((message) => message is SummaryMessage);
+    if (!hasSummary) {
+      messages.add(SummaryMessage(formController.toFlatJson()));
+    }
   }
 
   List<_ChatStep> _buildSteps() {
+    return _buildStepsFromSections(
+      sections: formController.sections.toList(),
+      localizedFieldLabel: _localizedFieldLabel,
+      localizedRepeatGroupTitle: _localizedRepeatGroupTitle,
+      cropPracticeRoleOrder: _cropPracticeRoleOrder(),
+    );
+  }
+
+  static List<_ChatStep> _buildStepsFromSections({
+    required List<FormSectionConfig> sections,
+    required String Function(FormFieldConfig field) localizedFieldLabel,
+    required String Function(
+      String groupKey,
+      String? cropRole,
+      bool isPrimaryCropSlot,
+    )
+    localizedRepeatGroupTitle,
+    List<String> cropPracticeRoleOrder = const ['main', 'other'],
+  }) {
     final steps = <_ChatStep>[];
     final configuredGroups = <String>{};
-    for (
-      var sectionIndex = 0;
-      sectionIndex < formController.sections.length;
-      sectionIndex++
-    ) {
-      final section = formController.sections[sectionIndex];
+    final practiceRoleOrder = _normalizedPracticeRoleOrder(
+      cropPracticeRoleOrder,
+    );
+    for (var sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+      final section = sections[sectionIndex];
       final repeatFields = section.fields
           .where((field) => field.repeatGroup != null)
           .toList();
       if (repeatFields.isNotEmpty) {
         for (final field in repeatFields) {
+          if (_isManagedRepeatStep(field.repeatGroup, field.cropRole)) {
+            continue;
+          }
           final key = [
             field.repeatGroup,
             field.cropRole,
@@ -271,7 +325,7 @@ class ChatSurveyController extends GetxController {
             steps.add(
               _RepeatStep(
                 field.repeatGroup!,
-                _localizedFieldLabel(field),
+                localizedFieldLabel(field),
                 sectionIndex: sectionIndex,
                 cropRole: field.cropRole,
               ),
@@ -287,7 +341,32 @@ class ChatSurveyController extends GetxController {
       }
     }
 
-    void insertAfter(String fieldKey, _RepeatStep step) {
+    bool hasRepeatStep(_RepeatStep step) {
+      return steps.any(
+        (s) =>
+            s is _RepeatStep &&
+            s.groupKey == step.groupKey &&
+            s.cropRole == step.cropRole,
+      );
+    }
+
+    void insertAfterIndex(int index, _RepeatStep step) {
+      if (hasRepeatStep(step)) return;
+      steps.insert(index == -1 ? steps.length : index + 1, step);
+    }
+
+    void insertAfterField(String fieldKey, _RepeatStep step) {
+      final index = steps.indexWhere(
+        (s) => s is _FieldStep && s.field.fieldKey == fieldKey,
+      );
+      insertAfterIndex(index, step);
+    }
+
+    void insertAfterRepeat(
+      String groupKey,
+      String? cropRole,
+      _RepeatStep step,
+    ) {
       if (steps.any(
         (s) =>
             s is _RepeatStep &&
@@ -297,54 +376,148 @@ class ChatSurveyController extends GetxController {
         return;
       }
       final index = steps.indexWhere((s) {
-        if (s is _FieldStep) return s.field.fieldKey == fieldKey;
-        if (s is _RepeatStep) return s.groupKey == fieldKey;
-        return false;
+        return s is _RepeatStep &&
+            s.groupKey == groupKey &&
+            s.cropRole == cropRole;
       });
-      steps.insert(index == -1 ? steps.length : index + 1, step);
+      insertAfterIndex(index, step);
     }
 
-    insertAfter(
+    int sectionIndexForField(String fieldKey) {
+      for (var i = 0; i < sections.length; i++) {
+        final section = sections[i];
+        if (section.fields.any((field) => field.fieldKey == fieldKey)) {
+          return i;
+        }
+      }
+      return sections.isEmpty ? 0 : sections.length - 1;
+    }
+
+    insertAfterField(
       'main_crop_land_acre',
       _RepeatStep(
         'kharif_crops',
-        _localizedRepeatGroupTitle('kharif_crops', null),
-        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
-      ),
-    );
-    insertAfter(
-      'kharif_crops',
-      _RepeatStep(
-        'crop_practices',
-        _localizedRepeatGroupTitle('crop_practices', 'main'),
-        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
-        cropRole: 'main',
-      ),
-    );
-    insertAfter(
-      'crop_practices',
-      _RepeatStep(
-        'main_crop_yearly',
-        _localizedRepeatGroupTitle('main_crop_yearly', null),
-        sectionIndex: _sectionIndexForField('main_crop_land_acre'),
-      ),
-    );
-    insertAfter(
-      'makes_food_products',
-      _RepeatStep(
-        'crop_practices',
-        _localizedRepeatGroupTitle('crop_practices', 'other'),
-        sectionIndex: _sectionIndexForField('makes_food_products'),
-        cropRole: 'other',
+        localizedRepeatGroupTitle('kharif_crops', null, true),
+        sectionIndex: sectionIndexForField('main_crop_land_acre'),
       ),
     );
 
+    String anchorGroup = 'kharif_crops';
+    String? anchorRole;
+    for (var i = 0; i < practiceRoleOrder.length; i++) {
+      final role = practiceRoleOrder[i];
+      insertAfterRepeat(
+        anchorGroup,
+        anchorRole,
+        _RepeatStep(
+          'crop_practices',
+          localizedRepeatGroupTitle('crop_practices', role, i == 0),
+          sectionIndex: sectionIndexForField('main_crop_land_acre'),
+          cropRole: role,
+        ),
+      );
+      anchorGroup = 'crop_practices';
+      anchorRole = role;
+    }
+
+    insertAfterRepeat(
+      anchorGroup,
+      anchorRole,
+      _RepeatStep(
+        'main_crop_yearly',
+        localizedRepeatGroupTitle('main_crop_yearly', null, true),
+        sectionIndex: sectionIndexForField('main_crop_land_acre'),
+      ),
+    );
+
+    _moveFieldToStart(steps, 'farmer_name');
     return steps;
+  }
+
+  static bool _isManagedRepeatStep(String? groupKey, String? cropRole) {
+    if (groupKey == 'kharif_crops' || groupKey == 'main_crop_yearly') {
+      return true;
+    }
+    return groupKey == 'crop_practices' &&
+        (cropRole == 'main' || cropRole == 'other');
+  }
+
+  static List<String> _normalizedPracticeRoleOrder(List<String> roles) {
+    final output = <String>[];
+    for (final role in roles) {
+      if ((role == 'main' || role == 'other') && !output.contains(role)) {
+        output.add(role);
+      }
+    }
+    for (final role in const ['main', 'other']) {
+      if (!output.contains(role)) output.add(role);
+    }
+    return output;
+  }
+
+  static void _moveFieldToStart(List<_ChatStep> steps, String fieldKey) {
+    final index = steps.indexWhere(
+      (step) => step is _FieldStep && step.field.fieldKey == fieldKey,
+    );
+    if (index <= 0) return;
+    final step = steps.removeAt(index);
+    steps.insert(0, step);
+  }
+
+  @visibleForTesting
+  static List<String> debugStepKeysForSections(
+    List<FormSectionConfig> sections, {
+    List<String> cropPracticeRoleOrder = const ['main', 'other'],
+  }) {
+    final steps = _buildStepsFromSections(
+      sections: sections,
+      localizedFieldLabel: (field) => field.label,
+      localizedRepeatGroupTitle: (groupKey, cropRole, isPrimaryCropSlot) {
+        final key = cropRole == null ? groupKey : '$groupKey:$cropRole';
+        if (groupKey != 'crop_practices') return key;
+        return '${isPrimaryCropSlot ? 'main-slot' : 'other-slot'}:$key';
+      },
+      cropPracticeRoleOrder: cropPracticeRoleOrder,
+    );
+    return steps.map((step) {
+      return switch (step) {
+        _FieldStep(:final field) => field.fieldKey,
+        _RepeatStep(:final groupKey, :final cropRole) =>
+          cropRole == null ? 'repeat:$groupKey' : 'repeat:$groupKey:$cropRole',
+      };
+    }).toList();
+  }
+
+  @visibleForTesting
+  static List<String> debugRepeatStepTitlesForSections(
+    List<FormSectionConfig> sections, {
+    List<String> cropPracticeRoleOrder = const ['main', 'other'],
+  }) {
+    final steps = _buildStepsFromSections(
+      sections: sections,
+      localizedFieldLabel: (field) => field.label,
+      localizedRepeatGroupTitle: _englishRepeatGroupTitle,
+      cropPracticeRoleOrder: cropPracticeRoleOrder,
+    );
+    return [
+      for (final step in steps)
+        if (step is _RepeatStep) step.title,
+    ];
+  }
+
+  @visibleForTesting
+  static List<String> debugCropPracticeRoleOrder({
+    required dynamic mainCrop,
+    required List<Map<String, dynamic>> kharifRows,
+  }) {
+    return _practiceRoleOrderFor(
+      _primaryCropGroup(mainCrop: mainCrop, kharifRows: kharifRows),
+    );
   }
 
   Future<void> _advanceToNext() async {
     activeField.value = null;
-    _cursor++;
+    _cursor = (_cursor + 1).clamp(0, _steps.length).toInt();
     await _saveProgress();
     await _showNext();
   }
@@ -353,15 +526,20 @@ class ChatSurveyController extends GetxController {
     if (_completed || formController.isEditMode) return;
     _syncCurrentSection();
     await formController.saveDraft();
-    await _secureStorage.writeInt(_cursorDraftKey, _cursor);
+    await _secureStorage.writeInt(cursorDraftKey, _cursor);
   }
 
   Future<int?> _loadDraftCursor() async {
-    return _secureStorage.readInt(_cursorDraftKey);
+    return _secureStorage.readInt(cursorDraftKey);
   }
 
   Future<void> _clearDraftCursor() async {
-    await _secureStorage.remove(_cursorDraftKey);
+    await _secureStorage.remove(cursorDraftKey);
+  }
+
+  Future<void> _clearStoredDraft() async {
+    await formController.clearDraft(suppressAutosave: true);
+    await _clearDraftCursor();
   }
 
   void _syncCurrentSection() {
@@ -385,30 +563,76 @@ class ChatSurveyController extends GetxController {
     return index == -1 ? 0 : index;
   }
 
-  int _sectionIndexForField(String fieldKey) {
-    for (var i = 0; i < formController.sections.length; i++) {
-      final section = formController.sections[i];
-      if (section.fields.any((field) => field.fieldKey == fieldKey)) {
+  int? _firstFieldCursor(String fieldKey) {
+    final index = _steps.indexWhere(
+      (step) => step is _FieldStep && step.field.fieldKey == fieldKey,
+    );
+    return index == -1 ? null : index;
+  }
+
+  int? _firstVisibleCursor() {
+    for (var i = 0; i < _steps.length; i++) {
+      final step = _steps[i];
+      if (step is _FieldStep && formController.isFieldVisible(step.field)) {
+        return i;
+      }
+      if (step is _RepeatStep &&
+          _shouldShowRepeatGroup(step.groupKey, step.cropRole)) {
         return i;
       }
     }
-    return formController.totalSteps == 0 ? 0 : formController.totalSteps - 1;
+    return null;
   }
 
   bool _shouldShowRepeatGroup(String groupKey, String? cropRole) {
-    if (cropRole == 'other') {
-      final mainCrop = formController.valueFor('main_crop');
-      return mainCrop == 'bajra' || mainCrop == 'other';
+    if (groupKey == 'kharif_crops') {
+      return _cropGroupForValue(formController.valueFor('main_crop')) != null;
     }
-    if (groupKey == 'kharif_crops' || cropRole == 'main') {
-      final mainCrop = formController.valueFor('main_crop');
-      return mainCrop == 'paddy' || mainCrop == 'nachani';
+    if (groupKey == 'crop_practices' &&
+        (cropRole == 'main' || cropRole == 'other')) {
+      return _selectedPrimaryCropGroup() != null;
     }
     if (groupKey == 'other_crops') {
-      final mainCrop = formController.valueFor('main_crop');
-      return mainCrop == 'bajra' || mainCrop == 'other';
+      return _cropGroupForValue(formController.valueFor('main_crop')) != null;
     }
     return true;
+  }
+
+  List<String> _cropPracticeRoleOrder() {
+    return _practiceRoleOrderFor(_selectedPrimaryCropGroup());
+  }
+
+  _CropGroup? _selectedPrimaryCropGroup() {
+    return _primaryCropGroup(
+      mainCrop: formController.valueFor('main_crop'),
+      kharifRows: formController.kharifRows.toList(),
+    );
+  }
+
+  static List<String> _practiceRoleOrderFor(_CropGroup? cropGroup) {
+    return cropGroup == _CropGroup.bajraOther
+        ? const ['other', 'main']
+        : const ['main', 'other'];
+  }
+
+  static _CropGroup? _primaryCropGroup({
+    required dynamic mainCrop,
+    required List<Map<String, dynamic>> kharifRows,
+  }) {
+    for (final row in kharifRows) {
+      final crop = row['crop_name']?.toString();
+      final group = _cropGroupForValue(crop);
+      if (group != null) return group;
+    }
+    return _cropGroupForValue(mainCrop);
+  }
+
+  static _CropGroup? _cropGroupForValue(dynamic value) {
+    final crop = value?.toString();
+    if (crop == null || crop.isEmpty) return null;
+    if (_riceRagiCrops.contains(crop)) return _CropGroup.riceRagi;
+    if (_bajraOtherCrops.contains(crop)) return _CropGroup.bajraOther;
+    return null;
   }
 
   String _localizedFieldLabel(FormFieldConfig field) {
@@ -419,7 +643,11 @@ class ChatSurveyController extends GetxController {
     };
   }
 
-  String _localizedRepeatGroupTitle(String groupKey, String? cropRole) {
+  String _localizedRepeatGroupTitle(
+    String groupKey,
+    String? cropRole,
+    bool isPrimaryCropSlot,
+  ) {
     final language = languageController.language.value;
     if (language == 'hi') {
       return switch (groupKey) {
@@ -427,7 +655,7 @@ class ChatSurveyController extends GetxController {
         'other_crops' => 'ली गई अन्य फसलें',
         'main_crop_yearly' => 'मुख्य फसल उत्पादन इतिहास',
         'crop_practices' =>
-          cropRole == 'other' ? 'अन्य फसल पद्धतियां' : 'मुख्य फसल पद्धतियां',
+          '${isPrimaryCropSlot ? 'मुख्य फसल कृषि' : 'अन्य फसल कृषि'} - ${_hindiCropPracticeGroupTitle(cropRole)}',
         _ => groupKey,
       };
     }
@@ -437,18 +665,44 @@ class ChatSurveyController extends GetxController {
         'other_crops' => 'घेतलेली इतर पिके',
         'main_crop_yearly' => 'मुख्य पीक उत्पादन इतिहास',
         'crop_practices' =>
-          cropRole == 'other' ? 'इतर पीक पद्धती' : 'मुख्य पीक पद्धती',
+          '${isPrimaryCropSlot ? 'मुख्य पीक कृषी' : 'इतर पीक कृषी'} - ${_marathiCropPracticeGroupTitle(cropRole)}',
         _ => groupKey,
       };
     }
+    return _englishRepeatGroupTitle(groupKey, cropRole, isPrimaryCropSlot);
+  }
+
+  static String _englishRepeatGroupTitle(
+    String groupKey,
+    String? cropRole,
+    bool isPrimaryCropSlot,
+  ) {
     return switch (groupKey) {
       'kharif_crops' => 'Kharif crops',
       'other_crops' => 'Other crops taken',
       'main_crop_yearly' => 'Main crop production history',
       'crop_practices' =>
-        cropRole == 'other' ? 'Other crop practices' : 'Main crop practices',
+        '${isPrimaryCropSlot ? 'Main Crop Agronomy' : 'Other Crop Agronomy'} - ${_englishCropPracticeGroupTitle(cropRole)}',
       _ => groupKey,
     };
+  }
+
+  static String _englishCropPracticeGroupTitle(String? cropRole) {
+    return cropRole == 'other'
+        ? 'Bajra/Other crop practices'
+        : 'Rice/Ragi crop practices';
+  }
+
+  static String _hindiCropPracticeGroupTitle(String? cropRole) {
+    return cropRole == 'other'
+        ? 'बाजरा/अन्य फसल पद्धतियां'
+        : 'चावल/रागी फसल पद्धतियां';
+  }
+
+  static String _marathiCropPracticeGroupTitle(String? cropRole) {
+    return cropRole == 'other'
+        ? 'बाजरी/इतर पीक पद्धती'
+        : 'तांदूळ/नाचणी पीक पद्धती';
   }
 
   bool _hasAnswer(FormFieldConfig field) {

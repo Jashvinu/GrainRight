@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import '../controllers/survey_controller.dart';
 import '../models/farmer_survey.dart';
+import '../models/survey_launch.dart';
 import '../services/offline_survey_queue_service.dart';
 import '../widgets/brand_text.dart';
 import '../widgets/survey_list_tile.dart';
@@ -64,10 +65,21 @@ class HomeScreen extends StatelessWidget {
     controller.surveys.removeWhere((item) => item.id == id);
   }
 
-  Future<void> _openNewSurvey(SurveyController controller) async {
-    await Get.toNamed('/form');
+  Future<void> _openSurvey(
+    SurveyController controller,
+    SurveyLaunchArgs args,
+  ) async {
+    await Get.toNamed('/form', arguments: args);
     await controller.loadPendingSubmissions();
     await controller.refreshDraftState();
+  }
+
+  Future<void> _openNewSurvey(SurveyController controller) async {
+    await _openSurvey(controller, const SurveyLaunchArgs.newSurvey());
+  }
+
+  Future<void> _resumeDraftSurvey(SurveyController controller) async {
+    await _openSurvey(controller, const SurveyLaunchArgs.resumeDraft());
   }
 
   @override
@@ -289,7 +301,9 @@ class HomeScreen extends StatelessWidget {
                               label: const Text('Offline Maps'),
                             ),
                             TextButton(
-                              onPressed: () => _openNewSurvey(controller),
+                              onPressed: () => hasDraft
+                                  ? _resumeDraftSurvey(controller)
+                                  : _openNewSurvey(controller),
                               child: Text(
                                 pending.isEmpty
                                     ? hasDraft
@@ -362,7 +376,7 @@ class HomeScreen extends StatelessWidget {
                     if (hasDraft) {
                       if (i == 0) {
                         return _DraftSurveyTile(
-                          onTap: () => _openNewSurvey(controller),
+                          onTap: () => _resumeDraftSurvey(controller),
                         );
                       }
                       i -= 1;

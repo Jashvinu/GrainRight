@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,21 +9,33 @@ import 'package:http/http.dart' as http;
 
 import '../config/runtime_config.dart';
 import 'local_app_database.dart';
+import 'network_status_service.dart';
 
-final String arcGisWorldImageryUrl =
-    RuntimeConfig.onlineSatelliteTileUrlTemplate;
+String get fieldImageryTileUrl {
+  final satellite = RuntimeConfig.onlineSatelliteTileUrlTemplate.trim();
+  return satellite.isNotEmpty ? satellite : openStreetMapTileUrl;
+}
 const String openStreetMapTileUrl = RuntimeConfig.onlineBaseTileUrlTemplate;
+const int mapTileMaxNativeZoom = 20;
+const double mapTileMinZoom = 3;
+const double mapTileMaxZoom = 20;
 
 class OfflineAwareTileLayer extends StatefulWidget {
   final String urlTemplate;
+  final String? offlineUrlTemplateOverride;
+  final int? maxOfflineNativeZoom;
   final String userAgentPackageName;
   final bool preferOfflineTemplateWhenOffline;
+  final bool forceOfflineTemplateOverride;
 
   const OfflineAwareTileLayer({
     super.key,
     required this.urlTemplate,
+    this.offlineUrlTemplateOverride,
+    this.maxOfflineNativeZoom,
     this.userAgentPackageName = 'grainright.wrkfarm',
     this.preferOfflineTemplateWhenOffline = true,
+    this.forceOfflineTemplateOverride = false,
   });
 
   @override
@@ -31,15 +43,21 @@ class OfflineAwareTileLayer extends StatefulWidget {
 }
 
 class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
-  final Connectivity _connectivity = Connectivity();
-  StreamSubscription<List<ConnectivityResult>>? _subscription;
-  bool _online = false;
+  static const _offlineFallbackTimeout = Duration(milliseconds: 600);
+  final _networkStatusService = NetworkStatusService();
+  StreamSubscription<Object>? _subscription;
+  bool _hasNetworkInterface = true;
+  bool _online = true;
+  String _offlineTemplate = RuntimeConfig.offlineTileUrlTemplate;
 
   @override
   void initState() {
     super.initState();
     unawaited(_refreshConnectivity());
-    _subscription = _connectivity.onConnectivityChanged.listen(_setConnection);
+    unawaited(_refreshRuntimeConfig());
+    _subscription = _networkStatusService.connectivityChanges.listen((_) {
+      unawaited(_refreshConnectivity());
+    });
   }
 
   @override
@@ -50,39 +68,90 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
 
   Future<void> _refreshConnectivity() async {
     try {
-      _setConnection(await _connectivity.checkConnectivity());
+      final hasNetworkInterface = await _networkStatusService
+          .hasNetworkInterface();
+      final online = await _networkStatusService.isOnline(
+        timeout: _offlineFallbackTimeout,
+      );
+      if (online) {
+        await _refreshRuntimeConfig();
+      }
+      if (!mounted ||
+          (online == _online &&
+              hasNetworkInterface == _hasNetworkInterface)) {
+        return;
+      }
+      setState(() {
+        _hasNetworkInterface = hasNetworkInterface;
+        _online = online;
+      });
     } catch (e) {
       debugPrint('[OfflineAwareTileLayer._refreshConnectivity] $e');
-      if (mounted) setState(() => _online = true);
+      if (mounted) {
+        setState(() {
+          _hasNetworkInterface = false;
+          _online = false;
+        });
+      }
     }
   }
 
-  void _setConnection(List<ConnectivityResult> results) {
-    final online = results.any((result) => result != ConnectivityResult.none);
-    if (!mounted || online == _online) return;
-    setState(() => _online = online);
+  Future<void> _refreshRuntimeConfig() async {
+    final offlineTemplate = await RuntimeConfig.offlineTileUrlTemplateRuntime();
+    if (!mounted || offlineTemplate == _offlineTemplate) return;
+    setState(() => _offlineTemplate = offlineTemplate);
   }
 
   @override
   Widget build(BuildContext context) {
-    final offlineTemplate = RuntimeConfig.offlineTileUrlTemplate.trim();
-    final activeTemplate =
-        !_online &&
-            widget.preferOfflineTemplateWhenOffline &&
-            offlineTemplate.isNotEmpty
+    final offlineTemplate = _effectiveOfflineTemplate();
+    final forceOfflineSource =
+        widget.offlineUrlTemplateOverride?.trim().isNotEmpty ?? false;
+    final canTryLiveTiles = _online || _hasNetworkInterface;
+    final usingOfflineTemplate =
+        offlineTemplate.isNotEmpty &&
+        ((forceOfflineSource && widget.forceOfflineTemplateOverride) ||
+            (!canTryLiveTiles && widget.preferOfflineTemplateWhenOffline));
+    final activeTemplate = usingOfflineTemplate
         ? offlineTemplate
         : widget.urlTemplate;
+    if (activeTemplate.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final maxNativeZoom = usingOfflineTemplate
+        ? (widget.maxOfflineNativeZoom ?? mapTileMaxNativeZoom)
+              .clamp(0, mapTileMaxNativeZoom)
+              .toInt()
+        : mapTileMaxNativeZoom;
+    if (!usingOfflineTemplate && canTryLiveTiles) {
+      return TileLayer(
+        urlTemplate: activeTemplate,
+        minZoom: mapTileMinZoom,
+        maxZoom: mapTileMaxZoom,
+        maxNativeZoom: maxNativeZoom,
+        userAgentPackageName: widget.userAgentPackageName,
+        errorTileCallback: (tile, error, stackTrace) {
+          if (_looksOffline(error)) {
+            unawaited(_refreshConnectivity());
+          }
+        },
+      );
+    }
     return TileLayer(
       urlTemplate: activeTemplate,
+      minZoom: mapTileMinZoom,
+      maxZoom: mapTileMaxZoom,
+      maxNativeZoom: maxNativeZoom,
       userAgentPackageName: widget.userAgentPackageName,
       tileProvider: _CachedMapTileProvider(
         sourceId: activeTemplate,
-        allowNetwork: _online,
-        writeNetworkTiles: activeTemplate == offlineTemplate,
+        allowNetwork: canTryLiveTiles,
+        preferCache: usingOfflineTemplate || !canTryLiveTiles,
+        writeNetworkTiles: _online && usingOfflineTemplate,
       ),
       errorTileCallback: (tile, error, stackTrace) {
         if (_looksOffline(error)) {
-          _setConnection(const [ConnectivityResult.none]);
+          unawaited(_refreshConnectivity());
         }
       },
     );
@@ -94,9 +163,14 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
         text.contains('network') ||
         text.contains('connection') ||
         text.contains('failed host lookup') ||
-        text.contains('clientexception') ||
         text.contains('xmlhttprequest') ||
         text.contains('timeout');
+  }
+
+  String _effectiveOfflineTemplate() {
+    final override = widget.offlineUrlTemplateOverride?.trim();
+    if (override != null && override.isNotEmpty) return override;
+    return _offlineTemplate.trim();
   }
 }
 
@@ -105,7 +179,7 @@ class OfflineMapBackground extends StatelessWidget {
 
   const OfflineMapBackground({
     super.key,
-    this.message = 'Offline map\nDraw boundary normally',
+    this.message = 'Offline field imagery\nDraw boundary normally',
   });
 
   @override
@@ -200,11 +274,13 @@ class _CachedMapTileProvider extends TileProvider {
 
   final String sourceId;
   final bool allowNetwork;
+  final bool preferCache;
   final bool writeNetworkTiles;
 
   _CachedMapTileProvider({
     required this.sourceId,
     required this.allowNetwork,
+    required this.preferCache,
     required this.writeNetworkTiles,
   }) : super(headers: {'User-Agent': 'grainright.wrkfarm'});
 
@@ -218,6 +294,7 @@ class _CachedMapTileProvider extends TileProvider {
       y: coordinates.y,
       headers: headers,
       allowNetwork: allowNetwork,
+      preferCache: preferCache,
       writeNetworkTiles: writeNetworkTiles,
       httpClient: _httpClient,
     );
@@ -226,6 +303,10 @@ class _CachedMapTileProvider extends TileProvider {
 
 @immutable
 class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
+  static final Uint8List _transparentTileBytes = base64Decode(
+    'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+  );
+
   final String url;
   final String sourceId;
   final int z;
@@ -233,6 +314,7 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   final int y;
   final Map<String, String> headers;
   final bool allowNetwork;
+  final bool preferCache;
   final bool writeNetworkTiles;
   final http.Client httpClient;
 
@@ -244,6 +326,7 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
     required this.y,
     required this.headers,
     required this.allowNetwork,
+    required this.preferCache,
     required this.writeNetworkTiles,
     required this.httpClient,
   });
@@ -261,50 +344,96 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
     return MultiFrameImageStreamCompleter(
       codec: key._loadAsync(decode),
       scale: 1,
-      debugLabel: url,
+      debugLabel: _redactUrl(url),
       informationCollector: () => [
-        DiagnosticsProperty<String>('Tile URL', url),
-        DiagnosticsProperty<String>('Source ID', sourceId),
+        DiagnosticsProperty<String>('Tile URL', _redactUrl(url)),
+        DiagnosticsProperty<String>('Source ID', _redactUrl(sourceId)),
       ],
     );
   }
 
   Future<ui.Codec> _loadAsync(ImageDecoderCallback decode) async {
-    final cached = await LocalAppDatabase.instance.readTile(
-      sourceId: sourceId,
-      z: z,
-      x: x,
-      y: y,
-    );
-    if (cached != null) {
-      final buffer = await ui.ImmutableBuffer.fromUint8List(cached.bytes);
-      return decode(buffer);
+    final db = LocalAppDatabase.maybeInstance;
+    if (preferCache) {
+      final cachedCodec = await _tryLoadCachedTile(db, decode);
+      if (cachedCodec != null) return cachedCodec;
     }
 
     if (!allowNetwork) {
-      throw StateError('Tile is not downloaded for offline use.');
+      return _decodeTransparentTile(decode);
     }
 
-    final response = await httpClient.get(Uri.parse(url), headers: headers);
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw http.ClientException(
-        'Tile request failed with ${response.statusCode}',
-        Uri.parse(url),
-      );
+    try {
+      final response = await httpClient
+          .get(Uri.parse(url), headers: headers)
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return _decodeTransparentTile(decode);
+      }
+
+      final bytes = response.bodyBytes;
+      if (bytes.isEmpty) return _decodeTransparentTile(decode);
+
+      if (writeNetworkTiles && db != null) {
+        unawaited(
+          db
+              .writeTile(
+                sourceId: sourceId,
+                z: z,
+                x: x,
+                y: y,
+                bytes: bytes,
+                contentType: response.headers['content-type'] ?? 'image/png',
+              )
+              .catchError(
+                (Object e) => debugPrint(
+                  '[OfflineAwareTileLayer.writeTile] ${_shortError(e)}',
+                ),
+              ),
+        );
+      }
+
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      return decode(buffer);
+    } catch (_) {
+      final cachedCodec = await _tryLoadCachedTile(db, decode);
+      return cachedCodec ?? _decodeTransparentTile(decode);
     }
-    final bytes = response.bodyBytes;
-    if (writeNetworkTiles) {
-      await LocalAppDatabase.instance.writeTile(
-        sourceId: sourceId,
-        z: z,
-        x: x,
-        y: y,
-        bytes: bytes,
-        contentType: response.headers['content-type'] ?? 'image/png',
-      );
+  }
+
+  Future<ui.Codec?> _tryLoadCachedTile(
+    LocalAppDatabase? db,
+    ImageDecoderCallback decode,
+  ) async {
+    if (db == null) return null;
+    try {
+      final cached = await db.readTile(sourceId: sourceId, z: z, x: x, y: y);
+      if (cached == null) return null;
+      final buffer = await ui.ImmutableBuffer.fromUint8List(cached.bytes);
+      return decode(buffer);
+    } catch (e) {
+      debugPrint('[OfflineAwareTileLayer.readTile] ${_shortError(e)}');
+      return null;
     }
-    final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+  }
+
+  static String _shortError(Object error) {
+    final text = error.toString();
+    return text.length <= 180 ? text : '${text.substring(0, 180)}...';
+  }
+
+  Future<ui.Codec> _decodeTransparentTile(ImageDecoderCallback decode) async {
+    final buffer = await ui.ImmutableBuffer.fromUint8List(
+      _transparentTileBytes,
+    );
     return decode(buffer);
+  }
+
+  static String _redactUrl(String value) {
+    return value.replaceAllMapped(
+      RegExp(r'([?&](?:api_key|key|access_token)=)[^&]+', caseSensitive: false),
+      (match) => '${match.group(1)}REDACTED',
+    );
   }
 
   @override
@@ -314,9 +443,22 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
         other.sourceId == sourceId &&
         other.z == z &&
         other.x == x &&
-        other.y == y;
+        other.y == y &&
+        other.allowNetwork == allowNetwork &&
+        other.preferCache == preferCache &&
+        other.writeNetworkTiles == writeNetworkTiles;
   }
 
   @override
-  int get hashCode => Object.hash(url, sourceId, z, x, y);
+  int get hashCode =>
+      Object.hash(
+        url,
+        sourceId,
+        z,
+        x,
+        y,
+        allowNetwork,
+        preferCache,
+        writeNetworkTiles,
+      );
 }

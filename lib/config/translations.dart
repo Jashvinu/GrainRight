@@ -93,6 +93,7 @@ class AppTranslations {
     // Yearly rows
     'Area (acre)': 'क्षेत्र (एकर)',
     'Total production': 'एकूण उत्पादन',
+    'Yield (average per acre)': 'उत्पादन सरासरी प्रति एकर',
     'Home consumption': 'घरगुती वापर',
     'Quantity sold': 'विकलेले प्रमाण',
     'Sold where': 'कुठे विकले',
@@ -123,7 +124,7 @@ class AppTranslations {
     'Farming method': 'शेती पद्धत',
     'Organic': 'सेंद्रिय',
     'Mixed': 'मिश्र',
-    'Natural': 'नैसर्गिक',
+    'Traditional': 'पारंपरिक',
 
     // Step 2 — seed and land preparation
     'Treats seeds?': 'बियाण्यांवर प्रक्रिया करता का?',

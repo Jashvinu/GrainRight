@@ -156,13 +156,15 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
             options: MapOptions(
               initialCenter: SatelliteConfig.defaultCenter,
               initialZoom: SatelliteConfig.defaultZoom,
+              minZoom: mapTileMinZoom,
+              maxZoom: mapTileMaxZoom,
               onTap: _addPoint,
             ),
             children: [
               const OfflineMapBackground(
                 message: 'Offline map\nTap points to draw farm',
               ),
-              const OfflineAwareTileLayer(urlTemplate: openStreetMapTileUrl),
+              OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
               if (_points.length >= 3)
                 PolygonLayer(
                   polygons: [

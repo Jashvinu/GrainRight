@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/farmer_survey.dart';
+import '../services/network_status_service.dart';
 import '../services/offline_survey_queue_service.dart';
 import '../services/secure_app_storage.dart';
 import '../services/survey_service.dart';
@@ -14,6 +15,7 @@ class SurveyController extends GetxController {
   final _service = SurveyService();
   final _sheetsService = SheetsSyncService();
   final _offlineQueueService = OfflineSurveyQueueService();
+  final _networkStatusService = NetworkStatusService();
   final _secureStorage = SecureAppStorage();
   final surveys = <FarmerSurvey>[].obs;
   final pendingSubmissions = <PendingSurveySubmission>[].obs;
@@ -34,12 +36,20 @@ class SurveyController extends GetxController {
   Future<void> loadSurveys() async {
     isLoading.value = true;
     hasError.value = false;
+    errorMessage.value = '';
     await refreshDraftState();
     await loadPendingSubmissions();
     try {
+      final online = await _networkStatusService.isOnline();
+      if (!online) return;
       surveys.value = await _service.fetchAll();
     } catch (e, st) {
       debugPrint('[SurveyController.loadSurveys] $e\n$st');
+      if (_networkStatusService.looksOffline(e)) {
+        hasError.value = false;
+        errorMessage.value = '';
+        return;
+      }
       hasError.value = true;
       errorMessage.value = _friendlyError(e);
     } finally {

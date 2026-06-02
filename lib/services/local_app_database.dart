@@ -107,6 +107,13 @@ class FormConfigCacheRecord {
 }
 
 class LocalAppDatabase extends GeneratedDatabase {
+  static bool get isSupported => isLocalDatabaseSupported();
+
+  static LocalAppDatabase? get maybeInstance {
+    if (!isSupported) return null;
+    return instance;
+  }
+
   static final LocalAppDatabase instance = LocalAppDatabase(
     openLocalDatabaseConnection(),
   );
@@ -513,7 +520,7 @@ class LocalAppDatabase extends GeneratedDatabase {
     required int y,
   }) async {
     await ensureInitialized();
-    final rows = await customSelect(
+    var rows = await customSelect(
       '''
       SELECT bytes, content_type FROM offline_tile_cache
       WHERE source_id = ? AND z = ? AND x = ? AND y = ?
@@ -526,6 +533,22 @@ class LocalAppDatabase extends GeneratedDatabase {
         Variable.withInt(y),
       ],
     ).get();
+    if (rows.isEmpty && !sourceId.contains('#region=')) {
+      rows = await customSelect(
+        '''
+        SELECT bytes, content_type FROM offline_tile_cache
+        WHERE source_id LIKE ? AND z = ? AND x = ? AND y = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+        ''',
+        variables: [
+          Variable.withString('$sourceId#region=%'),
+          Variable.withInt(z),
+          Variable.withInt(x),
+          Variable.withInt(y),
+        ],
+      ).get();
+    }
     if (rows.isEmpty) return null;
     return CachedTileRecord(
       bytes: rows.first.read<Uint8List>('bytes'),

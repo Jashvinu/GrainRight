@@ -7,7 +7,7 @@ import '../config/translations.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/form_config.dart';
-import '../screens/pencil_polygon_screen.dart';
+import '../utils/boundary_map_launcher.dart';
 import 'acre_input.dart';
 import 'custom_dropdown.dart';
 import 'custom_text_field.dart';
@@ -125,9 +125,7 @@ class DynamicField extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 14),
         child: OutlinedButton.icon(
           onPressed: () async {
-            final result = await Get.to<List<List<double>>>(
-              () => PencilPolygonScreen(initialPolygon: points),
-            );
+            final result = await openBoundaryDrawingMap(initialPolygon: points);
             if (result != null) {
               c.setPolygon(config.fieldKey, result);
             }

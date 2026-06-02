@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:millets_now/utils/polygon_simplify.dart';
 
 void main() {
@@ -17,9 +17,7 @@ void main() {
   });
 
   test('single-point stroke returns empty polygon', () {
-    final ring = PolygonSimplifier.simplify([
-      const LatLng(12.0, 77.0),
-    ]);
+    final ring = PolygonSimplifier.simplify([const LatLng(12.0, 77.0)]);
 
     expect(ring, isEmpty);
   });

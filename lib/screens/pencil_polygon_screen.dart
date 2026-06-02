@@ -1,13 +1,17 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart' as gmaps;
 import 'package:latlong2/latlong.dart' as ll;
-import '../config/satellite_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/theme.dart';
+import '../services/local_app_database.dart';
 import '../services/location_service.dart';
+import '../services/map_tile_cache_service.dart';
 import '../services/map_tile_provider.dart';
+import '../services/network_status_service.dart';
+import '../services/offline_map_service.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/polygon_simplify.dart';
 
@@ -21,42 +25,206 @@ class PencilPolygonScreen extends StatefulWidget {
 }
 
 class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
+  static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
   final _mapController = MapController();
   final _locationService = LocationService();
-  final _liveStroke = <gmaps.LatLng>[];
+  final _mapTileCacheService = MapTileCacheService();
+  final _offlineMapService = OfflineMapService();
+  final _networkStatusService = NetworkStatusService();
+  final _liveStroke = <ll.LatLng>[];
 
   bool _mapReady = false;
   bool _pencilMode = false;
-  gmaps.LatLng _center = gmaps.LatLng(
-    SatelliteConfig.defaultCenter.latitude,
-    SatelliteConfig.defaultCenter.longitude,
+  bool _loadingDownloadedMaps = false;
+  double _targetZoom = 18;
+  OfflineMapRegionRecord? _selectedOfflineRegion;
+  List<OfflineMapRegionRecord> _downloadedRegions = const [];
+  ll.LatLng _center = ll.LatLng(
+    MapTileCacheService.fallbackCenterLatitude,
+    MapTileCacheService.fallbackCenterLongitude,
   );
-  List<gmaps.LatLng> _ring = [];
+  List<ll.LatLng> _ring = [];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_mapTileCacheService.prefetchCoreRegions());
+    });
     if (widget.initialPolygon != null && widget.initialPolygon!.isNotEmpty) {
       _ring = _openRing(
         PolygonGeometry.fromGeoJsonRing(widget.initialPolygon!),
       );
       _center = _ring.first;
     } else {
-      _loadLocation();
+      unawaited(_loadInitialMapTarget());
+    }
+  }
+
+  @override
+  void dispose() {
+    _offlineMapService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitialMapTarget() async {
+    final regions = await _refreshDownloadedRegions();
+    if (!mounted) return;
+
+    final hasNetwork = await _networkStatusService.hasNetworkInterface();
+    if (!mounted) return;
+
+    if (!hasNetwork && regions.isNotEmpty) {
+      final preferred = await _preferredOfflineRegion(regions);
+      if (!mounted) return;
+      _focusOfflineRegion(preferred ?? regions.first, showSnack: false);
+      return;
+    }
+
+    await _loadLocation();
+  }
+
+  Future<List<OfflineMapRegionRecord>> _refreshDownloadedRegions() async {
+    try {
+      final regions = await _offlineMapService.listRegions();
+      final drawableRegions = regions.where(_canDrawOnRegion).toList();
+      if (mounted) setState(() => _downloadedRegions = drawableRegions);
+      return drawableRegions;
+    } catch (e) {
+      debugPrint('[PencilPolygonScreen._refreshDownloadedRegions] $e');
+      return const [];
     }
   }
 
   Future<void> _loadLocation() async {
+    final quickLocation = await _locationService.getLastKnownLocation();
+    if (!mounted) return;
+    if (quickLocation != null) {
+      _focusLiveLocation(quickLocation);
+    }
+
     final location = await _locationService.getCurrentLocation();
-    if (!mounted || location == null) return;
-    setState(() {
-      _center = gmaps.LatLng(location.latitude, location.longitude);
-    });
-    _moveMap(_center, zoom: 17);
+    if (!mounted) return;
+    if (location == null) {
+      if (quickLocation != null) return;
+      final fallbackRegion = await _preferredOfflineRegion(_downloadedRegions);
+      if (fallbackRegion != null) {
+        _focusOfflineRegion(fallbackRegion, showSnack: false);
+      }
+      return;
+    }
+    _focusLiveLocation(location);
   }
 
-  gmaps.LatLng? _pointFromGlobalPosition(Offset globalPosition) {
+  void _focusLiveLocation(LocationResult location) {
+    setState(() {
+      _center = ll.LatLng(location.latitude, location.longitude);
+      _targetZoom = 18;
+      _selectedOfflineRegion = null;
+    });
+    unawaited(
+      _mapTileCacheService.prefetchWideRegion(
+        latitude: location.latitude,
+        longitude: location.longitude,
+      ),
+    );
+    _moveMap(_center, zoom: 18);
+  }
+
+  Future<void> _selectDownloadedMap() async {
+    if (_loadingDownloadedMaps) return;
+    setState(() => _loadingDownloadedMaps = true);
+    final regions = await _refreshDownloadedRegions();
+    if (mounted) setState(() => _loadingDownloadedMaps = false);
+    if (!mounted) return;
+
+    if (regions.isEmpty) {
+      Get.snackbar(
+        'Downloaded maps',
+        'No downloaded map regions are available for drawing.',
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<OfflineMapRegionRecord>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return const Padding(
+                  padding: EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    'Select downloaded map',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                );
+              }
+
+              final region = regions[index - 1];
+              final selected =
+                  _selectedOfflineRegion?.regionId == region.regionId;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  selected ? Icons.offline_pin_rounded : Icons.map_outlined,
+                  color: selected ? AppTheme.green : AppTheme.textMuted,
+                ),
+                title: Text(
+                  region.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  '${region.status.toUpperCase()} · ${region.radiusKm.toStringAsFixed(0)} km · zoom ${region.minZoom}-${region.maxZoom} · ${region.downloadedTileCount}/${region.tileCount} tiles',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: selected
+                    ? const Icon(Icons.check_circle, color: AppTheme.green)
+                    : const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).pop(region),
+              );
+            },
+            separatorBuilder: (_, index) =>
+                index == 0 ? const SizedBox(height: 6) : const Divider(),
+            itemCount: regions.length + 1,
+          ),
+        );
+      },
+    );
+
+    if (selected != null) _focusOfflineRegion(selected);
+  }
+
+  void _focusOfflineRegion(
+    OfflineMapRegionRecord region, {
+    bool showSnack = true,
+  }) {
+    final center = ll.LatLng(region.centerLat, region.centerLng);
+    final zoom = region.maxZoom.clamp(10, mapTileMaxZoom.toInt()).toDouble();
+    setState(() {
+      _selectedOfflineRegion = region;
+      _center = center;
+      _targetZoom = zoom;
+    });
+    unawaited(_savePreferredOfflineRegion(region.regionId));
+    _moveMap(center, zoom: zoom);
+    if (showSnack) {
+      Get.snackbar(
+        'Downloaded map selected',
+        'Centered on ${region.label}. Switch to Draw and mark the farm boundary.',
+      );
+    }
+  }
+
+  ll.LatLng? _pointFromGlobalPosition(Offset globalPosition) {
     final box = _mapKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return null;
     final local = box.globalToLocal(globalPosition);
@@ -64,7 +232,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
       final point = _mapController.camera.pointToLatLng(
         math.Point<double>(local.dx, local.dy),
       );
-      return _fromMapPoint(point);
+      return point;
     } catch (_) {
       return null;
     }
@@ -131,7 +299,9 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
     if (!_mapReady || !mounted) return;
     try {
       final camera = _mapController.camera;
-      final nextZoom = (camera.zoom + delta).clamp(3.0, 20.0).toDouble();
+      final nextZoom = (camera.zoom + delta)
+          .clamp(mapTileMinZoom, mapTileMaxZoom)
+          .toDouble();
       _mapController.move(camera.center, nextZoom);
     } catch (e) {
       debugPrint('[PencilPolygonScreen._zoomBy] $e');
@@ -145,6 +315,17 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
       appBar: AppBar(
         title: const Text('Draw farm boundary'),
         actions: [
+          IconButton(
+            tooltip: 'Downloaded maps',
+            onPressed: _loadingDownloadedMaps ? null : _selectDownloadedMap,
+            icon: _loadingDownloadedMaps
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.offline_pin_outlined),
+          ),
           IconButton(
             tooltip: 'Re-center',
             onPressed: _loadLocation,
@@ -179,11 +360,13 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _toMapPoint(_center),
-              initialZoom: 17,
+              initialCenter: _center,
+              initialZoom: _targetZoom,
+              minZoom: mapTileMinZoom,
+              maxZoom: mapTileMaxZoom,
               initialCameraFit: _ring.length >= 3
                   ? CameraFit.bounds(
-                      bounds: LatLngBounds.fromPoints(_mapPoints(_ring)),
+                      bounds: LatLngBounds.fromPoints(_ring),
                       padding: const EdgeInsets.all(48),
                     )
                   : null,
@@ -192,19 +375,23 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
               ),
               onMapReady: () {
                 _mapReady = true;
-                if (_ring.isEmpty) _moveMap(_center, zoom: 17);
+                if (_ring.isEmpty) _moveMap(_center, zoom: _targetZoom);
               },
             ),
             children: [
               const OfflineMapBackground(
                 message: 'Offline map\nPan to your farm and draw',
               ),
-              OfflineAwareTileLayer(urlTemplate: arcGisWorldImageryUrl),
+              OfflineAwareTileLayer(
+                urlTemplate: fieldImageryTileUrl,
+                offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
+                maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
+              ),
               if (_ring.length >= 3)
                 PolygonLayer(
                   polygons: [
                     Polygon(
-                      points: _mapPoints(_ring),
+                      points: _ring,
                       color: AppTheme.green.withValues(alpha: 0.22),
                       borderColor: AppTheme.green,
                       borderStrokeWidth: 3,
@@ -215,7 +402,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _mapPoints(_liveStroke),
+                      points: _liveStroke,
                       strokeWidth: 4,
                       color: Colors.white,
                     ),
@@ -226,7 +413,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                   circles: _ring
                       .map(
                         (point) => CircleMarker(
-                          point: _toMapPoint(point),
+                          point: point,
                           radius: 6,
                           color: AppTheme.greenDark,
                           borderColor: Colors.white,
@@ -252,6 +439,14 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                 onPanEnd: (_) => _finishStroke(),
               ),
             ),
+          Positioned(
+            left: 16,
+            right: 88,
+            top: 16,
+            child: SafeArea(
+              child: _DownloadedMapBanner(region: _selectedOfflineRegion),
+            ),
+          ),
           Positioned(
             right: 16,
             top: 16,
@@ -320,33 +515,113 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
     );
   }
 
-  void _moveMap(gmaps.LatLng center, {required double zoom}) {
+  void _moveMap(ll.LatLng center, {required double zoom}) {
     if (!_mapReady) return;
     try {
-      _mapController.move(_toMapPoint(center), zoom);
+      _mapController.move(center, zoom);
     } catch (_) {
       // The controller may not be attached yet during startup.
     }
   }
 
-  ll.LatLng _toMapPoint(gmaps.LatLng point) =>
-      ll.LatLng(point.latitude, point.longitude);
-
-  gmaps.LatLng _fromMapPoint(ll.LatLng point) =>
-      gmaps.LatLng(point.latitude, point.longitude);
-
-  List<ll.LatLng> _mapPoints(List<gmaps.LatLng> points) =>
-      points.map(_toMapPoint).toList();
-
-  List<gmaps.LatLng> _openRing(List<gmaps.LatLng> points) {
+  List<ll.LatLng> _openRing(List<ll.LatLng> points) {
     if (points.length < 2) return [...points];
     final out = [...points];
     if (_samePoint(out.first, out.last)) out.removeLast();
     return out;
   }
 
-  bool _samePoint(gmaps.LatLng a, gmaps.LatLng b) =>
+  bool _samePoint(ll.LatLng a, ll.LatLng b) =>
       a.latitude == b.latitude && a.longitude == b.longitude;
+
+  bool _canDrawOnRegion(OfflineMapRegionRecord region) {
+    if (region.tileCount <= 0 || region.downloadedTileCount <= 0) {
+      return false;
+    }
+    return region.status == 'ready' ||
+        region.downloadedTileCount >= region.tileCount;
+  }
+
+  Future<OfflineMapRegionRecord?> _preferredOfflineRegion(
+    List<OfflineMapRegionRecord> regions,
+  ) async {
+    if (regions.isEmpty) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final preferredId = prefs.getString(_preferredRegionKey);
+    if (preferredId == null || preferredId.isEmpty) {
+      return regions.first;
+    }
+    for (final region in regions) {
+      if (region.regionId == preferredId) return region;
+    }
+    return regions.first;
+  }
+
+  Future<void> _savePreferredOfflineRegion(String regionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_preferredRegionKey, regionId);
+  }
+}
+
+class _DownloadedMapBanner extends StatelessWidget {
+  final OfflineMapRegionRecord? region;
+
+  const _DownloadedMapBanner({required this.region});
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = region;
+    if (selected == null) return const SizedBox.shrink();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD9E4D8)),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.offline_pin_outlined,
+              color: AppTheme.green,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                selected.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.greenDark,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Z${selected.minZoom}-${selected.maxZoom}',
+              style: const TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _ZoomControls extends StatelessWidget {

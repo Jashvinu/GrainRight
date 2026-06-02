@@ -299,6 +299,12 @@ class SurveyService {
       }
     }
 
+    if (_farmerSurveyColumns.contains('total_cultivation_cost')) {
+      output['total_cultivation_cost'] = _toNumericOrZero(
+        output['total_cultivation_cost'],
+      );
+    }
+
     if (extra.isNotEmpty) output['extra_details'] = extra;
     return output;
   }
@@ -335,6 +341,11 @@ class SurveyService {
       }
     }
 
+    if (columns.contains('sold_where_options') &&
+        !output.containsKey('sold_where_options')) {
+      output['sold_where_options'] = <String>[];
+    }
+
     if (extra.isNotEmpty && columns.contains('extra_details')) {
       output['extra_details'] = extra;
     }
@@ -359,6 +370,13 @@ class SurveyService {
       });
     }
     return source;
+  }
+
+  double _toNumericOrZero(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim()) ?? 0.0;
+    return 0.0;
   }
 }
 
@@ -408,6 +426,7 @@ const _farmerSurveyColumns = {
   'farm_polygon',
   'annual_agri_income',
   'non_agri_income',
+  'total_cultivation_cost',
   'total_annual_income',
   'makes_food_products',
   'food_products_list',
@@ -439,6 +458,8 @@ const _yearlyCropColumns = {
   'area_acre',
   'total_production',
   'total_production_unit',
+  'yield_avg_per_acre',
+  'yield_avg_per_acre_unit',
   'home_consumption',
   'home_consumption_unit',
   'quantity_sold',

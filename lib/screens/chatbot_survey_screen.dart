@@ -7,6 +7,7 @@ import '../controllers/chat_survey_controller.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/chat_message.dart';
+import '../models/survey_launch.dart';
 import '../widgets/chat/chat_answer_bar.dart';
 import '../widgets/chat/bot_text_bubble.dart';
 import '../widgets/chat/polygon_message_widget.dart';
@@ -24,10 +25,11 @@ class ChatbotSurveyScreen extends StatefulWidget {
 
 class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
     with WidgetsBindingObserver {
-  static const _formTag = 'chat_form';
-
+  late final String _formTag;
+  late final String _chatTag;
   late final FormController _formController;
   late final ChatSurveyController _chatController;
+  late final LanguageController _languageController;
   late final Worker _messageWorker;
   final _scrollController = ScrollController();
 
@@ -35,13 +37,16 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _formTag = 'chat_form_${identityHashCode(this)}';
+    _chatTag = 'chat_survey_${identityHashCode(this)}';
     _formController = Get.put(FormController(), tag: _formTag);
+    _languageController = Get.find<LanguageController>();
     _chatController = Get.put(
       ChatSurveyController(
         formController: _formController,
-        languageController: Get.find<LanguageController>(),
+        languageController: _languageController,
       ),
-      tag: 'chat_survey',
+      tag: _chatTag,
     );
     _messageWorker = ever(_chatController.messages, (_) => _scrollToBottom());
   }
@@ -66,8 +71,8 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
 
   Future<void> _persistAndReleaseControllers() async {
     await _chatController.persistProgress();
-    if (Get.isRegistered<ChatSurveyController>(tag: 'chat_survey')) {
-      Get.delete<ChatSurveyController>(tag: 'chat_survey');
+    if (Get.isRegistered<ChatSurveyController>(tag: _chatTag)) {
+      Get.delete<ChatSurveyController>(tag: _chatTag);
     }
     if (Get.isRegistered<FormController>(tag: _formTag)) {
       Get.delete<FormController>(tag: _formTag);
@@ -91,6 +96,20 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
     });
   }
 
+  Future<void> _switchToClassic() async {
+    await _chatController.persistProgress();
+    Get.offNamed('/form/classic', arguments: _switchArguments());
+  }
+
+  SurveyLaunchArgs _switchArguments() {
+    return SurveyLaunchArgs.from(Get.arguments).forModeSwitch();
+  }
+
+  Future<void> _setLanguage(String code) async {
+    await _chatController.setLanguageCode(code);
+    if (mounted) setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,15 +118,16 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
       appBar: AppBar(
         title: const Text('Baseline Survey'),
         actions: [
+          _buildLanguageMenu(),
           IconButton(
             tooltip: 'Use classic form',
-            onPressed: () =>
-                Get.offNamed('/form/classic', arguments: Get.arguments),
+            onPressed: _switchToClassic,
             icon: const Icon(Icons.article_outlined),
           ),
         ],
       ),
       body: Obx(() {
+        final _ = _languageController.language.value;
         if (!_chatController.isReady.value) {
           return const Center(
             child: CircularProgressIndicator(color: AppTheme.green),
@@ -172,6 +192,23 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
         );
       }),
     );
+  }
+
+  Widget _buildLanguageMenu() {
+    return Obx(() {
+      final code = _languageController.language.value;
+      return PopupMenuButton<String>(
+        tooltip: 'Change language',
+        initialValue: code,
+        icon: const Icon(Icons.translate_rounded),
+        onSelected: _setLanguage,
+        itemBuilder: (context) => const [
+          PopupMenuItem(value: 'en', child: Text('English')),
+          PopupMenuItem(value: 'hi', child: Text('हिन्दी')),
+          PopupMenuItem(value: 'mr', child: Text('मराठी')),
+        ],
+      );
+    });
   }
 
   List<ChatMessage> _visibleMessages(List<ChatMessage> messages) {
