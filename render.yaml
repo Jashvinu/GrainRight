@@ -4,7 +4,7 @@ services:
     name: grainright-admin-export
     rootDir: Admin Spreadsheet downloading website
     buildCommand: npm ci && npm run build
-    staticPublishPath: ./dist
+    staticPublishPath: "./Admin Spreadsheet downloading website/dist"
     autoDeployTrigger: commit
     renderSubdomainPolicy: enabled
     envVars:
