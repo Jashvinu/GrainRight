@@ -2,10 +2,9 @@ services:
   - type: web
     runtime: static
     name: grainright-admin-export
-    repo: https://github.com/Jashvinu/GrainRight
-    branch: main
-    buildCommand: cd "Admin Spreadsheet downloading website" && npm ci && npm run build
-    staticPublishPath: "./Admin Spreadsheet downloading website/dist"
+    rootDir: Admin Spreadsheet downloading website
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
     autoDeployTrigger: commit
     renderSubdomainPolicy: enabled
     envVars:
