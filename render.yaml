@@ -1,0 +1,26 @@
+services:
+  - type: web
+    runtime: static
+    name: grainright-admin-export
+    repo: https://github.com/Jashvinu/GrainRight
+    branch: main
+    buildCommand: cd "Admin Spreadsheet downloading website" && npm ci && npm run build
+    staticPublishPath: "./Admin Spreadsheet downloading website/dist"
+    autoDeployTrigger: commit
+    renderSubdomainPolicy: enabled
+    envVars:
+      - key: VITE_ADMIN_EXPORT_FUNCTION_URL
+        value: https://udbnskydigoqpxmmduvr.supabase.co/functions/v1/admin-survey-export
+      - key: VITE_SUPABASE_ANON_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVkYm5za3lkaWdvcXB4bW1kdXZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3MTM2MzgsImV4cCI6MjA3ODI4OTYzOH0.asXaM2V47DiP8-Wr-Kk44Xs2INT8flGYy51Vz47NQvM
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
