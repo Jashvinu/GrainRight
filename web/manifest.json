@@ -1,11 +1,11 @@
 {
-    "name": "millets_now",
-    "short_name": "millets_now",
+    "name": "Kalsubai Farms",
+    "short_name": "Kalsubai",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Kalsubai Farms farmer intelligence and traceability app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

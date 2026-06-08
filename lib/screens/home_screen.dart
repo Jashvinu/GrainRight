@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/brand_assets.dart';
 import '../config/theme.dart';
 import '../controllers/survey_controller.dart';
 import '../models/farmer_survey.dart';
 import '../models/survey_launch.dart';
 import '../services/offline_survey_queue_service.dart';
-import '../widgets/brand_text.dart';
 import '../widgets/survey_list_tile.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -88,12 +88,13 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         toolbarHeight: 70,
         title: Row(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset('assets/logo.png', height: 60),
+              child: Image.asset(BrandAssets.logo, height: 60),
             ),
             const SizedBox(width: 14),
             Text(
@@ -106,9 +107,24 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 6),
-            const BrandText(fontSize: 16),
+            const Text(
+              'wrkfarm',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: AppTheme.green,
+                letterSpacing: 0,
+              ),
+            ),
           ],
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Back to roles',
+            onPressed: () => Get.offAllNamed('/login'),
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ],
       ),
       body: Obx(() {
         final pending = controller.pendingSubmissions;

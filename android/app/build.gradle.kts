@@ -110,11 +110,11 @@ android {
         applicationId = "com.wrkfarm.millets_now"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = maxOf(flutter.minSdkVersion, 29)
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        manifestPlaceholders["appLabel"] = "GrainRight"
+        manifestPlaceholders["appLabel"] = "Kalsubai Farms"
         buildConfigField("String", "MAPTILER_API_KEY", mapTilerApiKey.toBuildConfigString())
         buildConfigField(
             "String",
@@ -146,7 +146,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "GrainRight Dev"
+            manifestPlaceholders["appLabel"] = "Kalsubai Farms"
         }
         release {
             if (keyPropertiesFile.exists()) {

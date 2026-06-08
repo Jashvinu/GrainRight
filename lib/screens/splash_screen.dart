@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../config/brand_assets.dart';
 import '../config/theme.dart';
-import '../controllers/main_auth_controller.dart';
-import '../widgets/brand_text.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,78 +12,118 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _anim;
+  late final AnimationController _controller;
   late final Animation<double> _fade;
+  late final Animation<Offset> _rise;
 
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(
+    _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 900),
     );
-    _fade = CurvedAnimation(parent: _anim, curve: Curves.easeOut);
-    _anim.forward();
-    Future.delayed(const Duration(seconds: 2), () async {
-      if (!mounted) return;
-      final auth = Get.find<MainAuthController>();
-      var hasSession = await auth.hasAnySession();
-      if (!hasSession) {
-        hasSession = await auth.ensureOfflineSessionWhenOffline();
-      }
-      if (!mounted) return;
-      Get.offNamed(hasSession ? '/home' : '/login');
-    });
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    _rise = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    _controller.forward();
+    _routeAfterIntro();
+  }
+
+  Future<void> _routeAfterIntro() async {
+    await Future<void>.delayed(const Duration(milliseconds: 1450));
+    if (!mounted) return;
+    Get.offNamed('/login');
   }
 
   @override
   void dispose() {
-    _anim.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final logoWidth = MediaQuery.sizeOf(context).width.clamp(360.0, 430.0);
+
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fade,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.green.withValues(alpha: 0.15),
-                      blurRadius: 40,
-                      spreadRadius: 8,
+      body: SafeArea(
+        child: Center(
+          child: FadeTransition(
+            opacity: _fade,
+            child: SlideTransition(
+              position: _rise,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 30),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      BrandAssets.logo,
+                      width: logoWidth,
+                      fit: BoxFit.contain,
                     ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Kalsubai Farms',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.greenDark,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Farm Intelligence & Traceability',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const _LoadingTrack(),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.asset('assets/logo.png', width: 140),
-                ),
               ),
-              const SizedBox(height: 32),
-              const BrandText(fontSize: 32),
-              const SizedBox(height: 8),
-              Text(
-                'MilletsNow',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey[400],
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 1.5,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _LoadingTrack extends StatelessWidget {
+  const _LoadingTrack();
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 1250),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, _) {
+        return SizedBox(
+          width: 150,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: value,
+              minHeight: 4,
+              backgroundColor: AppTheme.greenPale,
+              color: AppTheme.green,
+            ),
+          ),
+        );
+      },
     );
   }
 }

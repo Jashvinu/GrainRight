@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:millets_now/utils/polygon_geometry.dart';
+import 'package:kalsubai_farms/utils/polygon_geometry.dart';
 
 void main() {
   test('area is within one percent for a roughly 100m square', () {

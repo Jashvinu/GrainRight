@@ -20,5 +20,5 @@ void main() async {
   );
   final prefs = await SharedPreferences.getInstance();
   final language = prefs.getString('app_language') ?? 'en';
-  runApp(MilletsNowApp(initialLocale: Locale(language)));
+  runApp(KalsubaiFarmsApp(initialLocale: Locale(language)));
 }

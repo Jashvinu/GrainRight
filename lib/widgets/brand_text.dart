@@ -12,21 +12,21 @@ class BrandText extends StatelessWidget {
       TextSpan(
         children: [
           TextSpan(
-            text: 'wrk',
+            text: 'Kalsubai',
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
               color: AppTheme.textDark,
-              letterSpacing: -0.5,
+              letterSpacing: 0,
             ),
           ),
           TextSpan(
-            text: 'Farm',
+            text: ' Farms',
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
               color: AppTheme.green,
-              letterSpacing: -0.5,
+              letterSpacing: 0,
             ),
           ),
         ],

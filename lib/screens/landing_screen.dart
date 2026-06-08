@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../config/brand_assets.dart';
 import '../config/theme.dart';
 import '../widgets/brand_text.dart';
 
@@ -19,14 +20,20 @@ class LandingScreen extends StatelessWidget {
               // Header
               Row(
                 children: [
-                  Image.asset('assets/logo.png', width: 40, height: 40),
+                  Image.asset(BrandAssets.logo, width: 40, height: 40),
                   const SizedBox(width: 10),
                   const BrandText(fontSize: 22),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Back to roles',
+                    onPressed: () => Get.offAllNamed('/login'),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
-                'Precision Agriculture Platform',
+                'Farm Intelligence & Traceability',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppTheme.textMuted,
@@ -61,7 +68,7 @@ class LandingScreen extends StatelessWidget {
               const Spacer(),
               Center(
                 child: Text(
-                  'MilletsNow · wrkFarm',
+                  'Kalsubai Farms',
                   style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
                 ),
               ),
@@ -134,8 +141,11 @@ class _ModuleCard extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.arrow_forward_ios,
-                  color: Colors.white54, size: 16),
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white54,
+                size: 16,
+              ),
             ],
           ),
         ),

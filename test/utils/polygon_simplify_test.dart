@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:millets_now/utils/polygon_simplify.dart';
+import 'package:kalsubai_farms/utils/polygon_simplify.dart';
 
 void main() {
   test('simplify closes a drawn ring', () {

@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Millets Now</string>
+	<string>Kalsubai Farms</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>millets_now</string>
+	<string>Kalsubai Farms</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -54,9 +54,9 @@
 		</dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>MilletsNow records your location when filling a survey to track where data was collected.</string>
+	<string>Kalsubai Farms records your location when filling a survey to track where data was collected.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>MilletsNow records your location when filling a survey to track where data was collected.</string>
+	<string>Kalsubai Farms records your location when filling a survey to track where data was collected.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

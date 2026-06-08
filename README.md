@@ -1,6 +1,6 @@
-# millets_now
+# Kalsubai Farms
 
-A new Flutter project.
+Kalsubai Farms farmer intelligence and traceability app.
 
 ## Getting Started
 

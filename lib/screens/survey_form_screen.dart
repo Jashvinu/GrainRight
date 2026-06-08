@@ -171,6 +171,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
       if (c.hasError.value) {
         return Scaffold(
           appBar: AppBar(
+            automaticallyImplyLeading: false,
             title: Text(_tr('Error')),
             actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
@@ -207,6 +208,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
       if (!c.isConfigLoaded.value) {
         return Scaffold(
           appBar: AppBar(
+            automaticallyImplyLeading: false,
             title: Text(_tr('Loading...')),
             actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
@@ -220,6 +222,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
       if (totalSteps == 0) {
         return Scaffold(
           appBar: AppBar(
+            automaticallyImplyLeading: false,
             title: Text(_tr('Error')),
             actions: [_buildLanguageToggle(), _buildChatModeButton()],
           ),
@@ -229,6 +232,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
 
       return Scaffold(
         appBar: AppBar(
+          automaticallyImplyLeading: false,
           title: Text(c.isEditMode ? _tr('Edit Survey') : _tr('New Survey')),
           actions: [_buildLanguageToggle(), _buildChatModeButton()],
         ),

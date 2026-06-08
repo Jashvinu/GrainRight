@@ -56,7 +56,7 @@ class MainAuthController extends GetxController {
     errorMessage.value = '';
     try {
       await _auth.signInWithPassword(email: email, password: password);
-      await _afterSignIn();
+      await _afterSignIn('/home');
     } on AuthException catch (e) {
       errorMessage.value = e.message;
     } catch (_) {
@@ -66,14 +66,14 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<void> continueAsGuest() async {
+  Future<void> continueAsGuest({String nextRoute = '/home'}) async {
     isLoading.value = true;
     errorMessage.value = '';
     try {
       final online = await _networkStatusService.isOnline();
       if (!online) {
         await _startLocalGuest();
-        await _afterSignIn();
+        await _afterSignIn(nextRoute);
         return;
       }
       try {
@@ -82,7 +82,7 @@ class MainAuthController extends GetxController {
         if (!_networkStatusService.looksOffline(e)) rethrow;
         await _startLocalGuest();
       }
-      await _afterSignIn();
+      await _afterSignIn(nextRoute);
     } on AuthException catch (e) {
       errorMessage.value = e.message;
     } catch (_) {
@@ -92,11 +92,11 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<void> _afterSignIn() async {
+  Future<void> _afterSignIn(String nextRoute) async {
     if (Get.isRegistered<SurveyController>()) {
       await Get.find<SurveyController>().loadSurveys();
     }
-    Get.offAllNamed('/home');
+    Get.offAllNamed(nextRoute);
   }
 
   Future<void> logout() async {

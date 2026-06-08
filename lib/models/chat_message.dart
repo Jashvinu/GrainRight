@@ -1,4 +1,4 @@
-import 'package:millets_now/models/form_config.dart';
+import 'package:kalsubai_farms/models/form_config.dart';
 
 sealed class ChatMessage {
   final String id;

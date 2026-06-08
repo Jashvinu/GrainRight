@@ -5,9 +5,9 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:millets_now/config/runtime_config.dart';
-import 'package:millets_now/services/local_app_database.dart';
-import 'package:millets_now/services/offline_map_service.dart';
+import 'package:kalsubai_farms/config/runtime_config.dart';
+import 'package:kalsubai_farms/services/local_app_database.dart';
+import 'package:kalsubai_farms/services/offline_map_service.dart';
 
 const _template = String.fromEnvironment('OFFLINE_TILE_URL_TEMPLATE');
 const _pngBase64 =
