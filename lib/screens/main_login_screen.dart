@@ -33,7 +33,7 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
     final minHeight = screenHeight - safeArea.top - safeArea.bottom;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4FAF2),
+      backgroundColor: AppTheme.surface,
       body: SafeArea(
         child: Stack(
           children: [
@@ -174,14 +174,6 @@ class _BrandHeader extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Farm Intelligence & Traceability',
-          style: TextStyle(
-            color: AppTheme.textMuted,
-            fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
       ],
     );
   }

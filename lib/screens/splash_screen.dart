@@ -50,7 +50,7 @@ class _SplashScreenState extends State<SplashScreen>
     final logoWidth = MediaQuery.sizeOf(context).width.clamp(360.0, 430.0);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.surface,
       body: SafeArea(
         child: Center(
           child: FadeTransition(
@@ -80,7 +80,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Farm Intelligence & Traceability',
+                      'Smart Millet Operations',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: AppTheme.textMuted,

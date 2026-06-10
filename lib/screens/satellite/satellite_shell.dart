@@ -87,7 +87,7 @@ class _SatelliteShellState extends State<SatelliteShell> {
         title: Text(_titles[_index]),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Get.offAllNamed('/home'),
+          onPressed: () => Get.offAllNamed('/login'),
         ),
         actions: [
           IconButton(

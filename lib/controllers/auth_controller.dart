@@ -155,6 +155,6 @@ class AuthController extends GetxController {
     if (Get.isRegistered<dynamic>(tag: 'farm')) {
       Get.delete<dynamic>(tag: 'farm');
     }
-    Get.offAllNamed('/home');
+    Get.offAllNamed('/login');
   }
 }

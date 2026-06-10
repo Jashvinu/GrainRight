@@ -32,8 +32,8 @@ class LandingScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              Text(
-                'Farm Intelligence & Traceability',
+              const Text(
+                'Kalsubai Farms Platform',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppTheme.textMuted,

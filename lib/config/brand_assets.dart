@@ -1,0 +1,20 @@
+class BrandAssets {
+  static const String logo = 'assets/logo.png';
+  static const String farmerAvatar = 'assets/farmer_avatar.png';
+  static const String farmerAvatar2 = 'assets/farmer_avatar_2.png';
+  static const String farmerAvatar3 = 'assets/farmer_avatar_3.png';
+  static const String farmerAvatar4 = 'assets/farmer_avatar_4.png';
+  static const String farmerAvatar5 = 'assets/farmer_avatar_5.png';
+  static const String farmerAvatar6 = 'assets/farmer_avatar_6.png';
+  static const String farmerAvatar7 = 'assets/farmer_avatar_7.png';
+
+  static const List<String> farmerAvatars = [
+    farmerAvatar,
+    farmerAvatar2,
+    farmerAvatar3,
+    farmerAvatar4,
+    farmerAvatar5,
+    farmerAvatar6,
+    farmerAvatar7,
+  ];
+}

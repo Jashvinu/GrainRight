@@ -11,11 +11,13 @@ class BrandText extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
-          TextSpan(
+            TextSpan(
             text: 'Kalsubai',
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
+              fontFamily: 'Poppins',
+              fontFamilyFallback: ['Inter'],
               color: AppTheme.textDark,
               letterSpacing: 0,
             ),
@@ -25,6 +27,8 @@ class BrandText extends StatelessWidget {
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
+              fontFamily: 'Poppins',
+              fontFamilyFallback: ['Inter'],
               color: AppTheme.green,
               letterSpacing: 0,
             ),

@@ -1,0 +1,130 @@
+[
+  {
+    "phone": "7745040653",
+    "farmerId": "FMR-7745040653",
+    "farmerName": "Vikas Tutare",
+    "defaultLocation": "Shevgaon",
+    "lots": [
+      {
+        "product": "High Iron & Zinc Cookies",
+        "grain": "Wheat",
+        "harvestDate": "14/03/2026",
+        "location": "Shevgaon",
+        "variety": "GANGA31",
+        "grade": "A"
+      },
+      {
+        "product": "High Zinc Khakra",
+        "grain": "Wheat",
+        "harvestDate": "14/03/2026",
+        "location": "Shevgaon",
+        "variety": "GANGA31",
+        "grade": "A"
+      }
+    ]
+  },
+  {
+    "phone": "9850139390",
+    "farmerId": "FMR-9850139390",
+    "farmerName": "Vikram Deshmukh",
+    "defaultLocation": "Satara",
+    "lots": [
+      {
+        "product": "High Iron & Zinc Cookies",
+        "grain": "Jowar",
+        "harvestDate": "22/03/2026",
+        "location": "Satara",
+        "variety": "Dagdi Jowar",
+        "grade": "A"
+      },
+      {
+        "product": "Pearl Millet Laddu",
+        "grain": "Jowar",
+        "harvestDate": "22/03/2026",
+        "location": "Satara",
+        "variety": "Dagdi Jowar",
+        "grade": "A"
+      },
+      {
+        "product": "High Iron & Zinc NutriBar",
+        "grain": "Jowar",
+        "harvestDate": "22/03/2026",
+        "location": "Satara",
+        "variety": "Dagdi Jowar",
+        "grade": "A"
+      }
+    ]
+  },
+  {
+    "phone": "9607581899",
+    "farmerId": "FMR-9607581899",
+    "farmerName": "Manisha Divekar",
+    "defaultLocation": "Kadethan (Daund)",
+    "lots": [
+      {
+        "product": "High Iron & Zinc Cookies",
+        "grain": "Bajra",
+        "harvestDate": "25/10/2025",
+        "location": "Kadethan (Daund)",
+        "variety": "AHB1200",
+        "grade": "A"
+      },
+      {
+        "product": "Pearl Millet Laddu",
+        "grain": "Bajra",
+        "harvestDate": "25/10/2025",
+        "location": "Kadethan (Daund)",
+        "variety": "AHB1200",
+        "grade": "A"
+      },
+      {
+        "product": "Pearl Millet Chiwda",
+        "grain": "Bajra",
+        "harvestDate": "25/10/2025",
+        "location": "Kadethan (Daund)",
+        "variety": "AHB1200",
+        "grade": "A"
+      },
+      {
+        "product": "High Iron & Zinc NutriBar",
+        "grain": "Bajra",
+        "harvestDate": "25/10/2025",
+        "location": "Kadethan (Daund)",
+        "variety": "AHB1200",
+        "grade": "A"
+      }
+    ]
+  },
+  {
+    "phone": "9422264504",
+    "farmerId": "FMR-9422264504",
+    "farmerName": "Kiran Pawar",
+    "defaultLocation": "Nandurbar Sakri",
+    "lots": [
+      {
+        "product": "High Iron & Zinc Cookies",
+        "grain": "Nachni",
+        "harvestDate": "14/01/2026",
+        "location": "Nandurbar Sakri",
+        "variety": "GIRA 2",
+        "grade": "A"
+      },
+      {
+        "product": "Pearl Millet Laddu",
+        "grain": "Nachni",
+        "harvestDate": "14/01/2026",
+        "location": "Nandurbar Sakri",
+        "variety": "GIRA 2",
+        "grade": "A"
+      },
+      {
+        "product": "High Iron & Zinc NutriBar",
+        "grain": "Nachni",
+        "harvestDate": "14/01/2026",
+        "location": "Nandurbar Sakri",
+        "variety": "GIRA 2",
+        "grade": "A"
+      }
+    ]
+  }
+]

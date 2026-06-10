@@ -10,7 +10,6 @@ import 'controllers/auth_controller.dart';
 import 'controllers/farm_controller.dart';
 import 'controllers/satellite_controller.dart';
 import 'screens/splash_screen.dart';
-import 'screens/farmer_ai_grading_screen.dart';
 import 'screens/farmer_home_screen.dart';
 import 'screens/farmer_login_screen.dart';
 import 'screens/fpo_farmer_qr_scan_screen.dart';
@@ -19,6 +18,8 @@ import 'screens/harvest_qr_screen.dart';
 import 'screens/landing_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/survey_form_screen.dart';
+import 'screens/farmer_ai_chat_screen.dart';
+import 'screens/farmer_ai_grading_screen.dart';
 import 'screens/main_login_screen.dart';
 import 'screens/chatbot_survey_screen.dart';
 import 'screens/diagnostics_home_screen.dart';
@@ -99,6 +100,10 @@ class KalsubaiFarmsApp extends StatelessWidget {
         GetPage(name: '/login', page: () => const MainLoginScreen()),
         GetPage(name: '/farmer/login', page: () => const FarmerLoginScreen()),
         GetPage(name: '/farmer', page: () => const FarmerHomeScreen()),
+        GetPage(
+          name: '/farmer/ai-chat',
+          page: () => const FarmerAiChatScreen(),
+        ),
         GetPage(
           name: '/farmer/ai-grading',
           page: () => const FarmerAiGradingScreen(),
