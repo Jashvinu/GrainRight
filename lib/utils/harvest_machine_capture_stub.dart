@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+enum HarvestMachineImageSource { camera, gallery }
+
 class HarvestMachineCaptureResult {
   final Uint8List bytes;
   final String name;
@@ -10,6 +12,8 @@ class HarvestMachineCaptureResult {
   });
 }
 
-Future<HarvestMachineCaptureResult?> pickHarvestMachineImage() async {
+Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
+  HarvestMachineImageSource source = HarvestMachineImageSource.camera,
+}) async {
   return null;
 }

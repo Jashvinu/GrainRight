@@ -3,12 +3,21 @@ import 'package:latlong2/latlong.dart';
 
 import '../config/theme.dart';
 import '../utils/boundary_map_launcher.dart';
+import '../utils/polygon_geometry.dart';
 
 class FarmSetupChatResult {
   final String farmName;
   final String crop;
   final String variety;
   final String acres;
+  final double computedAcres;
+  final String previousCrop;
+  final String season;
+  final String irrigation;
+  final String soilType;
+  final String ownershipType;
+  final String seedSource;
+  final String harvestIntent;
   final DateTime sowingDate;
   final List<List<double>> polygon;
 
@@ -17,6 +26,14 @@ class FarmSetupChatResult {
     required this.crop,
     required this.variety,
     required this.acres,
+    required this.computedAcres,
+    required this.previousCrop,
+    required this.season,
+    required this.irrigation,
+    required this.soilType,
+    required this.ownershipType,
+    required this.seedSource,
+    required this.harvestIntent,
     required this.sowingDate,
     required this.polygon,
   });
@@ -27,7 +44,13 @@ enum _SetupStep {
   markPolygon,
   crop,
   variety,
-  acres,
+  previousCrop,
+  season,
+  irrigation,
+  soilType,
+  ownershipType,
+  seedSource,
+  harvestIntent,
   sowingDate,
   review,
 }
@@ -43,10 +66,10 @@ class FarmerFarmSetupChatScreen extends StatefulWidget {
 class _FarmerFarmSetupChatScreenState
     extends State<FarmerFarmSetupChatScreen> {
   static const Map<String, List<String>> _cropVarieties = {
-    'Finger Millet': ['Brown Top', 'Ravi', 'Sita', 'PRH-10'],
+    'Finger Millet': ['Gira', 'Phule Nachni'],
     'Foxtail Millet': ['Pragati', 'SiPS-1', 'BHU-8', 'Kalyan'],
-    'Rice': ['Basmati', 'Karnal Local', 'IR-64', 'Hybrid'],
-    'Bajra': ['HHB 67', 'HHB 208', 'Rajani', 'RNB-71'],
+    'Rice': ['Indrayani', 'Basmati', 'Kolum'],
+    'Bajra': ['ICTP-8203', 'Shanti', 'HHB-67', 'Saburi', 'Dhanshakti'],
   };
 
   static const List<String> _cropTypes = [
@@ -56,30 +79,29 @@ class _FarmerFarmSetupChatScreenState
     'Bajra',
   ];
 
-  static const List<String> _quickAcres = [
-    '1',
-    '2',
-    '3',
-    '5',
-  ];
-
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final List<_SetupMessage> _messages = [];
-
   final List<List<double>> _polygon = [];
 
   _SetupStep _step = _SetupStep.farmName;
   String? _farmName;
   String? _crop;
   String? _variety;
-  String? _acres;
+  String? _previousCrop;
+  String? _season;
+  String? _irrigation;
+  String? _soilType;
+  String? _ownershipType;
+  String? _seedSource;
+  String? _harvestIntent;
   DateTime? _sowingDate;
+  double? _computedAcres;
 
   @override
   void initState() {
     super.initState();
-    _pushBotIntro();
+    _appendMessage(_questionMessageForStep(_step), isUser: false);
   }
 
   @override
@@ -89,67 +111,85 @@ class _FarmerFarmSetupChatScreenState
     super.dispose();
   }
 
-  void _pushBotIntro() {
-    _appendMessage(
-      _questionMessageForStep(_step),
-      isUser: false,
-    );
-  }
-
   String _questionMessageForStep(_SetupStep step) {
     switch (step) {
       case _SetupStep.farmName:
         return 'First, tell me your farm name.';
       case _SetupStep.markPolygon:
-        return 'Now mark the farm polygon on the map.';
+        return 'Mark the farm boundary on the map. I will calculate land area in acres automatically.';
       case _SetupStep.crop:
-        return 'Choose crop grown on this farm.';
+        return 'Choose the crop grown on this farm.';
       case _SetupStep.variety:
-        return 'Choose variety for this crop.';
-      case _SetupStep.acres:
-        return 'How many acres of land is this farm?';
+        return 'Choose the crop variety.';
+      case _SetupStep.previousCrop:
+        return 'Which crop was sown here previously?';
+      case _SetupStep.season:
+        return 'Which season is this crop for?';
+      case _SetupStep.irrigation:
+        return 'What is the irrigation source or water condition?';
+      case _SetupStep.soilType:
+        return 'What is the soil type?';
+      case _SetupStep.ownershipType:
+        return 'What is the land ownership type?';
+      case _SetupStep.seedSource:
+        return 'Where did the seed come from?';
+      case _SetupStep.harvestIntent:
+        return 'What is the main harvest use?';
       case _SetupStep.sowingDate:
-        return 'When did you sow? Select from menu or type (yyyy-mm-dd).';
+        return 'When did you sow? Select from menu or type yyyy-mm-dd.';
       case _SetupStep.review:
-        final name = _farmName ?? '-';
-        final crop = _crop ?? '-';
-        final variety = _variety ?? '-';
-        final acres = _acres ?? '-';
         final date = _sowingDate == null
             ? '-'
-            : '${_sowingDate!.day.toString().padLeft(2, '0')}'
-                '/${_sowingDate!.month.toString().padLeft(2, '0')}'
-                '/${_sowingDate!.year}';
+            : '${_sowingDate!.day.toString().padLeft(2, '0')}/'
+                '${_sowingDate!.month.toString().padLeft(2, '0')}/'
+                '${_sowingDate!.year}';
         return 'Review and continue:\n'
-            'Farm: $name\n'
-            'Crop: $crop\n'
-            'Variety: $variety\n'
-            'Acres: $acres\n'
+            'Farm: ${_farmName ?? '-'}\n'
+            'Land marked: ${_acresText}\n'
+            'Crop: ${_crop ?? '-'}\n'
+            'Variety: ${_variety ?? '-'}\n'
+            'Previous crop: ${_previousCrop ?? '-'}\n'
+            'Season: ${_season ?? '-'}\n'
+            'Irrigation: ${_irrigation ?? '-'}\n'
+            'Soil: ${_soilType ?? '-'}\n'
+            'Ownership: ${_ownershipType ?? '-'}\n'
+            'Seed source: ${_seedSource ?? '-'}\n'
+            'Harvest use: ${_harvestIntent ?? '-'}\n'
             'Sowing date: $date';
     }
+  }
+
+  String get _acresText {
+    final value = _computedAcres ?? 0;
+    if (value <= 0) return '0 acres';
+    return '${value.toStringAsFixed(value >= 10 ? 1 : 2)} acres';
   }
 
   List<String> _quickSuggestionsForStep() {
     switch (_step) {
       case _SetupStep.farmName:
-        return const [
-          'North Field',
-          'South Plot',
-          'East Block',
-          'Main Farm',
-        ];
+        return const ['North Field', 'South Plot', 'East Block', 'Main Farm'];
       case _SetupStep.markPolygon:
         return const ['Mark polygon'];
       case _SetupStep.crop:
         return _cropTypes;
       case _SetupStep.variety:
         final crop = _crop;
-        if (crop != null && _cropVarieties.containsKey(crop)) {
-          return _cropVarieties[crop]!;
-        }
-        return const ['Brown Top', 'Pragati', 'Hybrid'];
-      case _SetupStep.acres:
-        return _quickAcres;
+        return crop == null ? const [] : _cropVarieties[crop] ?? const [];
+      case _SetupStep.previousCrop:
+        return const ['Finger Millet', 'Rice', 'Bajra', 'Vegetables', 'Fallow'];
+      case _SetupStep.season:
+        return const ['Kharif', 'Rabi', 'Summer'];
+      case _SetupStep.irrigation:
+        return const ['Rainfed', 'Well', 'Borewell', 'Canal', 'Drip'];
+      case _SetupStep.soilType:
+        return const ['Black soil', 'Red soil', 'Sandy loam', 'Clay loam'];
+      case _SetupStep.ownershipType:
+        return const ['Owned', 'Leased', 'Shared', 'Forest patta'];
+      case _SetupStep.seedSource:
+        return const ['Own saved', 'FPO', 'Local market', 'Government source'];
+      case _SetupStep.harvestIntent:
+        return const ['Home use', 'Market sale', 'Seed saving', 'Processing'];
       case _SetupStep.sowingDate:
         return const ['Today', 'Yesterday', '3 days ago', '1 week ago'];
       case _SetupStep.review:
@@ -159,26 +199,39 @@ class _FarmerFarmSetupChatScreenState
 
   bool get _isFormComplete {
     return _farmName != null &&
+        _polygon.isNotEmpty &&
+        (_computedAcres ?? 0) > 0 &&
         _crop != null &&
         _variety != null &&
-        _acres != null &&
+        _previousCrop != null &&
+        _season != null &&
+        _irrigation != null &&
+        _soilType != null &&
+        _ownershipType != null &&
+        _seedSource != null &&
+        _harvestIntent != null &&
         _sowingDate != null;
   }
 
   Future<void> _openPolygonMap() async {
-    final polygon = await openBoundaryDrawingMap();
-    if (polygon == null) {
+    final polygon = await openBoundaryDrawingMap(initialPolygon: _polygon);
+    if (polygon == null || polygon.length < 3) {
       _appendMessage(
-        'Polygon not captured. Tap again when you are ready.',
+        'Boundary not captured. Mark at least 3 points on the map.',
         isUser: false,
       );
       return;
     }
+
+    final ring = PolygonGeometry.fromGeoJsonRing(polygon);
+    final hectares = PolygonGeometry.areaHectares(ring);
+    final acres = hectares * 2.47105;
     _polygon
       ..clear()
       ..addAll(polygon);
+    _computedAcres = acres;
     _appendMessage(
-      'Polygon captured with ${polygon.length} points.',
+      'Farm marked with ${polygon.length} points. Land area fetched as ${_acresText}.',
       isUser: false,
     );
     _advanceStep();
@@ -212,25 +265,38 @@ class _FarmerFarmSetupChatScreenState
       case _SetupStep.variety:
         _variety = value;
         break;
-      case _SetupStep.acres:
-        _acres = value;
+      case _SetupStep.previousCrop:
+        _previousCrop = value;
+        break;
+      case _SetupStep.season:
+        _season = value;
+        break;
+      case _SetupStep.irrigation:
+        _irrigation = value;
+        break;
+      case _SetupStep.soilType:
+        _soilType = value;
+        break;
+      case _SetupStep.ownershipType:
+        _ownershipType = value;
+        break;
+      case _SetupStep.seedSource:
+        _seedSource = value;
+        break;
+      case _SetupStep.harvestIntent:
+        _harvestIntent = value;
         break;
       case _SetupStep.sowingDate:
         final parsed = _parseSowingDate(value);
         if (parsed == null) {
-          _appendMessage(
-            'I could not parse this date. Use format yyyy-mm-dd.',
-            isUser: false,
-          );
+          _appendMessage('I could not parse this date. Use yyyy-mm-dd.', isUser: false);
           return;
         }
         _sowingDate = parsed;
         break;
-      default:
+      case _SetupStep.markPolygon:
+      case _SetupStep.review:
         break;
-    }
-    if (_step == _SetupStep.sowingDate && _sowingDate == null) {
-      return;
     }
     _advanceStep();
   }
@@ -247,9 +313,7 @@ class _FarmerFarmSetupChatScreenState
 
   DateTime? _parseSowingDate(String value) {
     final normalized = value.trim().toLowerCase();
-    if (normalized == 'today') {
-      return DateTime.now();
-    }
+    if (normalized == 'today') return DateTime.now();
     if (normalized == 'yesterday') {
       return DateTime.now().subtract(const Duration(days: 1));
     }
@@ -261,7 +325,6 @@ class _FarmerFarmSetupChatScreenState
     }
     final direct = DateTime.tryParse(value);
     if (direct != null) return direct;
-
     final parts = value.split('/');
     if (parts.length == 3) {
       final day = int.tryParse(parts[0]);
@@ -276,8 +339,9 @@ class _FarmerFarmSetupChatScreenState
 
   void _advanceStep() {
     if (_step == _SetupStep.review) return;
-    if (_step == _SetupStep.markPolygon && _polygon.isEmpty) {
-      _appendMessage('Mark polygon first to continue.', isUser: false);
+    if (_step == _SetupStep.markPolygon &&
+        (_polygon.isEmpty || (_computedAcres ?? 0) <= 0)) {
+      _appendMessage('Mark the farm boundary first.', isUser: false);
       return;
     }
     if (_step == _SetupStep.crop && _crop == null) {
@@ -286,10 +350,6 @@ class _FarmerFarmSetupChatScreenState
     }
     if (_step == _SetupStep.variety && _variety == null) {
       _appendMessage('Choose a variety.', isUser: false);
-      return;
-    }
-    if (_step == _SetupStep.acres && (_acres == null || _acres!.trim().isEmpty)) {
-      _appendMessage('Add acres value.', isUser: false);
       return;
     }
     if (_step == _SetupStep.sowingDate && _sowingDate == null) {
@@ -301,16 +361,20 @@ class _FarmerFarmSetupChatScreenState
       _SetupStep.farmName => _SetupStep.markPolygon,
       _SetupStep.markPolygon => _SetupStep.crop,
       _SetupStep.crop => _SetupStep.variety,
-      _SetupStep.variety => _SetupStep.acres,
-      _SetupStep.acres => _SetupStep.sowingDate,
+      _SetupStep.variety => _SetupStep.previousCrop,
+      _SetupStep.previousCrop => _SetupStep.season,
+      _SetupStep.season => _SetupStep.irrigation,
+      _SetupStep.irrigation => _SetupStep.soilType,
+      _SetupStep.soilType => _SetupStep.ownershipType,
+      _SetupStep.ownershipType => _SetupStep.seedSource,
+      _SetupStep.seedSource => _SetupStep.harvestIntent,
+      _SetupStep.harvestIntent => _SetupStep.sowingDate,
       _SetupStep.sowingDate => _SetupStep.review,
       _SetupStep.review => _SetupStep.review,
     };
 
     setState(() => _step = next);
-    if (_step != _SetupStep.review) {
-      _appendMessage(_questionMessageForStep(_step), isUser: false);
-    }
+    _appendMessage(_questionMessageForStep(_step), isUser: false);
   }
 
   void _finishSetup() {
@@ -318,16 +382,23 @@ class _FarmerFarmSetupChatScreenState
       _appendMessage('Please complete all fields before saving.', isUser: false);
       return;
     }
-    final polygon = List<List<double>>.from(_polygon);
     Navigator.pop(
       context,
       FarmSetupChatResult(
         farmName: _farmName!.trim(),
         crop: _crop!.trim(),
         variety: _variety!.trim(),
-        acres: _acres!.trim(),
+        acres: (_computedAcres ?? 0).toStringAsFixed(2),
+        computedAcres: _computedAcres ?? 0,
+        previousCrop: _previousCrop!.trim(),
+        season: _season!.trim(),
+        irrigation: _irrigation!.trim(),
+        soilType: _soilType!.trim(),
+        ownershipType: _ownershipType!.trim(),
+        seedSource: _seedSource!.trim(),
+        harvestIntent: _harvestIntent!.trim(),
         sowingDate: _sowingDate!,
-        polygon: polygon,
+        polygon: List<List<double>>.from(_polygon),
       ),
     );
   }
@@ -340,18 +411,10 @@ class _FarmerFarmSetupChatScreenState
   Future<void> _onQuickSelect(String suggestion) async {
     if (_step == _SetupStep.markPolygon) {
       _appendMessage(suggestion, isUser: true);
-      if (suggestion == 'Mark polygon') {
-        await _openPolygonMap();
-      }
+      await _openPolygonMap();
       return;
     }
-    if (_step == _SetupStep.sowingDate) {
-      _appendUserText(suggestion);
-      return;
-    }
-    if (_step == _SetupStep.review) {
-      return;
-    }
+    if (_step == _SetupStep.review) return;
     _appendUserText(suggestion);
   }
 
@@ -362,9 +425,7 @@ class _FarmerFarmSetupChatScreenState
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppBar(
-        title: const Text('Add farm'),
-      ),
+      appBar: AppBar(title: const Text('Add farm')),
       body: SafeArea(
         child: Column(
           children: [
@@ -382,14 +443,9 @@ class _FarmerFarmSetupChatScreenState
                         : Alignment.centerLeft,
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 340),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
-                        color: item.isUser
-                            ? AppTheme.greenPale
-                            : Colors.white,
+                        color: item.isUser ? AppTheme.greenPale : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: item.isUser
@@ -412,12 +468,15 @@ class _FarmerFarmSetupChatScreenState
             ),
             if (_step == _SetupStep.markPolygon)
               Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                 child: OutlinedButton.icon(
                   onPressed: _openPolygonMap,
                   icon: const Icon(Icons.edit_location_alt_rounded),
-                  label: const Text('Open map and mark polygon'),
+                  label: Text(
+                    _computedAcres == null
+                        ? 'Open map and mark land'
+                        : 'Re-mark land ($_acresText)',
+                  ),
                 ),
               ),
             if (_step == _SetupStep.review)
@@ -428,7 +487,7 @@ class _FarmerFarmSetupChatScreenState
                   children: [
                     if (_polygon.isNotEmpty)
                       Text(
-                        'Polygon points: ${_polygon.length} ',
+                        'Polygon points: ${_polygon.length} • Land marked: $_acresText',
                         style: const TextStyle(
                           color: AppTheme.textMuted,
                           fontWeight: FontWeight.w700,
@@ -466,6 +525,8 @@ class _FarmerFarmSetupChatScreenState
                     Expanded(
                       child: TextField(
                         controller: _inputController,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _onSend(),
                         minLines: 1,
                         maxLines: 3,
                         decoration: const InputDecoration(
@@ -483,8 +544,7 @@ class _FarmerFarmSetupChatScreenState
                   ],
                 ),
               ),
-            if (_step != _SetupStep.review)
-              const SizedBox(height: 14),
+            if (_step != _SetupStep.review) const SizedBox(height: 14),
           ],
         ),
       ),

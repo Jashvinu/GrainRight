@@ -105,6 +105,25 @@ class AuthController extends GetxController {
 
   bool get isAuthenticated => isLoggedIn.value && accessToken.value.isNotEmpty;
 
+  Future<void> clearSession() => _clearSession();
+
+  Future<void> setExternalSession({
+    required String accessTokenValue,
+    String? refreshTokenValue,
+    required String userId,
+    required String email,
+  }) async {
+    if (accessTokenValue.isEmpty || userId.isEmpty) return;
+    final result = AuthResult(
+      accessToken: accessTokenValue,
+      refreshToken: refreshTokenValue,
+      userId: userId,
+      email: email,
+    );
+    await _saveSession(result);
+    _setLoggedIn(accessTokenValue, userId, email);
+  }
+
   Future<void> login(String email, String password) async {
     isLoading.value = true;
     errorMessage.value = '';
@@ -146,6 +165,46 @@ class AuthController extends GetxController {
       errorMessage.value = 'Signup failed. Check your connection.';
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<bool> ensureAnonymousFarmerSession({
+    required String phone,
+    required String farmerId,
+    required String farmerName,
+  }) async {
+    if (isAuthenticated) {
+      await _service.upsertFarmerPhoneProfile(
+        userId: currentUser.value?.id ?? '',
+        phone: phone,
+        farmerId: farmerId,
+        farmerName: farmerName,
+        jwt: accessToken.value,
+      );
+      return true;
+    }
+    try {
+      final result = await _service.signInAnonymously(
+        metadata: {
+          'role': 'verified_farmer',
+          'phone': phone,
+          'farmer_id': farmerId,
+          'farmer_name': farmerName,
+        },
+      );
+      if (result.accessToken.isEmpty) return false;
+      await _saveSession(result);
+      _setLoggedIn(result.accessToken, result.userId, result.email);
+      await _service.upsertFarmerPhoneProfile(
+        userId: result.userId,
+        phone: phone,
+        farmerId: farmerId,
+        farmerName: farmerName,
+        jwt: result.accessToken,
+      );
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

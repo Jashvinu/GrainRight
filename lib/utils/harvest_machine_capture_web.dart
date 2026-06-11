@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:html' as html;
 
+enum HarvestMachineImageSource { camera, gallery }
+
 class HarvestMachineCaptureResult {
   final Uint8List bytes;
   final String name;
@@ -13,13 +15,17 @@ class HarvestMachineCaptureResult {
   });
 }
 
-Future<HarvestMachineCaptureResult?> pickHarvestMachineImage() async {
+Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
+  HarvestMachineImageSource source = HarvestMachineImageSource.camera,
+}) async {
   final completer = Completer<HarvestMachineCaptureResult?>();
 
   final input = html.FileUploadInputElement()
     ..accept = 'image/*'
     ..multiple = false;
-  input.setAttribute('capture', 'environment');
+  if (source == HarvestMachineImageSource.camera) {
+    input.setAttribute('capture', 'environment');
+  }
 
   void finishNull() {
     if (!completer.isCompleted) {

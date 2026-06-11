@@ -5,14 +5,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/verified_farmer_record.dart';
 import '../services/network_status_service.dart';
 import '../services/secure_app_storage.dart';
-import '../services/verified_farmer_seed_service.dart';
+import 'auth_controller.dart';
 import 'survey_controller.dart';
 
 class MainAuthController extends GetxController {
   static const _localGuestIdKey = 'local_guest_id';
-  static const _verifiedFarmerSessionKey = 'verified_farmer_session';
 
   final _auth = Supabase.instance.client.auth;
+  final _client = Supabase.instance.client;
   final _networkStatusService = NetworkStatusService();
   final _secureStorage = SecureAppStorage();
 
@@ -27,11 +27,11 @@ class MainAuthController extends GetxController {
     super.onInit();
     isLoggedIn.value = _auth.currentSession != null;
     unawaited(_refreshLocalGuestState());
-    unawaited(_refreshVerifiedSession());
+    unawaited(_refreshVerifiedProfile());
     _auth.onAuthStateChange.listen((data) {
       if (data.session != null) {
         unawaited(_clearLocalGuest());
-        unawaited(_clearVerifiedFarmerSession());
+        unawaited(_refreshVerifiedProfile());
       }
       isLoggedIn.value =
           data.session != null ||
@@ -51,7 +51,7 @@ class MainAuthController extends GetxController {
 
   Future<bool> hasAnySession() async {
     await _refreshLocalGuestState();
-    await _refreshVerifiedSession();
+    await _refreshVerifiedProfile();
     return _auth.currentSession != null ||
         hasLocalGuest.value ||
         verifiedFarmer.value != null;
@@ -59,7 +59,7 @@ class MainAuthController extends GetxController {
 
   Future<bool> ensureOfflineSessionWhenOffline() async {
     await _refreshLocalGuestState();
-    await _refreshVerifiedSession();
+    await _refreshVerifiedProfile();
     if (_auth.currentSession != null ||
         hasLocalGuest.value ||
         verifiedFarmer.value != null) return true;
@@ -83,10 +83,73 @@ class MainAuthController extends GetxController {
     }
   }
 
+  Future<void> loginVerifiedFarmer(
+    String email,
+    String password, {
+    String nextRoute = '/farmer',
+  }) async {
+    isLoading.value = true;
+    errorMessage.value = '';
+    verifiedFarmer.value = null;
+    try {
+      await _clearLocalGuest();
+      await _auth.signInWithPassword(email: email, password: password);
+      final record = await _loadRemoteFarmerProfile() ??
+          await _createFarmerProfileFromCurrentUser(email);
+      verifiedFarmer.value = record;
+
+      final session = _auth.currentSession;
+      final user = _auth.currentUser;
+      if (session != null && user != null) {
+        await _syncSatelliteSession(session, user, email);
+      }
+
+      isLoggedIn.value = true;
+      await _afterSignIn(nextRoute);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
+    } catch (_) {
+      errorMessage.value = 'Could not login farmer profile.';
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> loginFpc(
+    String email,
+    String password, {
+    String nextRoute = '/fpo',
+  }) async {
+    isLoading.value = true;
+    errorMessage.value = '';
+    verifiedFarmer.value = null;
+    try {
+      await _clearLocalGuest();
+      await _auth.signInWithPassword(email: email, password: password);
+      final role = '${_auth.currentUser?.userMetadata?['role'] ?? ''}'
+          .trim()
+          .toLowerCase();
+      if (role.isNotEmpty &&
+          !{'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)) {
+        await _auth.signOut();
+        errorMessage.value = 'This account is not enabled for FPC login.';
+        return;
+      }
+      isLoggedIn.value = true;
+      await _afterSignIn(nextRoute);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
+    } catch (_) {
+      errorMessage.value = 'Could not login FPC account.';
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   Future<void> continueAsGuest({String nextRoute = '/home'}) async {
     isLoading.value = true;
     errorMessage.value = '';
-    await _clearVerifiedFarmerSession();
+    verifiedFarmer.value = null;
     try {
       final online = await _networkStatusService.isOnline();
       if (!online) {
@@ -123,16 +186,9 @@ class MainAuthController extends GetxController {
     isLoading.value = true;
     errorMessage.value = '';
     try {
-      final record = await VerifiedFarmerSeedService.instance.getByPhone(digits);
-      if (record == null) {
-        errorMessage.value =
-            'Phone number is not linked to a verified farmer profile.';
-        return;
-      }
       await _clearLocalGuest();
-      await _clearVerifiedFarmerSession();
+      final record = await _signInAndSyncRemoteFarmer(digits);
       verifiedFarmer.value = record;
-      await _secureStorage.writeString(_verifiedFarmerSessionKey, digits);
       isLoggedIn.value = true;
       await _afterSignIn(nextRoute);
     } catch (_) {
@@ -151,8 +207,11 @@ class MainAuthController extends GetxController {
 
   Future<void> logout() async {
     await _auth.signOut();
-    await _clearVerifiedFarmerSession();
+    verifiedFarmer.value = null;
     await _clearLocalGuest();
+    if (Get.isRegistered<AuthController>()) {
+      await Get.find<AuthController>().clearSession();
+    }
     Get.offAllNamed('/login');
   }
 
@@ -195,9 +254,8 @@ class MainAuthController extends GetxController {
         verifiedFarmer.value != null;
   }
 
-  Future<void> _refreshVerifiedSession() async {
-    final phone = await _secureStorage.readString(_verifiedFarmerSessionKey);
-    if (phone == null || phone.isEmpty) {
+  Future<void> _refreshVerifiedProfile() async {
+    if (_auth.currentUser == null) {
       verifiedFarmer.value = null;
       isLoggedIn.value =
           _auth.currentSession != null ||
@@ -206,12 +264,13 @@ class MainAuthController extends GetxController {
       return;
     }
 
-    final record = await VerifiedFarmerSeedService.instance.getByPhone(phone);
-    verifiedFarmer.value = record;
+    final record = await _loadRemoteFarmerProfile();
     if (record == null) {
-      await _clearVerifiedFarmerSession();
+      verifiedFarmer.value = null;
+      isLoggedIn.value = _auth.currentSession != null || hasLocalGuest.value;
       return;
     }
+    verifiedFarmer.value = record;
 
     isLoggedIn.value =
         _auth.currentSession != null ||
@@ -226,12 +285,121 @@ class MainAuthController extends GetxController {
         _auth.currentSession != null || verifiedFarmer.value != null;
   }
 
-  Future<void> _clearVerifiedFarmerSession() async {
-    await _secureStorage.remove(_verifiedFarmerSessionKey);
-    verifiedFarmer.value = null;
-    isLoggedIn.value =
-        _auth.currentSession != null || hasLocalGuest.value;
+  String _normalizePhone(String phone) => phone.replaceAll(RegExp(r'\D'), '');
+
+  Future<VerifiedFarmerRecord> _signInAndSyncRemoteFarmer(String phone) async {
+    if (_auth.currentSession == null) {
+      await _auth.signInAnonymously(
+        data: {
+          'role': 'farmer',
+          'phone': phone,
+        },
+      );
+    }
+
+    final session = _auth.currentSession;
+    final user = _auth.currentUser;
+    if (session == null || user == null) {
+      throw StateError('No Supabase farmer session.');
+    }
+
+    final farmerId = 'FMR-$phone';
+    final farmerName = 'Farmer $phone';
+    await _client.from('farmer_phone_profiles').upsert(
+      {
+        'user_id': user.id,
+        'phone': phone,
+        'farmer_id': farmerId,
+        'farmer_name': farmerName,
+        'default_location': 'Remote farm profile',
+        'auth_method': 'anonymous_link',
+      },
+      onConflict: 'user_id',
+    );
+
+    await _syncSatelliteSession(
+      session,
+      user,
+      user.email ?? 'farmer-$phone@anonymous.local',
+    );
+
+    return VerifiedFarmerRecord(
+      phone: phone,
+      farmerId: farmerId,
+      farmerName: farmerName,
+      defaultLocation: 'Remote farm profile',
+      lots: const [],
+    );
   }
 
-  String _normalizePhone(String phone) => phone.replaceAll(RegExp(r'\D'), '');
+  Future<VerifiedFarmerRecord?> _loadRemoteFarmerProfile() async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+    final rows = await _client
+        .from('farmer_phone_profiles')
+        .select('phone, farmer_id, farmer_name, default_location')
+        .eq('user_id', user.id)
+        .limit(1);
+    if (rows is! List || rows.isEmpty) return null;
+    final row = Map<String, dynamic>.from(rows.first as Map);
+    return VerifiedFarmerRecord(
+      phone: '${row['phone'] ?? ''}',
+      farmerId: '${row['farmer_id'] ?? 'FMR-${row['phone'] ?? user.id}'}',
+      farmerName: '${row['farmer_name'] ?? 'Farmer'}',
+      defaultLocation: '${row['default_location'] ?? 'Remote farm profile'}',
+      lots: const [],
+    );
+  }
+
+  Future<VerifiedFarmerRecord> _createFarmerProfileFromCurrentUser(
+    String email,
+  ) async {
+    final user = _auth.currentUser;
+    if (user == null) throw StateError('No Supabase farmer user.');
+
+    final metadata = user.userMetadata ?? const <String, dynamic>{};
+    final phone = _normalizePhone('${metadata['phone'] ?? ''}');
+    final fallbackId = 'FMR-${user.id.substring(0, 8).toUpperCase()}';
+    final farmerId = '${metadata['farmer_id'] ?? fallbackId}';
+    final farmerName =
+        '${metadata['farmer_name'] ?? metadata['name'] ?? email.split('@').first}';
+    final defaultLocation =
+        '${metadata['default_location'] ?? 'Remote farm profile'}';
+
+    await _client.from('farmer_phone_profiles').upsert(
+      {
+        'user_id': user.id,
+        'phone': phone.isEmpty ? user.id : phone,
+        'farmer_id': farmerId,
+        'farmer_name': farmerName,
+        'default_location': defaultLocation,
+        'auth_method': 'email_password',
+      },
+      onConflict: 'user_id',
+    );
+
+    return VerifiedFarmerRecord(
+      phone: phone,
+      farmerId: farmerId,
+      farmerName: farmerName,
+      defaultLocation: defaultLocation,
+      lots: const [],
+    );
+  }
+
+  Future<void> _syncSatelliteSession(
+    Session session,
+    User user,
+    String email,
+  ) async {
+    final satelliteAuth = Get.isRegistered<AuthController>()
+        ? Get.find<AuthController>()
+        : Get.put(AuthController());
+    await satelliteAuth.setExternalSession(
+      accessTokenValue: session.accessToken,
+      refreshTokenValue: session.refreshToken,
+      userId: user.id,
+      email: email,
+    );
+  }
 }

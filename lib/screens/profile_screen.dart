@@ -35,7 +35,7 @@ class FarmerProfileScreen extends StatelessWidget {
       'crop': farm.crop,
       'area': farm.area,
       'variety': farm.variety,
-      'source': 'verified_farmer_seed',
+      'source': 'remote_supabase',
       'verified': true,
     });
 

@@ -133,36 +133,20 @@ class WeatherPage extends StatelessWidget {
             if (farmName != null || farmLocation != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: _InfoPanel(
-                  tint: const Color(0xFFECF6E8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.location_on_rounded, color: AppTheme.green, size: 18),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            farmName == null
-                                ? (farmLocation ?? 'Local weather')
-                                : (farmLocation == null || farmLocation!.trim().isEmpty
-                                    ? '${farmName!} • weather panel'
-                                    : '${farmName!} • ${farmLocation!}'),
-                            style: const TextStyle(
-                              color: AppTheme.greenDark,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: _WeatherContextCard(
+                  farmName: farmName,
+                  farmLocation: farmLocation,
                 ),
               ),
             const _RevealSection(delayMs: 0, child: _WeatherHeroCard()),
             const SizedBox(height: 16),
+            const _RevealSection(
+              delayMs: 20,
+              child: _WeatherRiskSummaryCard(),
+            ),
+            const SizedBox(height: 16),
             _RevealSection(
-              delayMs: 35,
+              delayMs: 55,
               child: _InfoPanel(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -212,7 +196,7 @@ class WeatherPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _RevealSection(
-              delayMs: 70,
+              delayMs: 90,
               child: _InfoPanel(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -252,7 +236,7 @@ class WeatherPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _RevealSection(
-              delayMs: 95,
+              delayMs: 115,
               child: _InfoPanel(
                 tint: const Color(0xFFECF6E8),
                 child: Padding(
@@ -290,7 +274,7 @@ class WeatherPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             _RevealSection(
-              delayMs: 115,
+              delayMs: 135,
               child: _InfoPanel(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -330,6 +314,112 @@ class WeatherPage extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherContextCard extends StatelessWidget {
+  final String? farmName;
+  final String? farmLocation;
+
+  const _WeatherContextCard({
+    required this.farmName,
+    required this.farmLocation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = farmName == null
+        ? (farmLocation ?? 'Local weather')
+        : (farmLocation == null || farmLocation!.trim().isEmpty
+            ? '${farmName!} • weather panel'
+            : '${farmName!} • ${farmLocation!}');
+
+    return _InfoPanel(
+      tint: const Color(0xFFECF6E8),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.location_on_rounded, color: AppTheme.green, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Weather recommendations are scoped to the active farm selected on the farmer home page.',
+              style: TextStyle(
+                color: AppTheme.textDark,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherRiskSummaryCard extends StatelessWidget {
+  const _WeatherRiskSummaryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _InfoPanel(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Today at a glance',
+              style: TextStyle(
+                color: AppTheme.greenDark,
+                fontSize: 17,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: const [
+                _WeatherMetricTile(
+                  icon: Icons.water_drop_outlined,
+                  title: 'Irrigation',
+                  value: 'Evening',
+                  tint: Color(0xFFEAF6FF),
+                ),
+                SizedBox(width: 8),
+                _WeatherMetricTile(
+                  icon: Icons.bug_report_outlined,
+                  title: 'Pest risk',
+                  value: 'Low',
+                  tint: Color(0xFFFFF8E1),
+                ),
+                SizedBox(width: 8),
+                _WeatherMetricTile(
+                  icon: Icons.cloud_sync_outlined,
+                  title: 'Sync',
+                  value: 'Ready',
+                  tint: Color(0xFFE8F5E9),
+                ),
+              ],
             ),
           ],
         ),

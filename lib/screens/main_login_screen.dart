@@ -87,12 +87,11 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         child: _RoleCard(
                           icon: Icons.groups_2_outlined,
                           title: 'FPO / FPC',
-                          subtitle: 'Access dashboard',
+                          subtitle: 'Login with FPC details',
                           color: const Color(0xFF1976D2),
                           tint: const Color(0xFFE3F2FD),
                           isDisabled: false,
-                          onTap: () =>
-                              _continueAnonymously('fpo', nextRoute: '/fpo'),
+                          onTap: () => Get.toNamed('/fpc/login'),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -162,19 +161,52 @@ class _BrandHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: Image.asset(
-            BrandAssets.logo,
-            width: 196,
-            height: 112,
-            fit: BoxFit.contain,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.94, end: 1),
+      duration: const Duration(milliseconds: 680),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: child,
+        );
+      },
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.green.withValues(alpha: 0.20),
+                  blurRadius: 34,
+                  spreadRadius: 2,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Image.asset(
+                BrandAssets.logo,
+                width: 292,
+                height: 164,
+                fit: BoxFit.contain,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 10),
-      ],
+          const SizedBox(height: 8),
+          Container(
+            width: 74,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppTheme.green.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

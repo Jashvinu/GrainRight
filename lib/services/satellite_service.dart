@@ -186,6 +186,45 @@ class SatelliteService {
     );
   }
 
+  Future<AuthResult> signInAnonymously({
+    Map<String, dynamic> metadata = const {},
+  }) async {
+    final url = '${SatelliteConfig.authBase}/signup';
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SatelliteConfig.anonKey,
+          },
+          body: jsonEncode({'data': metadata}),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final body = jsonDecode(response.body);
+      throw SatelliteApiException(
+        body['error_description'] as String? ??
+            body['msg'] as String? ??
+            'Anonymous farmer session failed',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final session = data['session'] as Map<String, dynamic>?;
+    final user = data['user'] as Map<String, dynamic>? ?? {};
+    return AuthResult(
+      accessToken: data['access_token'] as String? ??
+          session?['access_token'] as String? ??
+          '',
+      refreshToken: data['refresh_token'] as String? ??
+          session?['refresh_token'] as String?,
+      userId: user['id'] as String? ?? '',
+      email: user['email'] as String? ?? 'verified-farmer@local',
+    );
+  }
+
   Future<AuthResult?> refreshToken(String refreshToken) async {
     final url = '${SatelliteConfig.authBase}/token?grant_type=refresh_token';
     try {
@@ -218,7 +257,7 @@ class SatelliteService {
 
   Future<List<Farm>> getFarms(String jwt) async {
     final url =
-        '${SatelliteConfig.restBase}/farms?select=id,name,geometry,bounds,area_hectares,user_id,created_at&order=created_at.desc';
+        '${SatelliteConfig.restBase}/farms?select=id,name,geometry,bounds,area_hectares,area_acres,user_id,created_at,crop,variety,previous_crop,season,irrigation,soil_type,ownership_type,seed_source,harvest_intent&order=created_at.desc';
     final response = await http
         .get(
           Uri.parse(url),
@@ -254,6 +293,98 @@ class SatelliteService {
     }
     final list = jsonDecode(response.body) as List;
     return Farm.fromJson(list.first as Map<String, dynamic>);
+  }
+
+  Future<List<Map<String, dynamic>>> getDiseaseScoutZones({
+    required String farmId,
+    required String? jwt,
+  }) async {
+    final url =
+        '${SatelliteConfig.restBase}/disease_scout_zones'
+        '?select=*&farm_id=eq.$farmId&order=scan_date.desc,zone_rank.asc';
+    final response = await http
+        .get(Uri.parse(url), headers: _headers(jwt))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw SatelliteApiException(
+        'Failed to load disease scout zones',
+        statusCode: response.statusCode,
+      );
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.whereType<Map<String, dynamic>>().toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> getDiseaseRiskCells({
+    required String farmId,
+    required String? jwt,
+  }) async {
+    final url =
+        '${SatelliteConfig.restBase}/disease_risk_cells'
+        '?select=*&farm_id=eq.$farmId&order=scan_date.desc,composite_risk.desc&limit=60';
+    final response = await http
+        .get(Uri.parse(url), headers: _headers(jwt))
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw SatelliteApiException(
+        'Failed to load disease risk cells',
+        statusCode: response.statusCode,
+      );
+    }
+    final list = jsonDecode(response.body) as List;
+    return list.whereType<Map<String, dynamic>>().toList(growable: false);
+  }
+
+  Future<void> insertDiseaseScoutZone({
+    required Map<String, dynamic> payload,
+    required String? jwt,
+  }) async {
+    final url = '${SatelliteConfig.restBase}/disease_scout_zones';
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 201 && response.statusCode != 200) {
+      throw SatelliteApiException(
+        'Failed to save disease scout zone',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  Future<void> upsertFarmerPhoneProfile({
+    required String userId,
+    required String phone,
+    required String farmerId,
+    required String farmerName,
+    required String? jwt,
+  }) async {
+    final url = '${SatelliteConfig.restBase}/farmer_phone_profiles?on_conflict=user_id';
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {
+            ..._headers(jwt),
+            'Prefer': 'resolution=merge-duplicates,return=minimal',
+          },
+          body: jsonEncode({
+            'user_id': userId,
+            'phone': phone,
+            'farmer_id': farmerId,
+            'farmer_name': farmerName,
+            'auth_method': 'anonymous_link',
+          }),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 201 && response.statusCode != 200 && response.statusCode != 204) {
+      throw SatelliteApiException(
+        'Failed to link farmer profile',
+        statusCode: response.statusCode,
+      );
+    }
   }
 
   // ─── Edge Functions ─────────────────────────────────────────────────────────

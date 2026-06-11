@@ -80,22 +80,23 @@ class FarmerAiGradingScreen extends StatelessWidget {
             tooltip: 'Help',
             onPressed: () => Get.snackbar(
               'AI Grading',
-              'Use a clear millet grain photo on a plain background.',
+              'Use a clear grain photo on a plain background before generating the harvest QR.',
               snackPosition: SnackPosition.BOTTOM,
             ),
             icon: const Icon(Icons.help_outline_rounded),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openHarvestSheet(context),
-        icon: const Icon(Icons.qr_code_2_rounded),
-        label: const Text('Harvest QR'),
-      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 96),
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 104),
         children: [
-          _InfoBanner(farmName: farm['farmName']!, crop: farm['crop']!),
+          _GradingHero(
+            farmName: farm['farmName']!,
+            crop: farm['crop']!,
+            village: farm['village']!,
+            score: _score,
+            grade: _grade,
+          ),
           const SizedBox(height: 16),
           _PhotoCard(
             onTap: () {
@@ -107,43 +108,116 @@ class FarmerAiGradingScreen extends StatelessWidget {
             },
           ),
           const SizedBox(height: 16),
-          const _GradeResultCard(grade: _grade, score: _score),
-          const SizedBox(height: 16),
           const _QualityGrid(),
           const SizedBox(height: 16),
           const _RecommendationCard(),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: () => _openHarvestSheet(context),
+            icon: const Icon(Icons.qr_code_2_rounded),
+            label: const Text('Generate Harvest QR'),
+          ),
         ],
       ),
     );
   }
 }
 
-class _InfoBanner extends StatelessWidget {
+class _GradingHero extends StatelessWidget {
   final String farmName;
   final String crop;
+  final String village;
+  final String grade;
+  final int score;
 
-  const _InfoBanner({required this.farmName, required this.crop});
+  const _GradingHero({
+    required this.farmName,
+    required this.crop,
+    required this.village,
+    required this.grade,
+    required this.score,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.greenPale.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(26),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0B5D2A), Color(0xFF4CAF50)],
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.auto_awesome_rounded, color: AppTheme.green),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              '$crop quality grading for $farmName',
-              style: const TextStyle(
-                color: AppTheme.greenDark,
-                fontWeight: FontWeight.w800,
-                height: 1.35,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Harvest quality result',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$crop • $farmName',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      village,
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
               ),
+              Container(
+                width: 86,
+                height: 86,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  grade,
+                  style: const TextStyle(
+                    color: AppTheme.green,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              minHeight: 10,
+              value: score / 100,
+              color: Colors.white,
+              backgroundColor: Colors.white24,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '$score / 100 quality score • Premium packaging eligible',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -159,56 +233,39 @@ class _PhotoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
+    return Card(
+      margin: EdgeInsets.zero,
       child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               Container(
                 height: 190,
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF8E1),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(20),
                 ),
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Icon(
-                      Icons.grain_rounded,
-                      color: Color(0xFFB8860B),
-                      size: 86,
+                    const Icon(Icons.grain_rounded, color: Color(0xFFB8860B), size: 86),
+                    Positioned(
+                      left: 14,
+                      top: 14,
+                      child: _PhotoBadge(label: 'Plain background'),
                     ),
                     Positioned(
                       right: 14,
                       bottom: 14,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Sample loaded',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
+                      child: _PhotoBadge(label: 'Sample loaded'),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
@@ -225,75 +282,20 @@ class _PhotoCard extends StatelessWidget {
   }
 }
 
-class _GradeResultCard extends StatelessWidget {
-  final String grade;
-  final int score;
+class _PhotoBadge extends StatelessWidget {
+  final String label;
 
-  const _GradeResultCard({required this.grade, required this.score});
+  const _PhotoBadge({required this.label});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 92,
-            height: 92,
-            decoration: BoxDecoration(
-              color: AppTheme.greenPale,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppTheme.green.withValues(alpha: 0.2)),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              grade,
-              style: const TextStyle(
-                color: AppTheme.green,
-                fontSize: 46,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Grade Generated',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '$score / 100 quality score',
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                LinearProgressIndicator(
-                  value: score / 100,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(8),
-                  color: AppTheme.green,
-                  backgroundColor: AppTheme.greenPale,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
     );
   }
 }
@@ -304,10 +306,10 @@ class _QualityGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const items = [
-      ('Purity', '94%', AppTheme.green),
-      ('Moisture', '11%', Color(0xFF1976D2)),
-      ('Broken', '3%', Color(0xFFE07800)),
-      ('Foreign Matter', '1%', AppTheme.green),
+      ('Purity', '94%', Icons.verified_outlined, AppTheme.green),
+      ('Moisture', '11%', Icons.water_drop_outlined, Color(0xFF1976D2)),
+      ('Broken', '3%', Icons.scatter_plot_outlined, Color(0xFFE07800)),
+      ('Foreign matter', '1%', Icons.filter_alt_outlined, AppTheme.green),
     ];
 
     return GridView.builder(
@@ -316,43 +318,43 @@ class _QualityGrid extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 2.35,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 1.85,
       ),
       itemBuilder: (context, index) {
         final item = items[index];
-        return Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                item.$1,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+        return Card(
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(item.$3, color: item.$4),
+                const SizedBox(height: 8),
+                Text(
+                  item.$1,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                item.$2,
-                style: TextStyle(
-                  color: item.$3,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                const SizedBox(height: 4),
+                Text(
+                  item.$2,
+                  style: TextStyle(
+                    color: item.$4,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -365,29 +367,34 @@ class _RecommendationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.tips_and_updates_outlined, color: AppTheme.green),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'This batch is suitable for premium packaging. Keep moisture below 12% before sealing the harvest sticker.',
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Row(
+              children: [
+                Icon(Icons.tips_and_updates_outlined, color: AppTheme.green),
+                SizedBox(width: 10),
+                Text(
+                  'Next best action',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+            SizedBox(height: 10),
+            Text(
+              'This batch is suitable for premium packaging. Keep moisture below 12%, print the harvest QR, and store bags away from direct floor contact.',
               style: TextStyle(
                 color: AppTheme.textMuted,
                 height: 1.45,
                 fontWeight: FontWeight.w600,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -406,7 +413,7 @@ class _HarvestBagSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(24),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -430,10 +437,7 @@ class _HarvestBagSheet extends StatelessWidget {
             TextField(
               controller: bagSizeCtrl,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Bag size',
-                suffixText: 'kg',
-              ),
+              decoration: const InputDecoration(labelText: 'Bag size', suffixText: 'kg'),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -442,7 +446,7 @@ class _HarvestBagSheet extends StatelessWidget {
               decoration: const InputDecoration(labelText: 'Number of bags'),
             ),
             const SizedBox(height: 18),
-            ElevatedButton.icon(
+            FilledButton.icon(
               onPressed: () {
                 final bagSize = double.tryParse(bagSizeCtrl.text.trim());
                 final bagCount = int.tryParse(bagCountCtrl.text.trim());

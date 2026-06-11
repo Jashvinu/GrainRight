@@ -20,7 +20,8 @@ class FarmController extends GetxController {
     loadFarms();
   }
 
-  String get _jwt => Get.find<AuthController>().accessToken.value;
+  String get _jwt =>
+      Get.isRegistered<AuthController>() ? Get.find<AuthController>().accessToken.value : '';
 
   Future<void> loadFarms() async {
     isLoading.value = true;
@@ -46,6 +47,7 @@ class FarmController extends GetxController {
   Future<bool> saveFarm({
     required String name,
     required List<LatLng> points,
+    Map<String, dynamic> metadata = const {},
   }) async {
     try {
       final coords = points.map((p) => [p.longitude, p.latitude]).toList();
@@ -75,14 +77,18 @@ class FarmController extends GetxController {
       // Rough area estimate using shoelace formula in degrees → hectares
       final areaHa = _shoelaceAreaHectares(points);
 
-      final userId = Get.find<AuthController>().currentUser.value?.id;
+      final userId = Get.isRegistered<AuthController>()
+          ? Get.find<AuthController>().currentUser.value?.id
+          : null;
 
       final farmJson = {
         'name': name,
         'geometry': geometry,
         'bounds': bounds,
         'area_hectares': areaHa,
+        'area_acres': areaHa * 2.47105,
         'user_id': userId,
+        ...metadata,
       };
 
       final farm = await _service.insertFarm(farmJson, _jwt);

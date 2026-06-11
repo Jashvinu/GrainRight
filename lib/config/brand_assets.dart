@@ -1,5 +1,6 @@
 class BrandAssets {
   static const String logo = 'assets/logo.png';
+  static const String farmerLoginAvatar = 'assets/farmer_login_avatar.png';
   static const String farmerAvatar = 'assets/farmer_avatar.png';
   static const String farmerAvatar2 = 'assets/farmer_avatar_2.png';
   static const String farmerAvatar3 = 'assets/farmer_avatar_3.png';
