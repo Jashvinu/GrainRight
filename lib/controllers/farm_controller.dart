@@ -1,9 +1,9 @@
-import 'dart:math';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import '../controllers/auth_controller.dart';
 import '../models/satellite/farm_model.dart';
 import '../services/satellite_service.dart';
+import '../utils/polygon_geometry.dart';
 
 class FarmController extends GetxController {
   final _service = SatelliteService();
@@ -50,32 +50,22 @@ class FarmController extends GetxController {
     Map<String, dynamic> metadata = const {},
   }) async {
     try {
-      final coords = points.map((p) => [p.longitude, p.latitude]).toList();
-      // Close the ring
-      if (coords.first[0] != coords.last[0] || coords.first[1] != coords.last[1]) {
-        coords.add(List<double>.from(coords.first));
+      if (points.length < 3) {
+        Get.snackbar(
+          'Too few points',
+          'Add at least 3 boundary points before saving the farm.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return false;
       }
 
-      final geometry = <String, dynamic>{
+      final geometry = {
         'type': 'Polygon',
-        'coordinates': [coords],
+        'coordinates': [PolygonGeometry.toGeoJsonRing(points)],
       };
 
-      // Compute rough bounding box
-      double minLat = points.map((p) => p.latitude).reduce(min);
-      double maxLat = points.map((p) => p.latitude).reduce(max);
-      double minLng = points.map((p) => p.longitude).reduce(min);
-      double maxLng = points.map((p) => p.longitude).reduce(max);
-
-      final bounds = {
-        'south': minLat,
-        'north': maxLat,
-        'west': minLng,
-        'east': maxLng,
-      };
-
-      // Rough area estimate using shoelace formula in degrees → hectares
-      final areaHa = _shoelaceAreaHectares(points);
+      final bounds = PolygonGeometry.bounds(points);
+      final areaHa = PolygonGeometry.areaHectares(points);
 
       final userId = Get.isRegistered<AuthController>()
           ? Get.find<AuthController>().currentUser.value?.id
@@ -100,20 +90,5 @@ class FarmController extends GetxController {
           snackPosition: SnackPosition.BOTTOM);
       return false;
     }
-  }
-
-  double _shoelaceAreaHectares(List<LatLng> pts) {
-    if (pts.length < 3) return 0.0;
-    double area = 0.0;
-    for (int i = 0; i < pts.length; i++) {
-      final j = (i + 1) % pts.length;
-      area += pts[i].longitude * pts[j].latitude;
-      area -= pts[j].longitude * pts[i].latitude;
-    }
-    area = area.abs() / 2.0;
-    // Convert degrees² to m² (approx at equator) then to hectares
-    const metersPerDegree = 111320.0;
-    final areaM2 = area * metersPerDegree * metersPerDegree;
-    return areaM2 / 10000.0;
   }
 }

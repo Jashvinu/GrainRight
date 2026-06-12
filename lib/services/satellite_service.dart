@@ -8,6 +8,7 @@ import '../models/satellite/index_tile_model.dart';
 import '../models/satellite/timeline_entry_model.dart';
 import '../models/satellite/diagnostics_model.dart';
 import '../models/satellite/advanced_monitoring_model.dart';
+import '../models/satellite/farm_alert_model.dart';
 
 class SatelliteApiException implements Exception {
   final String message;
@@ -33,11 +34,16 @@ class AuthResult {
 }
 
 class SatelliteService {
-  Map<String, String> _headers(String? jwt) => {
-    'Content-Type': 'application/json',
-    'apikey': SatelliteConfig.anonKey,
-    'Authorization': 'Bearer ${jwt ?? SatelliteConfig.anonKey}',
-  };
+  Map<String, String> _headers(String? jwt) {
+    final bearer = jwt == null || jwt.trim().isEmpty
+        ? SatelliteConfig.anonKey
+        : jwt.trim();
+    return {
+      'Content-Type': 'application/json',
+      'apikey': SatelliteConfig.anonKey,
+      'Authorization': 'Bearer $bearer',
+    };
+  }
 
   // ─── Retry wrappers ────────────────────────────────────────────────────────
 
@@ -215,10 +221,12 @@ class SatelliteService {
     final session = data['session'] as Map<String, dynamic>?;
     final user = data['user'] as Map<String, dynamic>? ?? {};
     return AuthResult(
-      accessToken: data['access_token'] as String? ??
+      accessToken:
+          data['access_token'] as String? ??
           session?['access_token'] as String? ??
           '',
-      refreshToken: data['refresh_token'] as String? ??
+      refreshToken:
+          data['refresh_token'] as String? ??
           session?['refresh_token'] as String?,
       userId: user['id'] as String? ?? '',
       email: user['email'] as String? ?? 'verified-farmer@local',
@@ -355,6 +363,78 @@ class SatelliteService {
     }
   }
 
+  Future<DiseaseScreenResult> runDiseaseScreen({
+    required String farmId,
+    required String crop,
+    required String growthStage,
+    required String season,
+    Map<String, dynamic>? geometry,
+    required String? jwt,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/disease-risk-screen',
+      {
+        'farm_id': farmId,
+        'crop': crop,
+        'growth_stage': growthStage,
+        'season': season,
+        'geometry': ?geometry,
+      },
+      jwt,
+    );
+    return DiseaseScreenResult.fromJson(data);
+  }
+
+  Future<FarmAlertAdvice> getFarmAlertAdvice({
+    required Map<String, dynamic> body,
+    required String? jwt,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farm-alert-advisor',
+      body,
+      jwt,
+    );
+    return FarmAlertAdvice.fromJson(data);
+  }
+
+  /// Uploads a field photo to the private disease-photos bucket and returns
+  /// the storage path used by disease-image-diagnose.
+  Future<String> uploadDiseasePhoto({
+    required List<int> bytes,
+    required String farmId,
+    required String? jwt,
+  }) async {
+    final path =
+        '$farmId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final url = '${SatelliteConfig.url}/storage/v1/object/disease-photos/$path';
+    final response = await http
+        .post(
+          Uri.parse(url),
+          headers: {..._headers(jwt), 'Content-Type': 'image/jpeg'},
+          body: bytes,
+        )
+        .timeout(const Duration(seconds: 60));
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw SatelliteApiException(
+        'Failed to upload field photo',
+        statusCode: response.statusCode,
+      );
+    }
+    return path;
+  }
+
+  Future<FarmPhotoDiagnosis> diagnoseDiseasePhoto({
+    required Map<String, dynamic> body,
+    required String? jwt,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/disease-image-diagnose',
+      body,
+      jwt,
+    );
+    return FarmPhotoDiagnosis.fromJson(data);
+  }
+
   Future<void> upsertFarmerPhoneProfile({
     required String userId,
     required String phone,
@@ -362,7 +442,8 @@ class SatelliteService {
     required String farmerName,
     required String? jwt,
   }) async {
-    final url = '${SatelliteConfig.restBase}/farmer_phone_profiles?on_conflict=user_id';
+    final url =
+        '${SatelliteConfig.restBase}/farmer_phone_profiles?on_conflict=user_id';
     final response = await http
         .post(
           Uri.parse(url),
@@ -379,7 +460,9 @@ class SatelliteService {
           }),
         )
         .timeout(const Duration(seconds: 20));
-    if (response.statusCode != 201 && response.statusCode != 200 && response.statusCode != 204) {
+    if (response.statusCode != 201 &&
+        response.statusCode != 200 &&
+        response.statusCode != 204) {
       throw SatelliteApiException(
         'Failed to link farmer profile',
         statusCode: response.statusCode,

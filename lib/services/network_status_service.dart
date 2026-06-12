@@ -34,6 +34,10 @@ class NetworkStatusService {
       _rememberProbeResult(false);
       return false;
     }
+    if (kIsWeb) {
+      _rememberProbeResult(true);
+      return true;
+    }
     final cached = _cachedProbeResult();
     if (cached != null) return cached;
     final inFlightProbe = _inFlightProbe;

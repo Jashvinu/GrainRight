@@ -12,6 +12,7 @@ class SatelliteMapView extends StatelessWidget {
   final bool isLoading;
   final List<LatLng>? farmPolygon;
   final List<CircleMarker>? heatCircles;
+  final List<Marker>? markers;
   final double height;
   final bool showZoomControls;
 
@@ -23,6 +24,7 @@ class SatelliteMapView extends StatelessWidget {
     this.isLoading = false,
     this.farmPolygon,
     this.heatCircles,
+    this.markers,
     this.height = 260,
     this.showZoomControls = false,
   });
@@ -36,6 +38,7 @@ class SatelliteMapView extends StatelessWidget {
       isLoading: isLoading,
       farmPolygon: farmPolygon,
       heatCircles: heatCircles,
+      markers: markers,
       height: height,
       showZoomControls: showZoomControls,
       key: key,
@@ -50,6 +53,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final bool isLoading;
   final List<LatLng>? farmPolygon;
   final List<CircleMarker>? heatCircles;
+  final List<Marker>? markers;
   final double height;
   final bool showZoomControls;
 
@@ -61,6 +65,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.isLoading = false,
     this.farmPolygon,
     this.heatCircles,
+    this.markers,
     this.height = 260,
     this.showZoomControls = false,
   });
@@ -162,6 +167,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                   ),
                 if (widget.heatCircles != null && widget.heatCircles!.isNotEmpty)
                   CircleLayer(circles: widget.heatCircles!),
+                if (widget.markers != null && widget.markers!.isNotEmpty)
+                  MarkerLayer(markers: widget.markers!),
               ],
             ),
             if (widget.showZoomControls)

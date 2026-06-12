@@ -1,0 +1,156 @@
+{
+  "doc_source": "icar_finger_millet_mh_2026",
+  "crop": "millet",
+  "source_title": "Finger Millet (Ragi/Nachni) Complete Deep Farming & Traceability Report, Maharashtra Edition 2026 (ICAR Directorate of Millets Development)",
+  "records": [
+    {
+      "chunk_type": "symptom",
+      "disease": "blast",
+      "growth_stage": "vegetative-flowering",
+      "content": "Finger millet Blast (causal organism Pyricularia grisea / Magnaporthe grisea) appears from the vegetative to flowering stage. Symptoms: grey-centred spindle-shaped (eye-shaped) leaf spots with a purple-grey margin, chlorosis (yellowing) around lesions, and premature drying of leaves. Neck and finger (panicle) infection can break the neck and shrivel grain. It is the most dangerous and damaging finger millet disease and can devastate the crop. Risk rises with high humidity, overhead irrigation during flowering, dense canopy, and excess nitrogen.",
+      "metadata": { "severity": "high", "common_names": ["blast", "neck blast", "leaf blast"] }
+    },
+    {
+      "chunk_type": "mitigation",
+      "disease": "blast",
+      "growth_stage": "vegetative-flowering",
+      "content": "Blast mitigation for finger millet (cultural / IDM first): grow blast-resistant varieties (GPU-28, GPU-67, GPU-48, L-5, VL Mandua-149); treat seed before sowing; avoid excess nitrogen because lush growth is more susceptible; avoid overhead irrigation during flowering as high canopy humidity triggers blast; scout fields from 20 days after sowing for early detection; control weeds that harbour inoculum; rotate with legumes and avoid continuous finger millet; after harvest destroy crop debris and deep-plough to bury inoculum. If chemical control is needed, consult a KVK/agronomist for the correct product and dose rather than self-prescribing.",
+      "metadata": {
+        "severity": "high",
+        "resistant_varieties": ["GPU-28", "GPU-67", "GPU-48", "L-5", "VL Mandua-149"],
+        "chemical_options_agronomist_only": ["Carbendazim", "Edifenphos", "Mancozeb-based combination (Saaf)"]
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "rust",
+      "growth_stage": "tillering-grain_filling",
+      "content": "Finger millet Rust (causal organism Puccinia sp.) appears from tillering through grain filling. Symptoms: brown to orange powdery spots (uredospores) on both upper and lower leaf surfaces, later turning into dark brown teliospores. Heavy rust reduces photosynthetic leaf area and is most damaging when it appears around and after grain-fill. Severity is medium; high humidity favours spread.",
+      "metadata": { "severity": "medium", "common_names": ["rust", "leaf rust"] }
+    },
+    {
+      "chunk_type": "mitigation",
+      "disease": "rust",
+      "growth_stage": "tillering-grain_filling",
+      "content": "Rust mitigation for finger millet: prefer rust-resistant varieties such as GPU-67; maintain balanced nutrition and good spacing for canopy airflow; scout lower leaves during tillering for early orange pustules; control alternate weed hosts. If protective spraying is warranted, consult a KVK/agronomist for the appropriate product and dose.",
+      "metadata": {
+        "severity": "medium",
+        "resistant_varieties": ["GPU-67"],
+        "chemical_options_agronomist_only": ["Mancozeb", "sulphur dust"]
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "downy_mildew",
+      "growth_stage": "grain_filling",
+      "content": "Finger millet Downy Mildew / Green Ear (causal organism Sclerospora graminicola) is most visible around grain filling. Symptoms: chlorotic (yellow) leaves with a downy white spore mass on the lower leaf surface, stunted plants, and malformed panicles that turn leafy and green (the 'green ear' symptom) instead of setting grain. Severity is medium to high because it directly reduces grain yield. Cool, wet, humid conditions favour it.",
+      "metadata": { "severity": "high", "common_names": ["downy mildew", "green ear"] }
+    },
+    {
+      "chunk_type": "mitigation",
+      "disease": "downy_mildew",
+      "growth_stage": "grain_filling",
+      "content": "Downy mildew mitigation for finger millet: use clean, treated, certified seed; practise crop rotation (avoid continuous finger millet) since rotation is essential to break the cycle; rogue out and destroy malformed green-ear plants to cut inoculum; ensure field drainage and avoid prolonged leaf wetness. For seed treatment or foliar protection, consult a KVK/agronomist for the correct product and dose.",
+      "metadata": {
+        "severity": "high",
+        "cultural": ["crop rotation", "rogue green-ear plants", "treated certified seed", "field drainage"],
+        "chemical_options_agronomist_only": ["Metalaxyl + Mancozeb seed dressing (Ridomil MZ)"]
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "seedling_blight_foot_rot",
+      "growth_stage": "germination-seedling",
+      "content": "Finger millet Seedling Blight / Foot Rot (causal organisms Helminthosporium and Fusarium spp.) strikes at germination and the seedling stage. Symptoms: seeds fail to germinate, seedlings collapse at the soil line, and brown to black rot appears at the base/foot of the seedling. Damage is high when seed is left untreated and where soil is waterlogged.",
+      "metadata": { "severity": "high", "common_names": ["seedling blight", "foot rot", "damping off"] }
+    },
+    {
+      "chunk_type": "mitigation",
+      "disease": "seedling_blight_foot_rot",
+      "growth_stage": "germination-seedling",
+      "content": "Seedling blight / foot rot mitigation for finger millet: always treat seed before sowing (fungicidal seed treatment followed, after drying, by a biocontrol such as Trichoderma viride or Pseudomonas fluorescens); avoid waterlogging and ensure good drainage; do not sow too deep (2-3 cm) so emergence is rapid; gap-fill and re-sow collapsed patches early. For seed-treatment products and doses, consult a KVK/agronomist.",
+      "metadata": {
+        "severity": "high",
+        "cultural": ["seed treatment", "Trichoderma viride", "Pseudomonas fluorescens", "avoid waterlogging", "shallow sowing"],
+        "chemical_options_agronomist_only": ["Carbendazim seed treatment"]
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "brown_spot",
+      "growth_stage": "vegetative-onward",
+      "content": "Finger millet Brown Spot (causal organism Helminthosporium nodulosum) appears from the vegetative stage onward. Symptoms: small brown spots on leaves that enlarge and coalesce under humid conditions, reducing green leaf area. Severity is low to medium but can build up in wet, humid weather.",
+      "metadata": { "severity": "low-medium", "common_names": ["brown spot", "leaf spot"] }
+    },
+    {
+      "chunk_type": "mitigation",
+      "disease": "brown_spot",
+      "growth_stage": "vegetative-onward",
+      "content": "Brown spot mitigation for finger millet: use resistant varieties and clean treated seed; maintain balanced nutrition (avoid nitrogen excess); ensure spacing and weed control for better airflow and lower humidity; remove heavily infected debris after harvest. For protective spraying if needed, consult a KVK/agronomist for the correct product and dose.",
+      "metadata": {
+        "severity": "low-medium",
+        "cultural": ["resistant varieties", "treated seed", "weed control", "balanced nutrition"],
+        "chemical_options_agronomist_only": ["Mancozeb", "Carbendazim"]
+      }
+    },
+    {
+      "chunk_type": "idm",
+      "disease": null,
+      "growth_stage": null,
+      "content": "Integrated Disease Management (IDM) for finger millet, prevention-first checklist: (1) grow blast-resistant varieties GPU-28, GPU-48, L-5, VL Mandua-149; (2) treat seed before sowing (fungicide or Pseudomonas fluorescens); (3) rotate with legumes, avoid continuous finger millet in the same field; (4) avoid excess nitrogen which promotes lush blast-susceptible growth; (5) scout fields from 20 days after sowing for early detection; (6) apply Trichoderma viride + Pseudomonas fluorescens in FYM at weeding stage; (7) control weeds because weed hosts harbour inoculum; (8) avoid overhead irrigation during flowering because high humidity triggers blast; (9) after harvest destroy crop debris and deep-plough to bury inoculum.",
+      "metadata": { "policy": "prevention_first" }
+    },
+    {
+      "chunk_type": "variety",
+      "disease": null,
+      "growth_stage": null,
+      "content": "Finger millet variety disease resistance (Maharashtra): GPU-28 is blast resistant and strongly drought tolerant (best for Dhule, Nashik, Nandurbar, Beed). GPU-67 is rust and blast resistant, the commercial standard with premium grain (Chhatrapati Sambhajinagar, Nashik). KMR-204 has moderate disease resistance, suited to low-rainfall Akola and Beed. Indaf-5 is blast-sensitive and is NOT recommended for blast-prone zones. VL Mandua-149 has good resistance and suits hilly, organic, cooler micro-climates (Nandurbar). Choosing a resistant variety for the local disease pressure is the cheapest disease control.",
+      "metadata": { "blast_resistant": ["GPU-28", "GPU-67", "VL Mandua-149"], "blast_sensitive": ["Indaf-5"] }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "disease": null,
+      "growth_stage": "vegetative-flowering",
+      "content": "Finger millet stage-wise disease watch: at seedling stage (7-21 DAS) check for seedling blight; during vegetative growth (21-45 DAS) watch leaf colour and blast symptoms and avoid waterlogging; at tillering (30-50 DAS) inspect lower leaves for rust; at booting/flowering (50-70 DAS) never allow moisture stress and avoid overhead irrigation that triggers blast; at grain filling (70-90 DAS) watch for downy mildew (green ear) and rust. Early scouting from 20 DAS allows targeted, minimal intervention.",
+      "metadata": {}
+    },
+    {
+      "chunk_type": "climate",
+      "disease": null,
+      "growth_stage": null,
+      "content": "Finger millet disease-relevant climate: optimum growth 27-32 C day and 22 C night. High humidity during grain filling increases blast and rust risk. Prolonged leaf wetness and overhead irrigation during flowering strongly favour blast. Good drainage and airflow reduce blast, rust, downy mildew, and brown spot. Cool wet spells favour downy mildew.",
+      "metadata": {}
+    },
+    {
+      "chunk_type": "district",
+      "disease": "blast",
+      "growth_stage": null,
+      "district": "Akola",
+      "content": "Akola district (hot semi-arid, erratic 450-700 mm rainfall): blast risk is elevated due to high temperatures during grain filling. Preferred varieties KMR-204 and Indaf-5 are early-maturing to avoid peak heat, but note Indaf-5 is blast-sensitive. Manage with resistant seed where blast pressure is known, balanced nitrogen, and early scouting.",
+      "metadata": {}
+    },
+    {
+      "chunk_type": "district",
+      "disease": null,
+      "growth_stage": null,
+      "district": "Dhule",
+      "content": "Dhule district (semi-arid, hot dry summers, 500-800 mm rainfall): main challenge is heat stress during grain filling. GPU-28 performs best here for its drought tolerance and blast resistance. Provide 2-3 critical irrigations and scout for blast under any humid spells.",
+      "metadata": {}
+    },
+    {
+      "chunk_type": "district",
+      "disease": null,
+      "growth_stage": null,
+      "district": "Nandurbar",
+      "content": "Nandurbar district (tribal belt, higher and more reliable 700-1000 mm rainfall, organic farming zone): cooler hill micro-climates favour good grain quality but the wetter, more humid conditions raise foliar disease and downy mildew pressure. VL Mandua-149 (good resistance) and GPU-28 are preferred; emphasise treated seed, drainage, and rogueing of green-ear plants.",
+      "metadata": {}
+    },
+    {
+      "chunk_type": "grading",
+      "disease": null,
+      "growth_stage": null,
+      "content": "Disease control protects grain grade. Grade A / export finger millet needs blast-resistant certified seed, balanced NPK (nitrogen imbalance causes shrivelling), critical irrigation at flowering and grain filling without stress, harvest at correct maturity, and drying below 12% moisture before storage to prevent fungal growth and mould. Uncontrolled blast, downy mildew (green ear), and storage mould push grain to low-value Grade C.",
+      "metadata": {}
+    }
+  ]
+}

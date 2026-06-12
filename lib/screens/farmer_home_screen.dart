@@ -5,7 +5,6 @@ import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'dart:convert';
-import 'dart:ui';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
@@ -15,6 +14,7 @@ import '../config/theme.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/satellite/farm_model.dart';
+import '../models/satellite/farm_alert_model.dart';
 import '../models/satellite/timeline_entry_model.dart';
 import '../models/verified_farmer_record.dart';
 import '../widgets/brand_text.dart';
@@ -45,9 +45,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   static const _dashboardTabIndex = 0;
   static const _farmTabIndex = 1;
   static const _harvestTabIndex = 2;
-  static const _diseaseTabIndex = 4;
   static const _inventoryTabIndex = 3;
-  static const _aiChatTabIndex = 5;
+  static const _aiChatTabIndex = 4;
   static const _fallbackProfile = _FarmerProfile(
     name: 'Santosh Pawar',
     farmerId: 'FMR-2026-001',
@@ -140,6 +139,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   final Map<int, List<Map<String, dynamic>>> _diseaseScoutZonesByFarmIndex = {};
   final Map<int, List<Map<String, dynamic>>> _diseaseRiskCellsByFarmIndex = {};
   final Set<int> _diseaseRemoteLoading = {};
+  final Map<int, DiseaseScreenResult> _diseaseScreenByFarmIndex = {};
+  final Map<int, FarmAlertAdvice> _farmAlertAdviceByFarmIndex = {};
+  final Map<int, String> _farmAlertErrorByFarmIndex = {};
+  final Set<int> _farmAlertLoading = {};
   bool _satelliteFarmCatalogLoaded = false;
   bool _satelliteFarmCatalogLoading = false;
   List<Farm> _satelliteFarmCatalog = [];
@@ -178,8 +181,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         ? _fallbackFarms
         : _remoteFarmsFromController(verified);
 
-    final nextProfile =
-        verified == null ? _fallbackProfile : _profileFromVerified(verified);
+    final nextProfile = verified == null
+        ? _fallbackProfile
+        : _profileFromVerified(verified);
     final nextFarms = List<_FarmerFarm>.from(fallback, growable: true);
     if (nextFarms.isEmpty) {
       nextFarms.add(_fallbackFarms.first);
@@ -221,6 +225,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     _diseaseScoutZonesByFarmIndex.clear();
     _diseaseRiskCellsByFarmIndex.clear();
     _diseaseRemoteLoading.clear();
+    _diseaseScreenByFarmIndex.clear();
+    _farmAlertAdviceByFarmIndex.clear();
+    _farmAlertErrorByFarmIndex.clear();
+    _farmAlertLoading.clear();
     _initializeAllFarmState();
   }
 
@@ -250,34 +258,38 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       ];
     }
 
-    return remoteFarms.map((farm) {
-      final center = _centerFromGeometry(farm.geometry);
-      return _FarmerFarm(
-        name: farm.name,
-        location: _formatLocationFromPoints(center),
-        crop: (farm.crop == null || farm.crop!.trim().isEmpty) ? 'Millet' : farm.crop!,
-        variety: (farm.variety == null || farm.variety!.trim().isEmpty)
-            ? 'General'
-            : farm.variety!,
-        area: farm.areaAcres == null
-            ? '${((farm.areaHectares ?? 0) * 2.47105).toStringAsFixed(2)} acres'
-            : '${farm.areaAcres!.toStringAsFixed(farm.areaAcres! >= 10 ? 1 : 2)} acres',
-        health: 'Active',
-        ndvi: '--',
-        moisture: '--',
-        product: 'Farm profile',
-        previousCrop: farm.previousCrop ?? '',
-        season: farm.season ?? '',
-        irrigation: farm.irrigation ?? '',
-        soilType: farm.soilType ?? '',
-        ownershipType: farm.ownershipType ?? '',
-        seedSource: farm.seedSource ?? '',
-        harvestIntent: farm.harvestIntent ?? '',
-        latitude: center?.latitude,
-        longitude: center?.longitude,
-        polygon: _ringFromGeometry(farm.geometry),
-      );
-    }).toList(growable: false);
+    return remoteFarms
+        .map((farm) {
+          final center = _centerFromGeometry(farm.geometry);
+          return _FarmerFarm(
+            name: farm.name,
+            location: _formatLocationFromPoints(center),
+            crop: (farm.crop == null || farm.crop!.trim().isEmpty)
+                ? 'Millet'
+                : farm.crop!,
+            variety: (farm.variety == null || farm.variety!.trim().isEmpty)
+                ? 'General'
+                : farm.variety!,
+            area: farm.areaAcres == null
+                ? '${((farm.areaHectares ?? 0) * 2.47105).toStringAsFixed(2)} acres'
+                : '${farm.areaAcres!.toStringAsFixed(farm.areaAcres! >= 10 ? 1 : 2)} acres',
+            health: 'Active',
+            ndvi: '--',
+            moisture: '--',
+            product: 'Farm profile',
+            previousCrop: farm.previousCrop ?? '',
+            season: farm.season ?? '',
+            irrigation: farm.irrigation ?? '',
+            soilType: farm.soilType ?? '',
+            ownershipType: farm.ownershipType ?? '',
+            seedSource: farm.seedSource ?? '',
+            harvestIntent: farm.harvestIntent ?? '',
+            latitude: center?.latitude,
+            longitude: center?.longitude,
+            polygon: _ringFromGeometry(farm.geometry),
+          );
+        })
+        .toList(growable: false);
   }
 
   LatLng? _centerFromGeometry(Map<String, dynamic> geometry) {
@@ -286,8 +298,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     final points = _polygonPointsFromRing(ring);
     if (points.isEmpty) return null;
     return LatLng(
-      points.map((point) => point.latitude).reduce((a, b) => a + b) / points.length,
-      points.map((point) => point.longitude).reduce((a, b) => a + b) / points.length,
+      points.map((point) => point.latitude).reduce((a, b) => a + b) /
+          points.length,
+      points.map((point) => point.longitude).reduce((a, b) => a + b) /
+          points.length,
     );
   }
 
@@ -338,11 +352,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       selectedIcon: Icon(Icons.inventory_2_rounded),
       label: 'Harvest',
     ),
-    NavigationDestination(
-      icon: Icon(Icons.bug_report_outlined),
-      selectedIcon: Icon(Icons.bug_report_rounded),
-      label: 'Disease',
-    ),
   ];
 
   static const _mobileDestinationFromPage = {
@@ -350,7 +359,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     _farmTabIndex: 1,
     _aiChatTabIndex: 2,
     _harvestTabIndex: 3,
-    _diseaseTabIndex: 4,
   };
 
   static int _pageIndexForMobile(int index) {
@@ -362,10 +370,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       case 2:
         return _aiChatTabIndex;
       case 3:
-        return _harvestTabIndex;
-      case 4:
       default:
-        return _diseaseTabIndex;
+        return _harvestTabIndex;
     }
   }
 
@@ -373,83 +379,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     if (pageIndex == _inventoryTabIndex) {
       return _mobileDestinationFromPage[_harvestTabIndex]!;
     }
-    return _mobileDestinationFromPage[pageIndex] ?? _mobileDestinationFromPage[_diseaseTabIndex]!;
-  }
-
-  static Widget _mobileNavIcon({
-    required IconData defaultIcon,
-    required IconData activeIcon,
-    required String label,
-    required bool selected,
-    required bool isCenter,
-  }) {
-    if (isCenter) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            width: selected ? 38 : 34,
-            height: selected ? 38 : 34,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
-              ),
-              shape: BoxShape.circle,
-              boxShadow: selected
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.green.withValues(alpha: 0.38),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ]
-                  : const [],
-            ),
-            child: Icon(
-              selected ? activeIcon : defaultIcon,
-              color: Colors.white,
-              size: selected ? 20 : 18,
-            ),
-          ),
-          if (selected) ...[
-            const SizedBox(height: 1),
-            const Text(
-              'AI Chat',
-              style: TextStyle(
-                fontSize: 8.5,
-                fontWeight: FontWeight.w900,
-                color: AppTheme.green,
-              ),
-            ),
-          ],
-        ],
-      );
-    }
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          transform: Matrix4.identity()..scale(selected ? 1.03 : 1.0),
-          child: Icon(
-            selected ? activeIcon : defaultIcon,
-            size: selected ? 21 : 19,
-          ),
-        ),
-        const SizedBox(height: 1),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 9,
-            fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-            color: selected ? AppTheme.green : AppTheme.textMuted,
-          ),
-        ),
-      ],
-    );
+    return _mobileDestinationFromPage[pageIndex] ??
+        _mobileDestinationFromPage[_farmTabIndex]!;
   }
 
   int _mobileNavIndexFromPage() {
@@ -463,180 +394,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   Widget _buildMobileBottomNavigationBar() {
     return SafeArea(
       top: false,
-      child: Container(
-        height: 90,
-        margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // Background bar
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: 64,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(22),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.84),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: const Color(0xFFDCE6D4)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.11),
-                          blurRadius: 14,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // The row of items
-            Positioned(
-              left: 6,
-              right: 6,
-              bottom: 0,
-              height: 90,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  for (var i = 0; i < _destinations.length; i++)
-                    Expanded(
-                      child: i == 2
-                          ? _buildCenterFloatingButton()
-                          : _buildNormalNavItem(i),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNormalNavItem(int i) {
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          _setMobileTab(i);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          height: 56,
-          padding: const EdgeInsets.symmetric(
-            vertical: 4,
-            horizontal: 2,
-          ),
-          decoration: BoxDecoration(
-            color: _mobileNavIndexFromPage() == i
-                ? Colors.green.shade50
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: AnimatedScale(
-            scale: _mobileNavIndexFromPage() == i ? 1.0 : 0.96,
-            duration: const Duration(milliseconds: 220),
-            child: _mobileNavIcon(
-              defaultIcon: (i == 0)
-                  ? Icons.home_outlined
-                  : (i == 1)
-                      ? Icons.agriculture_outlined
-                      : (i == 3)
-                          ? Icons.inventory_2_outlined
-                          : Icons.bug_report_outlined,
-              activeIcon: (i == 0)
-                  ? Icons.home_rounded
-                  : (i == 1)
-                      ? Icons.agriculture_rounded
-                      : (i == 3)
-                          ? Icons.inventory_2_rounded
-                          : Icons.bug_report_rounded,
-              label: (i == 0)
-                  ? 'Home'
-                  : (i == 1)
-                      ? 'Farm'
-                      : (i == 3)
-                          ? 'Harvest'
-                          : 'Disease',
-              selected: _mobileNavIndexFromPage() == i,
-              isCenter: false,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCenterFloatingButton() {
-    final selected = _mobileNavIndexFromPage() == 2;
-    return Container(
-      height: 90,
-      alignment: Alignment.topCenter,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: () => _setMobileTab(2),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 220),
-                width: selected ? 58 : 52,
-                height: selected ? 58 : 52,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2E7D32).withValues(alpha: selected ? 0.45 : 0.2),
-                      blurRadius: selected ? 12 : 6,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  selected ? Icons.auto_awesome_rounded : Icons.auto_awesome_outlined,
-                  color: Colors.white,
-                  size: selected ? 28 : 24,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          GestureDetector(
-            onTap: () => _setMobileTab(2),
-            child: Text(
-              'AI Chat',
-              style: TextStyle(
-                fontSize: 9.5,
-                fontWeight: selected ? FontWeight.w900 : FontWeight.w600,
-                color: selected ? AppTheme.green : AppTheme.textMuted,
-              ),
-            ),
-          ),
-        ],
+      child: NavigationBar(
+        selectedIndex: _mobileNavIndexFromPage(),
+        onDestinationSelected: _setMobileTab,
+        destinations: _destinations,
       ),
     );
   }
 
   List<Map<String, String>> _marketLotPayloads() {
     return _harvestInventory
-        .map(
-          (lot) => lot.toMarketPayload(),
-        )
+        .map((lot) => lot.toMarketPayload())
         .toList(growable: false);
   }
 
@@ -655,7 +423,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
 
   void _onHarvestCompleted(_HarvestInventoryLot lot) {
     setState(() {
-      final index = _harvestInventory.indexWhere((item) => item.batchId == lot.batchId);
+      final index = _harvestInventory.indexWhere(
+        (item) => item.batchId == lot.batchId,
+      );
       if (index >= 0) {
         _harvestInventory[index] = lot;
       } else {
@@ -664,43 +434,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     });
   }
 
-  static const _railDestinations = [
-    NavigationRailDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home_rounded),
-      label: Text('Home'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.agriculture_outlined),
-      selectedIcon: Icon(Icons.agriculture_rounded),
-      label: Text('Farm'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.inventory_outlined),
-      selectedIcon: Icon(Icons.inventory_2_rounded),
-      label: Text('Harvest'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.inventory_2_outlined),
-      selectedIcon: Icon(Icons.inventory_2_rounded),
-      label: Text('Inventory'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.bug_report_outlined),
-      selectedIcon: Icon(Icons.bug_report_rounded),
-      label: Text('Disease'),
-    ),
-    NavigationRailDestination(
-      icon: Icon(Icons.auto_awesome_outlined),
-      selectedIcon: Icon(Icons.auto_awesome_rounded),
-      label: Text('AI Chat'),
-    ),
-  ];
-
   _FarmerFarm get _farm => _farms[_selectedFarm];
 
   String get _currentFarmAvatar =>
-      BrandAssets.farmerAvatars[_selectedFarm % BrandAssets.farmerAvatars.length];
+      BrandAssets.farmerAvatars[_selectedFarm %
+          BrandAssets.farmerAvatars.length];
 
   String _satelliteRequestToken() {
     if (!Get.isRegistered<AuthController>()) return '';
@@ -709,10 +447,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   }
 
   String _normalizeLookup(String value) {
-    return value
-        .toLowerCase()
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+    return value.toLowerCase().replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
   Future<List<Farm>> _getSatelliteFarmCatalog() async {
@@ -751,8 +486,15 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     final userId = Get.find<MainAuthController>().remoteUserId;
 
     Farm? matched;
-    final userMatch = farms.where((item) => item.userId != null && userId != null && item.userId == userId).toList();
-    final matchingNames = farms.where((item) => _normalizeLookup(item.name) == farmName).toList();
+    final userMatch = farms
+        .where(
+          (item) =>
+              item.userId != null && userId != null && item.userId == userId,
+        )
+        .toList();
+    final matchingNames = farms
+        .where((item) => _normalizeLookup(item.name) == farmName)
+        .toList();
 
     if (matchingNames.isNotEmpty) {
       if (crop.isNotEmpty) {
@@ -849,7 +591,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  Map<String, List<TimelineEntry>> _groupTimelineByIndex(List<TimelineEntry> entries) {
+  Map<String, List<TimelineEntry>> _groupTimelineByIndex(
+    List<TimelineEntry> entries,
+  ) {
     final map = <String, List<TimelineEntry>>{};
     for (final entry in entries) {
       final key = _normalizeLookup(entry.indexType);
@@ -870,7 +614,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     return value.toStringAsFixed(decimals);
   }
 
-  _SatelliteMetricTileData _placeholderTile(String title, IconData icon, Color tint, Color color) {
+  _SatelliteMetricTileData _placeholderTile(
+    String title,
+    IconData icon,
+    Color tint,
+    Color color,
+  ) {
     return _SatelliteMetricTileData(
       title: title,
       value: '--',
@@ -943,7 +692,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  _FarmSatelliteOverview _buildFarmSatelliteOverview(List<TimelineEntry> entries) {
+  _FarmSatelliteOverview _buildFarmSatelliteOverview(
+    List<TimelineEntry> entries,
+  ) {
     if (entries.isEmpty) {
       return _fallbackSatelliteOverview('No records from remote index feed.');
     }
@@ -1097,10 +848,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   LatLng _nextDiseaseMarker(int index, List<LatLng> existing) {
     final center = _farmCenter(_farms[index]);
     final shift = _diagnosisOffsets[existing.length % _diagnosisOffsets.length];
-    return LatLng(
-      center.latitude + shift.dx,
-      center.longitude + shift.dy,
-    );
+    return LatLng(center.latitude + shift.dx, center.longitude + shift.dy);
   }
 
   Future<void> _ensureDiseaseRemoteForFarm(int index) async {
@@ -1158,7 +906,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
           'centroid_lat': marker.latitude,
           'centroid_lng': marker.longitude,
           'radius_meters': 45,
-          'disease_candidates': note.trim().isEmpty ? ['Field observation'] : [note.trim()],
+          'disease_candidates': note.trim().isEmpty
+              ? ['Field observation']
+              : [note.trim()],
           'max_risk_score': 0.62,
           'cell_count': 1,
           'crop': _farms[index].crop,
@@ -1171,6 +921,215 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       unawaited(_ensureDiseaseRemoteForFarm(index));
     } catch (_) {
       // Local diagnosis remains saved even when remote scout-zone sync fails.
+    }
+  }
+
+  /// Issue locations for the farm map. Prefers the freshest REST rows (latest
+  /// scan only), falling back to the cells returned inline by the screening
+  /// function — the REST read is empty for guest sessions blocked by RLS.
+  List<FarmIssueCell> _issueCellsForFarm(int index) {
+    final rows =
+        _diseaseRiskCellsByFarmIndex[index] ?? const <Map<String, dynamic>>[];
+    final latestScan = rows.isEmpty ? null : rows.first['scan_date']?.toString();
+    final parsed = rows
+        .where((row) => row['scan_date']?.toString() == latestScan)
+        .map(FarmIssueCell.fromJson)
+        .where((cell) => cell.hasLocation)
+        .toList(growable: false);
+    if (parsed.isNotEmpty) return parsed;
+    return _diseaseScreenByFarmIndex[index]?.riskCells ??
+        const <FarmIssueCell>[];
+  }
+
+  void _openFarmIssue(int index, FarmIssueCell issue) {
+    if (index < 0 || index >= _farms.length) return;
+    _initializeFarmState(index);
+    _refreshFarmStage(index);
+    final farm = _farms[index];
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FarmIssueSheet(
+        farmName: farm.name,
+        issue: issue,
+        farmCenter: _farmCenter(farm),
+        daysAfterSowing: _daysAfterSowing(index),
+        growthStage: _farmGrowthStage[index] ?? _farmLifecycleStages.first,
+        weatherContext: _diseaseScreenByFarmIndex[index]?.weatherContext,
+        fetchGuidance: () => _fetchIssueGuidance(index, issue),
+        captureAndDiagnose: (source) =>
+            _captureAndDiagnoseIssuePhoto(index, issue, source),
+      ),
+    );
+  }
+
+  Future<FarmAlertAdvice> _fetchIssueGuidance(
+    int index,
+    FarmIssueCell issue,
+  ) async {
+    final farm = _farms[index];
+    final farmId = await _resolveSatelliteFarmId(farm, index);
+    final diseaseScreen = _diseaseScreenByFarmIndex[index];
+    return _satelliteService.getFarmAlertAdvice(
+      jwt: _satelliteRequestToken(),
+      body: {
+        'farm_id': farmId,
+        'farm_name': farm.name,
+        'crop': _diseaseCropForFarm(farm),
+        'growth_stage': _farmGrowthStage[index] ?? _growthStageForFarm(index),
+        'season': _diseaseSeasonForFarm(farm),
+        'days_after_sowing': _daysAfterSowing(index),
+        'local_status': _farmStatusAnswer[index],
+        'focus_cell': issue.toJson(),
+        if (diseaseScreen != null) 'disease_screen': diseaseScreen.toJson(),
+        'weather_context': diseaseScreen?.weatherContext,
+      },
+    );
+  }
+
+  Future<FarmPhotoDiagnosis?> _captureAndDiagnoseIssuePhoto(
+    int index,
+    FarmIssueCell issue,
+    HarvestMachineImageSource source,
+  ) async {
+    final shot = await pickHarvestMachineImage(source: source);
+    if (shot == null) return null;
+    final farm = _farms[index];
+    final farmId = await _resolveSatelliteFarmId(farm, index);
+    if (farmId.isEmpty) {
+      throw SatelliteApiException('Farm is not synced to satellite yet');
+    }
+    final path = await _satelliteService.uploadDiseasePhoto(
+      bytes: shot.bytes,
+      farmId: farmId,
+      jwt: _satelliteRequestToken(),
+    );
+    return _satelliteService.diagnoseDiseasePhoto(
+      jwt: _satelliteRequestToken(),
+      body: {
+        'farm_id': farmId,
+        'storage_path': path,
+        'taken_lat': issue.lat,
+        'taken_lng': issue.lng,
+        'crop': _diseaseCropForFarm(farm),
+        'growth_stage': _farmGrowthStage[index],
+        'satellite_context': issue.toJson(),
+      },
+    );
+  }
+
+  String _diseaseCropForFarm(_FarmerFarm farm) {
+    final crop = farm.crop.toLowerCase();
+    return crop.contains('rice') || crop.contains('paddy') ? 'rice' : 'millet';
+  }
+
+  String _diseaseSeasonForFarm(_FarmerFarm farm) {
+    final season = farm.season.toLowerCase();
+    return season.contains('rabi') ? 'rabi' : 'kharif';
+  }
+
+  Map<String, dynamic>? _farmGeometryJson(_FarmerFarm farm) {
+    final ring = farm.polygon;
+    if (ring == null || ring.length < 3) return null;
+    return {
+      'type': 'Polygon',
+      'coordinates': [ring],
+    };
+  }
+
+  Future<void> _runDiseaseScreenForFarm(int index) async {
+    if (index < 0 || index >= _farms.length) return;
+    if (_farmAlertLoading.contains(index)) return;
+
+    _initializeFarmState(index);
+    _refreshFarmStage(index);
+    setState(() {
+      _farmAlertLoading.add(index);
+      _farmAlertErrorByFarmIndex.remove(index);
+    });
+
+    try {
+      final farm = _farms[index];
+      final farmId = await _resolveSatelliteFarmId(farm, index);
+      final crop = _diseaseCropForFarm(farm);
+      final season = _diseaseSeasonForFarm(farm);
+      final growthStage = _farmGrowthStage[index] ?? _growthStageForFarm(index);
+      final diseaseScreen = await _satelliteService.runDiseaseScreen(
+        farmId: farmId,
+        crop: crop,
+        growthStage: growthStage,
+        season: season,
+        geometry: _farmGeometryJson(farm),
+        jwt: _satelliteRequestToken(),
+      );
+
+      final hasFreshRiskData =
+          diseaseScreen.riskCellsCount > 0 ||
+          diseaseScreen.scoutZones.isNotEmpty;
+      final zones = hasFreshRiskData
+          ? await _satelliteService.getDiseaseScoutZones(
+              farmId: farmId,
+              jwt: _satelliteRequestToken(),
+            )
+          : <Map<String, dynamic>>[];
+      final cells = hasFreshRiskData
+          ? await _satelliteService.getDiseaseRiskCells(
+              farmId: farmId,
+              jwt: _satelliteRequestToken(),
+            )
+          : <Map<String, dynamic>>[];
+
+      final advice = await _satelliteService.getFarmAlertAdvice(
+        jwt: _satelliteRequestToken(),
+        body: {
+          'farm_id': farmId,
+          'farm_name': farm.name,
+          'crop': crop,
+          'growth_stage': growthStage,
+          'season': season,
+          'local_status': _farmStatusAnswer[index],
+          'days_after_sowing': _daysAfterSowing(index),
+          'disease_screen': diseaseScreen.toJson(),
+          'scout_zones': zones.take(5).toList(growable: false),
+          'risk_cells': cells.isNotEmpty
+              ? cells.take(20).toList(growable: false)
+              : diseaseScreen.riskCells
+                    .take(20)
+                    .map((cell) => cell.toJson())
+                    .toList(growable: false),
+          'weather_context': diseaseScreen.weatherContext,
+        },
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _diseaseScreenByFarmIndex[index] = diseaseScreen;
+        _diseaseScoutZonesByFarmIndex[index] = zones;
+        _diseaseRiskCellsByFarmIndex[index] = cells;
+        _farmAlertAdviceByFarmIndex[index] = advice;
+      });
+      Get.snackbar(
+        'Farm alerts refreshed',
+        '${farm.name}: ${zones.length} scout zone${zones.length == 1 ? '' : 's'} found.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _farmAlertErrorByFarmIndex[index] = e.toString().replaceFirst(
+          'SatelliteApiException: ',
+          '',
+        );
+      });
+      Get.snackbar(
+        'Alert refresh failed',
+        _farmAlertErrorByFarmIndex[index]!,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() => _farmAlertLoading.remove(index));
     }
   }
 
@@ -1195,7 +1154,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       polygonPoints.isEmpty
           ? null
           : LatLng(
-              polygonPoints.map((point) => point.latitude).reduce((a, b) => a + b) /
+              polygonPoints
+                      .map((point) => point.latitude)
+                      .reduce((a, b) => a + b) /
                   polygonPoints.length,
               polygonPoints
                       .map((point) => point.longitude)
@@ -1315,7 +1276,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
       } else {
         _farmStatusPhotoBytes[index] = result.photoBytes;
         _farmStatusPhotoName[index] =
-            result.photoName ?? 'field-status-${DateTime.now().millisecondsSinceEpoch}.jpg';
+            result.photoName ??
+            'field-status-${DateTime.now().millisecondsSinceEpoch}.jpg';
       }
     });
 
@@ -1375,8 +1337,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     _refreshFarmStage(index);
     final farm = _farms[index];
     final polygons = _farmBoundary(farm);
-    final markers = List<LatLng>.from(_farmDiseaseMarkers[index] ?? const <LatLng>[]);
-    final logs = List<String>.from(_farmDiagnosisLog[index] ?? const <String>[]);
+    final markers = List<LatLng>.from(
+      _farmDiseaseMarkers[index] ?? const <LatLng>[],
+    );
+    final logs = List<String>.from(
+      _farmDiagnosisLog[index] ?? const <String>[],
+    );
     final noteCtrl = TextEditingController();
     final inset = MediaQuery.viewInsetsOf(context).bottom;
     final question = _statusQuestionForStage(_farmGrowthStage[index]!);
@@ -1497,7 +1463,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                             return;
                           }
                           setState(() {
-                            _farmDiseaseMarkers[index] = List<LatLng>.from(markers);
+                            _farmDiseaseMarkers[index] = List<LatLng>.from(
+                              markers,
+                            );
                             _farmDiagnosisLog[index] = List<String>.from(logs);
                           });
                           if (markers.isNotEmpty) {
@@ -1541,16 +1509,13 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     setState(() => _index = _harvestTabIndex);
   }
 
-  void _openDiseaseTab() {
-    setState(() => _index = _diseaseTabIndex);
-  }
-
   void _openAiChatTab() {
     setState(() => _index = _aiChatTabIndex);
   }
 
   void _openMarketPage() {
-    final selectedFarmName = (_selectedFarm >= 0 && _selectedFarm < _farms.length)
+    final selectedFarmName =
+        (_selectedFarm >= 0 && _selectedFarm < _farms.length)
         ? _farms[_selectedFarm].name
         : null;
     Get.to(
@@ -1564,22 +1529,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   void _openNewsPage() {
     final hasFarm = _selectedFarm >= 0 && _selectedFarm < _farms.length;
     final farm = hasFarm ? _farms[_selectedFarm] : null;
-    Get.to(
-      () => NewsPage(
-        farmName: farm?.name,
-        farmLocation: farm?.location,
-      ),
-    );
+    Get.to(() => NewsPage(farmName: farm?.name, farmLocation: farm?.location));
   }
 
   void _openWeatherPage() {
     final hasFarm = _selectedFarm >= 0 && _selectedFarm < _farms.length;
     final farm = hasFarm ? _farms[_selectedFarm] : null;
     Get.to(
-      () => WeatherPage(
-        farmName: farm?.name,
-        farmLocation: farm?.location,
-      ),
+      () => WeatherPage(farmName: farm?.name, farmLocation: farm?.location),
     );
   }
 
@@ -1587,10 +1544,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     final hasFarm = _selectedFarm >= 0 && _selectedFarm < _farms.length;
     final farm = hasFarm ? _farms[_selectedFarm] : null;
     Get.to(
-      () => SchemesPage(
-        farmName: farm?.name,
-        farmLocation: farm?.location,
-      ),
+      () => SchemesPage(farmName: farm?.name, farmLocation: farm?.location),
     );
   }
 
@@ -1709,7 +1663,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         stageSummary: _stageSummary(_selectedFarm),
         onOpenAiChat: _openAiChatTab,
         onOpenFarm: _openFarmTab,
-        onOpenDisease: _openDiseaseTab,
+        onOpenDisease: _openFarmTab,
         onOpenMarket: _openMarketPage,
         satelliteOverview: _satelliteOverviewByFarmIndex[_selectedFarm],
         isSatelliteLoading: _satelliteOverviewLoading.contains(_selectedFarm),
@@ -1723,14 +1677,23 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
           _ensureDiseaseRemoteForFarm(value);
         },
         onOpenFarmInsight: _openFarmMapInsight,
-        onOpenDiagnose: _openDiagnosisFlow,
         onOpenStatusUpdate: _openFarmStatusUpdate,
+        onRefreshAlerts: _runDiseaseScreenForFarm,
+        onOpenIssue: _openFarmIssue,
         farmPolygons: farmPolygons,
         statusByFarm: _farmStatusAnswer,
         stageByFarm: _farmGrowthStage,
         diseaseMarkersByFarm: _farmDiseaseMarkers,
+        scoutZonesByFarm: _diseaseScoutZonesByFarmIndex,
+        riskCellsByFarm: _diseaseRiskCellsByFarmIndex,
+        issueCells: _issueCellsForFarm(_selectedFarm),
         statusUpdatedAt: _farmStatusUpdatedAt,
+        diseaseScreenByFarm: _diseaseScreenByFarmIndex,
+        alertAdviceByFarm: _farmAlertAdviceByFarmIndex,
+        alertErrorByFarm: _farmAlertErrorByFarmIndex,
+        alertLoading: _farmAlertLoading,
         stageSummary: _stageSummary,
+        daysAfterSowing: _daysAfterSowing,
       ),
       _HarvestHomePage(
         farmName: _farm.name,
@@ -1755,15 +1718,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
           ),
         ),
       ),
-      _DiseaseDetectionPage(
-        farm: _farm,
-        diseaseLogs: _farmDiagnosisLog[_selectedFarm] ?? const [],
-        diseaseMarkers: _farmDiseaseMarkers[_selectedFarm] ?? const [],
-        farmPolygon: farmPolygons[_selectedFarm] ?? const [],
-        scoutZones: _diseaseScoutZonesByFarmIndex[_selectedFarm] ?? const [],
-        riskCells: _diseaseRiskCellsByFarmIndex[_selectedFarm] ?? const [],
-        isRemoteLoading: _diseaseRemoteLoading.contains(_selectedFarm),
-      ),
       FarmerAiChatScreen(
         farmName: _farm.name,
         crop: _farm.crop,
@@ -1778,41 +1732,49 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         return Scaffold(
           backgroundColor: AppTheme.surface,
           drawer: _buildDrawer(context),
-          appBar: useSideNav ? null : AppBar(
-            backgroundColor: AppTheme.surface,
-            elevation: 0,
-            toolbarHeight: 66,
-            iconTheme: const IconThemeData(color: AppTheme.greenDark),
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Image.asset(
-                  BrandAssets.logo,
-                  width: 92,
-                  height: 52,
-                  fit: BoxFit.contain,
+          appBar: useSideNav
+              ? null
+              : AppBar(
+                  backgroundColor: AppTheme.surface,
+                  elevation: 0,
+                  toolbarHeight: 66,
+                  iconTheme: const IconThemeData(color: AppTheme.greenDark),
+                  title: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.asset(
+                        BrandAssets.logo,
+                        width: 92,
+                        height: 52,
+                        fit: BoxFit.contain,
+                      ),
+                      const SizedBox(width: 10),
+                      const BrandText(fontSize: 21),
+                    ],
+                  ),
                 ),
-                const SizedBox(width: 10),
-                const BrandText(fontSize: 21),
-              ],
-            ),
-          ),
           body: SafeArea(
             child: useSideNav
                 ? Row(
                     children: [
-                      _buildSideNavigation(context, constraints.maxWidth >= 1060),
+                      _buildSideNavigation(
+                        context,
+                        constraints.maxWidth >= 1060,
+                      ),
                       Expanded(
                         child: AnimatedSwitcher(
                           duration: const Duration(milliseconds: 280),
                           transitionBuilder: (child, animation) {
-                            final offsetTween = Tween<Offset>(
-                              begin: const Offset(0.05, 0),
-                              end: Offset.zero,
-                            ).animate(CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutCubic,
-                            ));
+                            final offsetTween =
+                                Tween<Offset>(
+                                  begin: const Offset(0.05, 0),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
                             return FadeTransition(
                               opacity: animation,
                               child: SlideTransition(
@@ -1832,13 +1794,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                 : AnimatedSwitcher(
                     duration: const Duration(milliseconds: 280),
                     transitionBuilder: (child, animation) {
-                      final offsetTween = Tween<Offset>(
-                        begin: const Offset(0.05, 0),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      ));
+                      final offsetTween =
+                          Tween<Offset>(
+                            begin: const Offset(0.05, 0),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          );
                       return FadeTransition(
                         opacity: animation,
                         child: SlideTransition(
@@ -1877,10 +1842,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFFFFFF),
-            Color(0xFFF4FAEF),
-          ],
+          colors: [Color(0xFFFFFFFF), Color(0xFFF4FAEF)],
         ),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: const Color(0xFFDCE8D2)),
@@ -1911,7 +1873,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
               onOpenApmcMarket: _openMarketPage,
               onOpenSchemes: _openSchemesPage,
               onOpenHistory: _openHistoryIndexPage,
-              onOpenInventory: () => setState(() => _index = _inventoryTabIndex),
+              onOpenInventory: () =>
+                  setState(() => _index = _inventoryTabIndex),
               onOpenProfile: _openProfilePage,
               onOpenSettings: _openSettingsPage,
             ),
@@ -1952,9 +1915,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   }
 
   void _openSettingsPage() {
-    Get.to(
-      () => _SettingsPage(profile: _profile),
-    );
+    Get.to(() => _SettingsPage(profile: _profile));
   }
 
   Widget _buildDrawer(BuildContext context) {
@@ -1975,8 +1936,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                       border: Border.all(color: const Color(0xFFDDE8D4)),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF1B5E20)
-                              .withValues(alpha: 0.08),
+                          color: const Color(
+                            0xFF1B5E20,
+                          ).withValues(alpha: 0.08),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -2033,8 +1995,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                   ),
                   const SizedBox(height: 14),
                   ListTile(
-                    leading:
-                        const Icon(Icons.person_rounded, color: AppTheme.green),
+                    leading: const Icon(
+                      Icons.person_rounded,
+                      color: AppTheme.green,
+                    ),
                     title: const Text(
                       'Profile',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -2045,8 +2009,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                     },
                   ),
                   ListTile(
-                    leading:
-                        const Icon(Icons.history_rounded, color: AppTheme.green),
+                    leading: const Icon(
+                      Icons.history_rounded,
+                      color: AppTheme.green,
+                    ),
                     title: const Text(
                       'Farm History',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -2071,10 +2037,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                     },
                   ),
                   ListTile(
-                    leading: const Icon(
-                      Icons.grain,
-                      color: AppTheme.green,
-                    ),
+                    leading: const Icon(Icons.grain, color: AppTheme.green),
                     title: const Text(
                       'Grain Grading',
                       style: TextStyle(fontWeight: FontWeight.w700),
@@ -2268,7 +2231,8 @@ class _HarvestInventoryLot {
     required this.machineImageName,
   });
 
-  String get lotLabel => '$batchId • $grade • ${estimatedYieldKg.toStringAsFixed(1)}kg';
+  String get lotLabel =>
+      '$batchId • $grade • ${estimatedYieldKg.toStringAsFixed(1)}kg';
 
   Map<String, String> toMarketPayload() {
     return {
@@ -2295,10 +2259,7 @@ class _InventoryPage extends StatefulWidget {
   final List<_HarvestInventoryLot> lots;
   final ValueChanged<_HarvestInventoryLot> onTapListForSell;
 
-  const _InventoryPage({
-    required this.lots,
-    required this.onTapListForSell,
-  });
+  const _InventoryPage({required this.lots, required this.onTapListForSell});
 
   @override
   State<_InventoryPage> createState() => _InventoryPageState();
@@ -2336,16 +2297,19 @@ class _InventoryPageState extends State<_InventoryPage> {
   List<_HarvestInventoryLot> get _filteredLots {
     final selected = _selectedFarm.toLowerCase();
     final query = _searchText.toLowerCase();
-    final filtered = widget.lots.where((lot) {
-      final farmMatch = _selectedFarm == _allFarmsLabel ||
-          lot.farmName.toLowerCase() == selected;
-      if (!farmMatch) return false;
-      if (query.isEmpty) return true;
-      return lot.batchId.toLowerCase().contains(query) ||
-          lot.crop.toLowerCase().contains(query) ||
-          lot.variety.toLowerCase().contains(query) ||
-          lot.grade.toLowerCase().contains(query);
-    }).toList(growable: false);
+    final filtered = widget.lots
+        .where((lot) {
+          final farmMatch =
+              _selectedFarm == _allFarmsLabel ||
+              lot.farmName.toLowerCase() == selected;
+          if (!farmMatch) return false;
+          if (query.isEmpty) return true;
+          return lot.batchId.toLowerCase().contains(query) ||
+              lot.crop.toLowerCase().contains(query) ||
+              lot.variety.toLowerCase().contains(query) ||
+              lot.grade.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
 
     filtered.sort((a, b) {
       switch (_sortBy) {
@@ -2372,13 +2336,18 @@ class _InventoryPageState extends State<_InventoryPage> {
   Widget build(BuildContext context) {
     final lots = _filteredLots;
     final totalBags = lots.fold<int>(0, (sum, lot) => sum + lot.bagCount);
-    final totalQty = lots.fold<double>(0, (sum, lot) => sum + lot.estimatedYieldKg);
+    final totalQty = lots.fold<double>(
+      0,
+      (sum, lot) => sum + lot.estimatedYieldKg,
+    );
     final avgMoisture = lots.isEmpty
         ? 0.0
-        : lots.fold<double>(0, (sum, lot) => sum + lot.moisturePercent) / lots.length;
+        : lots.fold<double>(0, (sum, lot) => sum + lot.moisturePercent) /
+              lots.length;
     final avgScore = lots.isEmpty
         ? 0.0
-        : lots.fold<double>(0, (sum, lot) => sum + lot.gradeScore) / lots.length;
+        : lots.fold<double>(0, (sum, lot) => sum + lot.gradeScore) /
+              lots.length;
 
     return _PageScaffold(
       title: 'Inventory',
@@ -2391,10 +2360,7 @@ class _InventoryPageState extends State<_InventoryPage> {
               child: Row(
                 children: [
                   Expanded(
-                    child: _SummaryStat(
-                      title: 'Lots',
-                      value: '${lots.length}',
-                    ),
+                    child: _SummaryStat(title: 'Lots', value: '${lots.length}'),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -2501,116 +2467,118 @@ class _InventoryPageState extends State<_InventoryPage> {
               ),
             )
           else
-            ...lots.asMap().entries.map(
-              (entry) {
-                final index = entry.key;
-                final lot = entry.value;
-                return Padding(
-                  padding: EdgeInsets.only(bottom: index == lots.length - 1 ? 0 : 10),
-                  child: _Panel(
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            lot.lotLabel,
-                            style: const TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 16,
+            ...lots.asMap().entries.map((entry) {
+              final index = entry.key;
+              final lot = entry.value;
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == lots.length - 1 ? 0 : 10,
+                ),
+                child: _Panel(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          lot.lotLabel,
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Harvested ${_formatDateTime(lot.harvestedAt)}',
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _InventoryChip(label: lot.farmName),
+                            _InventoryChip(label: lot.crop),
+                            _InventoryChip(label: lot.variety),
+                            _InventoryChip(label: 'Grade ${lot.grade}'),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SummaryStat(
+                                title: 'Bags',
+                                value:
+                                    '${lot.bagCount} × ${lot.bagSizeKg.toStringAsFixed(0)}kg',
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Harvested ${_formatDateTime(lot.harvestedAt)}',
-                            style: const TextStyle(
-                              color: AppTheme.textMuted,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _SummaryStat(
+                                title: 'Moisture',
+                                value:
+                                    '${lot.moisturePercent.toStringAsFixed(1)}%',
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
-                              _InventoryChip(label: lot.farmName),
-                              _InventoryChip(label: lot.crop),
-                              _InventoryChip(label: lot.variety),
-                              _InventoryChip(label: 'Grade ${lot.grade}'),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _SummaryStat(
-                                  title: 'Bags',
-                                  value:
-                                      '${lot.bagCount} × ${lot.bagSizeKg.toStringAsFixed(0)}kg',
-                                ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _SummaryStat(
+                                title: 'Quality score',
+                                value: '${lot.gradeScore}',
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _SummaryStat(
-                                  title: 'Moisture',
-                                  value: '${lot.moisturePercent.toStringAsFixed(1)}%',
-                                ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _SummaryStat(
+                                title: 'Est. qty',
+                                value:
+                                    '${lot.estimatedYieldKg.toStringAsFixed(1)}kg',
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _SummaryStat(
-                                  title: 'Quality score',
-                                  value: '${lot.gradeScore}',
-                                ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => widget.onTapListForSell(lot),
+                                icon: const Icon(Icons.storefront_rounded),
+                                label: const Text('List for sale'),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _SummaryStat(
-                                  title: 'Est. qty',
-                                  value: '${lot.estimatedYieldKg.toStringAsFixed(1)}kg',
-                                ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Get.snackbar(
+                                    'Inventory',
+                                    'Coordinates: ${lot.latitude.toStringAsFixed(4)}, ${lot.longitude.toStringAsFixed(4)}',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                  );
+                                },
+                                icon: const Icon(Icons.location_on_outlined),
+                                label: const Text('View lot'),
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  onPressed: () => widget.onTapListForSell(lot),
-                                  icon: const Icon(Icons.storefront_rounded),
-                                  label: const Text('List for sale'),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: () {
-                                    Get.snackbar(
-                                      'Inventory',
-                                      'Coordinates: ${lot.latitude.toStringAsFixed(4)}, ${lot.longitude.toStringAsFixed(4)}',
-                                      snackPosition: SnackPosition.BOTTOM,
-                                    );
-                                  },
-                                  icon: const Icon(Icons.location_on_outlined),
-                                  label: const Text('View lot'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            }),
           const SizedBox(height: 8),
           _Panel(
             child: Padding(
@@ -2750,19 +2718,19 @@ class _FarmerDashboard extends StatelessWidget {
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 340),
                     transitionBuilder: (child, animation) {
-                      final slide = Tween<Offset>(
-                        begin: const Offset(0.04, 0.04),
-                        end: Offset.zero,
-                      ).animate(CurvedAnimation(
-                        parent: animation,
-                        curve: Curves.easeOutCubic,
-                      ));
+                      final slide =
+                          Tween<Offset>(
+                            begin: const Offset(0.04, 0.04),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          );
                       return FadeTransition(
                         opacity: animation,
-                        child: SlideTransition(
-                          position: slide,
-                          child: child,
-                        ),
+                        child: SlideTransition(position: slide, child: child),
                       );
                     },
                     child: _WelcomeHero(
@@ -3033,8 +3001,8 @@ class FarmOverviewSection extends StatelessWidget {
                   final cardWidth = availableWidth >= 760
                       ? (availableWidth - 36) / 4
                       : availableWidth >= 420
-                          ? 178.0
-                          : 172.0;
+                      ? 178.0
+                      : 172.0;
                   return ListView.separated(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
@@ -3062,10 +3030,7 @@ class FarmOverviewSection extends StatelessWidget {
 class FarmMetricCard extends StatelessWidget {
   final FarmMetricData metric;
 
-  const FarmMetricCard({
-    super.key,
-    required this.metric,
-  });
+  const FarmMetricCard({super.key, required this.metric});
 
   @override
   Widget build(BuildContext context) {
@@ -3223,11 +3188,18 @@ class _ApmcMarketBulletin extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              const _MarketBullet(text: 'Finger millet demand is steady in nearby APMC markets.'),
+              const _MarketBullet(
+                text: 'Finger millet demand is steady in nearby APMC markets.',
+              ),
               const SizedBox(height: 8),
-              const _MarketBullet(text: 'Grade and moisture checks improve selling price confidence.'),
+              const _MarketBullet(
+                text:
+                    'Grade and moisture checks improve selling price confidence.',
+              ),
               const SizedBox(height: 8),
-              const _MarketBullet(text: 'Tap to open lot-wise APMC rates and listing options.'),
+              const _MarketBullet(
+                text: 'Tap to open lot-wise APMC rates and listing options.',
+              ),
             ],
           ),
         ),
@@ -3364,9 +3336,7 @@ class FarmOverviewExampleScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Scaffold(
       backgroundColor: Colors.white,
-      body: SafeArea(
-        child: FarmOverviewSection(),
-      ),
+      body: SafeArea(child: FarmOverviewSection()),
     );
   }
 }
@@ -3599,7 +3569,9 @@ class _FarmSatelliteOverviewSection extends StatelessWidget {
                   children: [
                     for (final tile in tiles)
                       SizedBox(
-                        width: (constraints.maxWidth - ((crossAxisCount - 1) * 10)) /
+                        width:
+                            (constraints.maxWidth -
+                                ((crossAxisCount - 1) * 10)) /
                             crossAxisCount,
                         child: _FarmSatelliteMetricCard(tile: tile),
                       ),
@@ -3676,7 +3648,10 @@ class _SelectedFarmHomeCard extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.greenPale.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(999),
@@ -3684,7 +3659,11 @@ class _SelectedFarmHomeCard extends StatelessWidget {
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.cloud_done_outlined, color: AppTheme.greenDark, size: 14),
+                      Icon(
+                        Icons.cloud_done_outlined,
+                        color: AppTheme.greenDark,
+                        size: 14,
+                      ),
                       SizedBox(width: 5),
                       Text(
                         'Synced view',
@@ -3716,21 +3695,33 @@ class _SelectedFarmHomeCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: _FarmMetric(label: 'Area', value: farm.area)),
+                Expanded(
+                  child: _FarmMetric(label: 'Area', value: farm.area),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _FarmMetric(label: 'Crop', value: farm.crop)),
+                Expanded(
+                  child: _FarmMetric(label: 'Crop', value: farm.crop),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _FarmMetric(label: 'Variety', value: farm.variety)),
+                Expanded(
+                  child: _FarmMetric(label: 'Variety', value: farm.variety),
+                ),
               ],
             ),
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: _FarmMetric(label: 'Health', value: farm.health)),
+                Expanded(
+                  child: _FarmMetric(label: 'Health', value: farm.health),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _FarmMetric(label: 'NDVI', value: farm.ndvi)),
+                Expanded(
+                  child: _FarmMetric(label: 'NDVI', value: farm.ndvi),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _FarmMetric(label: 'Moisture', value: farm.moisture)),
+                Expanded(
+                  child: _FarmMetric(label: 'Moisture', value: farm.moisture),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -3934,10 +3925,7 @@ class _HarvestReadinessCard extends StatelessWidget {
   final _FarmerFarm farm;
   final VoidCallback onOpenAiChat;
 
-  const _HarvestReadinessCard({
-    required this.farm,
-    required this.onOpenAiChat,
-  });
+  const _HarvestReadinessCard({required this.farm, required this.onOpenAiChat});
 
   @override
   Widget build(BuildContext context) {
@@ -4015,10 +4003,7 @@ class _FarmSatelliteOverview {
   final List<_SatelliteMetricTileData> tiles;
   final String? note;
 
-  const _FarmSatelliteOverview({
-    required this.tiles,
-    this.note,
-  });
+  const _FarmSatelliteOverview({required this.tiles, this.note});
 }
 
 class _SatelliteMetricTileData {
@@ -4090,38 +4075,35 @@ class _SnapshotMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.greenDark,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.greenDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -4144,12 +4126,12 @@ class _RecentActivityCard extends StatelessWidget {
       child: Column(
         children: [
           _ActivityRow(
-                icon: Icons.bug_report_outlined,
-                iconColor: const Color(0xFFE07800),
-                title: 'Disease Risk Checked',
-                detail: '${farm.name} • Leaf spot moderate',
-                onTap: onOpenDisease,
-              ),
+            icon: Icons.bug_report_outlined,
+            iconColor: const Color(0xFFE07800),
+            title: 'Disease Risk Checked',
+            detail: '${farm.name} • Leaf spot moderate',
+            onTap: onOpenDisease,
+          ),
           const Divider(height: 1),
           _ActivityRow(
             icon: Icons.auto_awesome_outlined,
@@ -4289,10 +4271,38 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
   String _gradingMessage = 'Run grading to generate verified lot score.';
 
   static const Map<String, Map<String, double>> _yieldCurve = {
-    'Finger Millet': {'A+': 1.00, 'A': 0.97, 'B+': 0.93, 'B': 0.88, 'C': 0.80, 'D': 0.68},
-    'Foxtail Millet': {'A+': 1.00, 'A': 0.96, 'B+': 0.92, 'B': 0.86, 'C': 0.78, 'D': 0.66},
-    'Rice': {'A+': 1.00, 'A': 0.98, 'B+': 0.93, 'B': 0.86, 'C': 0.77, 'D': 0.65},
-    'Bajra': {'A+': 1.00, 'A': 0.96, 'B+': 0.92, 'B': 0.84, 'C': 0.76, 'D': 0.64},
+    'Finger Millet': {
+      'A+': 1.00,
+      'A': 0.97,
+      'B+': 0.93,
+      'B': 0.88,
+      'C': 0.80,
+      'D': 0.68,
+    },
+    'Foxtail Millet': {
+      'A+': 1.00,
+      'A': 0.96,
+      'B+': 0.92,
+      'B': 0.86,
+      'C': 0.78,
+      'D': 0.66,
+    },
+    'Rice': {
+      'A+': 1.00,
+      'A': 0.98,
+      'B+': 0.93,
+      'B': 0.86,
+      'C': 0.77,
+      'D': 0.65,
+    },
+    'Bajra': {
+      'A+': 1.00,
+      'A': 0.96,
+      'B+': 0.92,
+      'B': 0.84,
+      'C': 0.76,
+      'D': 0.64,
+    },
   };
 
   double _estimatedYield({
@@ -4300,8 +4310,16 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     required int bagCount,
     required String grade,
   }) {
-    final cropMap = _yieldCurve[widget.cropName] ??
-        const {'A+': 1.0, 'A': 0.95, 'B+': 0.9, 'B': 0.83, 'C': 0.74, 'D': 0.62};
+    final cropMap =
+        _yieldCurve[widget.cropName] ??
+        const {
+          'A+': 1.0,
+          'A': 0.95,
+          'B+': 0.9,
+          'B': 0.83,
+          'C': 0.74,
+          'D': 0.62,
+        };
     final factor = cropMap[grade] ?? 1.0;
     return bagSize * bagCount * factor;
   }
@@ -4342,8 +4360,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         _farmLongitude != null;
   }
 
-  bool get _canCaptureImage =>
-      _farmLatitude != null && _farmLongitude != null;
+  bool get _canCaptureImage => _farmLatitude != null && _farmLongitude != null;
 
   Future<HarvestMachineImageSource?> _chooseMachineImageSource() {
     return showModalBottomSheet<HarvestMachineImageSource>(
@@ -4373,19 +4390,15 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
                   leading: const Icon(Icons.photo_camera_rounded),
                   title: const Text('Open camera'),
                   subtitle: const Text('Click a new machine photo'),
-                  onTap: () => Navigator.pop(
-                    context,
-                    HarvestMachineImageSource.camera,
-                  ),
+                  onTap: () =>
+                      Navigator.pop(context, HarvestMachineImageSource.camera),
                 ),
                 ListTile(
                   leading: const Icon(Icons.photo_library_rounded),
                   title: const Text('Select from gallery'),
                   subtitle: const Text('Use an existing machine image'),
-                  onTap: () => Navigator.pop(
-                    context,
-                    HarvestMachineImageSource.gallery,
-                  ),
+                  onTap: () =>
+                      Navigator.pop(context, HarvestMachineImageSource.gallery),
                 ),
               ],
             ),
@@ -4494,14 +4507,14 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     final grade = score >= 92
         ? 'A+'
         : score >= 84
-            ? 'A'
-            : score >= 76
-                ? 'B+'
-                : score >= 68
-                    ? 'B'
-                    : score >= 60
-            ? 'C'
-            : 'D';
+        ? 'A'
+        : score >= 76
+        ? 'B+'
+        : score >= 68
+        ? 'B'
+        : score >= 60
+        ? 'C'
+        : 'D';
     final estimatedYield = _estimatedYield(
       bagSize: bagSize,
       bagCount: bagCount,
@@ -4569,8 +4582,8 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
       _batchId = _createBatchId();
     }
     final batchId = _batchId;
-    final totalKg =
-        (double.parse(bagSize) * int.parse(bagCount)).toStringAsFixed(1);
+    final totalKg = (double.parse(bagSize) * int.parse(bagCount))
+        .toStringAsFixed(1);
     Get.toNamed(
       '/farmer/harvest-qr',
       arguments: {
@@ -4660,20 +4673,26 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
                   TextField(
                     controller: _bagSizeCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Bag size (kg)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Bag size (kg)',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   TextField(
                     controller: _bagCountCtrl,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Number of bags'),
+                    decoration: const InputDecoration(
+                      labelText: 'Number of bags',
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _isLocationFetching ? null : _fetchLocation,
+                          onPressed: _isLocationFetching
+                              ? null
+                              : _fetchLocation,
                           icon: const Icon(Icons.gps_fixed_rounded),
                           label: const Text('Live location'),
                         ),
@@ -4681,8 +4700,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _isCapturingImage ||
-                                  !_canCaptureImage
+                          onPressed: _isCapturingImage || !_canCaptureImage
                               ? null
                               : _captureMachineImage,
                           icon: _isCapturingImage
@@ -4760,7 +4778,9 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
                           )
                         : const Icon(Icons.auto_awesome_rounded),
                     label: Text(
-                      _isGrading ? 'Running grading...' : 'Run grading (mandatory)',
+                      _isGrading
+                          ? 'Running grading...'
+                          : 'Run grading (mandatory)',
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -4890,416 +4910,8 @@ class _InfoRow extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
-        Text(
-          value,
-          style: const TextStyle(fontWeight: FontWeight.w900),
-        ),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
       ],
-    );
-  }
-}
-
-class _DiseaseDetectionPage extends StatelessWidget {
-  final _FarmerFarm farm;
-  final List<String> diseaseLogs;
-  final List<LatLng> diseaseMarkers;
-  final List<LatLng> farmPolygon;
-  final List<Map<String, dynamic>> scoutZones;
-  final List<Map<String, dynamic>> riskCells;
-  final bool isRemoteLoading;
-
-  const _DiseaseDetectionPage({
-    required this.farm,
-    required this.diseaseLogs,
-    required this.diseaseMarkers,
-    required this.farmPolygon,
-    required this.scoutZones,
-    required this.riskCells,
-    required this.isRemoteLoading,
-  });
-
-  List<CircleMarker> get _diseaseCircles {
-    return diseaseMarkers
-        .map(
-          (point) => CircleMarker(
-            point: point,
-            radius: 9,
-            useRadiusInMeter: false,
-            borderColor: Colors.white,
-            borderStrokeWidth: 1.5,
-            color: Colors.redAccent.withValues(alpha: 0.62),
-          ),
-        )
-        .toList();
-  }
-
-  List<CircleMarker> get _remoteRiskCircles {
-    return riskCells
-        .take(40)
-        .map((cell) {
-          final lat = (cell['cell_lat'] as num?)?.toDouble();
-          final lng = (cell['cell_lng'] as num?)?.toDouble();
-          if (lat == null || lng == null) return null;
-          final risk = ((cell['composite_risk'] as num?)?.toDouble() ?? 0).clamp(0, 1).toDouble();
-          return CircleMarker(
-            point: LatLng(lat, lng),
-            radius: 5 + (risk * 9),
-            useRadiusInMeter: false,
-            borderColor: Colors.white,
-            borderStrokeWidth: 1,
-            color: Colors.deepOrange.withValues(alpha: 0.18 + (risk * 0.45)),
-          );
-        })
-        .whereType<CircleMarker>()
-        .toList(growable: false);
-  }
-
-  double get _maxRemoteRisk {
-    var value = 0.0;
-    for (final zone in scoutZones) {
-      final risk = (zone['max_risk_score'] as num?)?.toDouble() ?? 0;
-      if (risk > value) value = risk;
-    }
-    for (final cell in riskCells) {
-      final risk = (cell['composite_risk'] as num?)?.toDouble() ?? 0;
-      if (risk > value) value = risk;
-    }
-    return value.clamp(0, 1).toDouble();
-  }
-
-  String get _riskLabel {
-    final risk = _maxRemoteRisk;
-    if (risk >= 0.7) return 'High';
-    if (risk >= 0.4) return 'Moderate';
-    if (risk > 0) return 'Low';
-    return 'Pending';
-  }
-
-  List<String> get _candidateDiseases {
-    final values = <String>{};
-    for (final zone in scoutZones) {
-      final raw = zone['disease_candidates'];
-      if (raw is List) {
-        values.addAll(raw.map((item) => '$item').where((item) => item.trim().isNotEmpty));
-      }
-    }
-    if (values.isEmpty && farm.crop.toLowerCase().contains('rice')) {
-      values.addAll(['Blast', 'Brown spot', 'Bacterial leaf blight']);
-    }
-    if (values.isEmpty) {
-      values.addAll(['Leaf spot', 'Downy mildew', 'Rust']);
-    }
-    return values.take(4).toList(growable: false);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final allCircles = [..._remoteRiskCircles, ..._diseaseCircles];
-    return _PageScaffold(
-      title: 'Disease Detection',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SatelliteMapView(
-                    farmPolygon: farmPolygon,
-                    heatCircles: allCircles,
-                    height: 210,
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          farm.name,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      _DiseaseStatusPill(label: _riskLabel),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${farm.crop} • ${farm.variety} • ${farm.area}',
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _SummaryStat(
-                          title: 'Remote zones',
-                          value: isRemoteLoading ? '...' : '${scoutZones.length}',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _SummaryStat(
-                          title: 'Risk cells',
-                          value: isRemoteLoading ? '...' : '${riskCells.length}',
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _SummaryStat(
-                          title: 'Max risk',
-                          value: _maxRemoteRisk == 0
-                              ? '--'
-                              : '${(_maxRemoteRisk * 100).round()}%',
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () => Get.snackbar(
-                        'Disease Detection',
-                        'Image detection model connection is ready to be wired here.',
-                        snackPosition: SnackPosition.BOTTOM,
-                      ),
-                      icon: const Icon(Icons.camera_alt_outlined),
-                      label: const Text('Scan crop photo'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Likely Risks',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  for (final disease in _candidateDiseases)
-                    _RiskRow(
-                      title: disease,
-                      status: _riskLabel == 'Pending' ? 'Watch' : _riskLabel,
-                      color: _riskLabel == 'High'
-                          ? AppTheme.error
-                          : _riskLabel == 'Moderate'
-                              ? const Color(0xFFE07800)
-                              : AppTheme.green,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Field scouting and treatment',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Inspect highlighted zones first. Capture close-up leaf and stem photos, avoid spraying before confirmation, and isolate severely affected patches if symptoms spread.',
-                    style: TextStyle(
-                      color: AppTheme.textDark,
-                      height: 1.45,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _InventoryChip(label: 'Scout early morning'),
-                      _InventoryChip(label: 'Photo evidence'),
-                      _InventoryChip(label: 'FPO review'),
-                      if (farm.irrigation.isNotEmpty) _InventoryChip(label: farm.irrigation),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Diagnosis logs',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  if (diseaseLogs.isEmpty && scoutZones.isEmpty)
-                    const Text(
-                      'No diagnosis logged yet. Use Farm > Diagnose to mark zones, then this page will show local notes and synced scout records.',
-                      style: TextStyle(color: AppTheme.textMuted, height: 1.4),
-                    )
-                  else ...[
-                    for (final zone in scoutZones.take(4))
-                      _DiseaseLogTile(
-                        title: 'Remote zone ${zone['zone_rank'] ?? '-'}',
-                        detail:
-                            '${zone['status'] ?? 'pending'} • risk ${(((zone['max_risk_score'] as num?)?.toDouble() ?? 0) * 100).round()}% • ${zone['scan_date'] ?? ''}',
-                      ),
-                    for (final log in diseaseLogs.take(5))
-                      _DiseaseLogTile(title: 'Local observation', detail: log),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DiseaseStatusPill extends StatelessWidget {
-  final String label;
-
-  const _DiseaseStatusPill({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = label == 'High'
-        ? AppTheme.error
-        : label == 'Moderate'
-            ? const Color(0xFFE07800)
-            : AppTheme.green;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        '$label risk',
-        style: TextStyle(color: color, fontWeight: FontWeight.w900, fontSize: 12),
-      ),
-    );
-  }
-}
-
-class _DiseaseLogTile extends StatelessWidget {
-  final String title;
-  final String detail;
-
-  const _DiseaseLogTile({required this.title, required this.detail});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.greenPale.withValues(alpha: 0.28),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.bug_report_outlined, color: AppTheme.greenDark, size: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 3),
-                  Text(
-                    detail,
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      height: 1.35,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RiskRow extends StatelessWidget {
-  final String title;
-  final String status;
-  final Color color;
-
-  const _RiskRow({
-    required this.title,
-    required this.status,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              status,
-              style: TextStyle(color: color, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -5309,43 +4921,234 @@ class _FarmPage extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelectFarm;
   final ValueChanged<int> onOpenFarmInsight;
-  final ValueChanged<int> onOpenDiagnose;
   final ValueChanged<int> onOpenStatusUpdate;
+  final ValueChanged<int> onRefreshAlerts;
+  final void Function(int, FarmIssueCell) onOpenIssue;
   final Map<int, List<LatLng>> farmPolygons;
   final Map<int, String> statusByFarm;
   final Map<int, String> stageByFarm;
   final Map<int, List<LatLng>> diseaseMarkersByFarm;
+  final Map<int, List<Map<String, dynamic>>> scoutZonesByFarm;
+  final Map<int, List<Map<String, dynamic>>> riskCellsByFarm;
+  final List<FarmIssueCell> issueCells;
   final Map<int, DateTime> statusUpdatedAt;
+  final Map<int, DiseaseScreenResult> diseaseScreenByFarm;
+  final Map<int, FarmAlertAdvice> alertAdviceByFarm;
+  final Map<int, String> alertErrorByFarm;
+  final Set<int> alertLoading;
   final String Function(int) stageSummary;
+  final int Function(int) daysAfterSowing;
 
   const _FarmPage({
     required this.farms,
     required this.selectedIndex,
     required this.onSelectFarm,
     required this.onOpenFarmInsight,
-    required this.onOpenDiagnose,
     required this.onOpenStatusUpdate,
+    required this.onRefreshAlerts,
+    required this.onOpenIssue,
     required this.farmPolygons,
     required this.statusByFarm,
     required this.stageByFarm,
     required this.diseaseMarkersByFarm,
+    required this.scoutZonesByFarm,
+    required this.riskCellsByFarm,
+    required this.issueCells,
     required this.statusUpdatedAt,
+    required this.diseaseScreenByFarm,
+    required this.alertAdviceByFarm,
+    required this.alertErrorByFarm,
+    required this.alertLoading,
     required this.stageSummary,
+    required this.daysAfterSowing,
   });
 
-  List<CircleMarker> _diseaseCircles(List<LatLng> points) {
-    return points
-        .map(
-          (point) => CircleMarker(
-            point: point,
-            radius: 9,
-            useRadiusInMeter: false,
-            borderColor: Colors.white,
-            borderStrokeWidth: 1.5,
-            color: Colors.redAccent.withValues(alpha: 0.62),
+  static double? _readDouble(Map<String, dynamic> row, List<String> keys) {
+    for (final key in keys) {
+      final value = row[key];
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+    }
+    return null;
+  }
+
+  static Color _riskColor(double risk) {
+    if (risk >= 0.72) return const Color(0xFFD32F2F);
+    if (risk >= 0.55) return const Color(0xFFF57C00);
+    if (risk >= 0.35) return const Color(0xFFFBC02D);
+    return AppTheme.green;
+  }
+
+  static String _riskLabel(double risk) {
+    if (risk >= 0.72) return 'High';
+    if (risk >= 0.55) return 'Watch';
+    if (risk > 0) return 'Low';
+    return 'Pending';
+  }
+
+  static Color _severityColor(String severity) {
+    switch (severity.toLowerCase()) {
+      case 'critical':
+      case 'high':
+        return const Color(0xFFD32F2F);
+      case 'medium':
+      case 'watch':
+        return const Color(0xFFF57C00);
+      default:
+        return AppTheme.green;
+    }
+  }
+
+  static String _formatScanDate(String raw) {
+    if (raw.isEmpty) return 'Not screened yet';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    return '${parsed.day.toString().padLeft(2, '0')}/${parsed.month.toString().padLeft(2, '0')}/${parsed.year}';
+  }
+
+  static String _formatWeatherValue(Object? raw, String suffix) {
+    if (raw is num) return '${raw.toStringAsFixed(raw >= 10 ? 0 : 1)}$suffix';
+    if (raw is String && raw.trim().isNotEmpty) return '$raw$suffix';
+    return '--';
+  }
+
+  static const Color _abioticColor = Color(0xFF1976D2);
+  static const Color _zoneColor = Color(0xFF7B1FA2);
+
+  static Color _issueColor(FarmIssueCell issue) {
+    if (issue.isScoutZone) return _zoneColor;
+    if (!issue.isDisease) return _abioticColor;
+    // Disease candidates never render green: floor at the amber band.
+    return _riskColor(math.max(issue.compositeRisk, 0.35));
+  }
+
+  static IconData _issueIcon(FarmIssueCell issue) {
+    if (issue.isScoutZone) return Icons.travel_explore_rounded;
+    if (!issue.isDisease) return Icons.water_drop_rounded;
+    return Icons.coronavirus_rounded;
+  }
+
+  static String _issueTitle(FarmIssueCell issue) {
+    if (issue.isScoutZone) return 'Scout zone';
+    if (!issue.isDisease) return 'Crop stress (water/heat)';
+    final names = issue.diseaseCandidates
+        .map((name) => name.replaceAll('_', ' '))
+        .join(', ');
+    return 'Possible $names';
+  }
+
+  /// Issue locations worth a walk: every flagged cell, or the top few when
+  /// nothing crosses the risk floor so the farmer still sees where to check.
+  static List<FarmIssueCell> _visibleIssues(List<FarmIssueCell> cells) {
+    final flagged = cells
+        .where((cell) => cell.compositeRisk >= 0.30)
+        .take(40)
+        .toList(growable: false);
+    if (flagged.isNotEmpty) return flagged;
+    final sorted = [...cells]
+      ..sort((a, b) => b.compositeRisk.compareTo(a.compositeRisk));
+    return sorted.take(5).toList(growable: false);
+  }
+
+  List<Marker> _issueMarkers({
+    required List<FarmIssueCell> cells,
+    required List<Map<String, dynamic>> scoutZones,
+    required void Function(FarmIssueCell) onTap,
+  }) {
+    final issues = <FarmIssueCell>[
+      ..._visibleIssues(cells),
+      ...scoutZones
+          .map(FarmIssueCell.fromScoutZone)
+          .where((zone) => zone.hasLocation),
+    ];
+    return [
+      for (final issue in issues)
+        Marker(
+          point: LatLng(issue.lat, issue.lng),
+          width: issue.isScoutZone ? 30 : 24,
+          height: issue.isScoutZone ? 30 : 24,
+          child: GestureDetector(
+            onTap: () => onTap(issue),
+            child: Container(
+              decoration: BoxDecoration(
+                color: _issueColor(issue),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Icon(
+                _issueIcon(issue),
+                size: issue.isScoutZone ? 15 : 12,
+                color: Colors.white,
+              ),
+            ),
           ),
-        )
-        .toList();
+        ),
+    ];
+  }
+
+  List<CircleMarker> _alertCircles({
+    required List<LatLng> localMarkers,
+    required List<Map<String, dynamic>> scoutZones,
+  }) {
+    final circles = <CircleMarker>[
+      for (final point in localMarkers)
+        CircleMarker(
+          point: point,
+          radius: 9,
+          useRadiusInMeter: false,
+          borderColor: Colors.white,
+          borderStrokeWidth: 1.5,
+          color: Colors.redAccent.withValues(alpha: 0.62),
+        ),
+    ];
+
+    for (final zone in scoutZones) {
+      final lat = _readDouble(zone, const ['centroid_lat', 'lat']);
+      final lng = _readDouble(zone, const ['centroid_lng', 'lng']);
+      if (lat == null || lng == null) continue;
+      circles.add(
+        CircleMarker(
+          point: LatLng(lat, lng),
+          radius: 16,
+          useRadiusInMeter: false,
+          borderColor: _zoneColor,
+          borderStrokeWidth: 2,
+          color: _zoneColor.withValues(alpha: 0.18),
+        ),
+      );
+    }
+
+    return circles;
+  }
+
+  double _maxRisk(
+    List<Map<String, dynamic>> scoutZones,
+    List<Map<String, dynamic>> riskCells,
+    List<FarmIssueCell> issueCells,
+  ) {
+    var maxRisk = 0.0;
+    for (final row in [...scoutZones, ...riskCells]) {
+      maxRisk = math.max(
+        maxRisk,
+        _readDouble(row, const [
+              'max_risk_score',
+              'composite_risk',
+              'risk_score',
+            ]) ??
+            0,
+      );
+    }
+    for (final cell in issueCells) {
+      maxRisk = math.max(maxRisk, cell.compositeRisk);
+    }
+    return maxRisk;
   }
 
   @override
@@ -5353,11 +5156,26 @@ class _FarmPage extends StatelessWidget {
     final selected = farms[selectedIndex];
     final selectedPolygon = farmPolygons[selectedIndex] ?? const [];
     final diseaseMarkers = diseaseMarkersByFarm[selectedIndex] ?? const [];
+    final scoutZones =
+        scoutZonesByFarm[selectedIndex] ?? const <Map<String, dynamic>>[];
+    final riskCells =
+        riskCellsByFarm[selectedIndex] ?? const <Map<String, dynamic>>[];
+    final diseaseScreen = diseaseScreenByFarm[selectedIndex];
+    final advice = alertAdviceByFarm[selectedIndex];
+    final alertError = alertErrorByFarm[selectedIndex];
+    final isLoading = alertLoading.contains(selectedIndex);
     final currentStage = stageByFarm[selectedIndex] ?? 'Sowing';
     final currentStatus = statusByFarm[selectedIndex] ?? 'No status update yet';
     final updatedAt = statusUpdatedAt[selectedIndex];
+    final maxRisk = _maxRisk(scoutZones, riskCells, issueCells);
+    final weather = diseaseScreen?.weatherContext;
+    final issueMarkers = _issueMarkers(
+      cells: issueCells,
+      scoutZones: scoutZones,
+      onTap: (issue) => onOpenIssue(selectedIndex, issue),
+    );
     return _PageScaffold(
-      title: 'My Farms',
+      title: 'Farm Alerts',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -5367,13 +5185,13 @@ class _FarmPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                    const Text(
-                      'Farm Overview',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                      ),
+                  const Text(
+                    'Important alerts',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                   const SizedBox(height: 14),
                   _SelectedFarmHeader(farm: selected),
@@ -5389,37 +5207,90 @@ class _FarmPage extends StatelessWidget {
                   _InfoStrip(
                     icon: Icons.track_changes_rounded,
                     label: 'Current status',
-                    value: '$currentStage • $currentStatus',
+                    value: '$currentStage - $currentStatus',
                   ),
                   if (updatedAt != null) ...[
                     const SizedBox(height: 8),
                     _InfoStrip(
                       icon: Icons.schedule_outlined,
                       label: 'Updated',
-                      value: '${updatedAt.day.toString().padLeft(2, '0')}/${updatedAt.month.toString().padLeft(2, '0')} ${updatedAt.hour.toString().padLeft(2, '0')}:${updatedAt.minute.toString().padLeft(2, '0')}',
+                      value:
+                          '${updatedAt.day.toString().padLeft(2, '0')}/${updatedAt.month.toString().padLeft(2, '0')} ${updatedAt.hour.toString().padLeft(2, '0')}:${updatedAt.minute.toString().padLeft(2, '0')}',
                     ),
                   ],
                   const SizedBox(height: 12),
-                  InkWell(
-                    onTap: () => onOpenFarmInsight(selectedIndex),
-                    child: SizedBox(
-                      height: 172,
-                      child: SatelliteMapView(
-                        farmPolygon: selectedPolygon,
-                        heatCircles: _diseaseCircles(diseaseMarkers),
-                        height: 172,
-                        showZoomControls: true,
+                  SizedBox(
+                    height: 196,
+                    child: SatelliteMapView(
+                      farmPolygon: selectedPolygon,
+                      heatCircles: _alertCircles(
+                        localMarkers: diseaseMarkers,
+                        scoutZones: scoutZones,
                       ),
+                      markers: issueMarkers,
+                      height: 196,
+                      showZoomControls: true,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  if (issueMarkers.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
+                      children: const [
+                        _IssueLegendItem(
+                          color: Color(0xFFF57C00),
+                          label: 'Disease risk',
+                        ),
+                        _IssueLegendItem(
+                          color: _abioticColor,
+                          label: 'Water/heat stress',
+                        ),
+                        _IssueLegendItem(
+                          color: _zoneColor,
+                          label: 'Scout zone',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Tap a spot on the map to see the issue and get guidance.',
+                      style: TextStyle(
+                        color: AppTheme.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => onOpenFarmInsight(selectedIndex),
+                      icon: const Icon(Icons.open_in_full_rounded, size: 16),
+                      label: const Text('Open full farm view'),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => onOpenDiagnose(selectedIndex),
-                          icon: const Icon(Icons.bug_report_rounded),
-                          label: const Text('Diagnose'),
+                        child: FilledButton.icon(
+                          onPressed: isLoading
+                              ? null
+                              : () => onRefreshAlerts(selectedIndex),
+                          icon: isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
+                          label: Text(
+                            isLoading ? 'Refreshing...' : 'Refresh alerts',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -5435,10 +5306,156 @@ class _FarmPage extends StatelessWidget {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      _FarmMetric(label: 'Area', value: selected.area),
-                      _FarmMetric(label: 'NDVI', value: selected.ndvi),
-                      _FarmMetric(label: 'Moisture', value: selected.moisture),
+                      Expanded(
+                        child: _SummaryStat(
+                          title: 'Scout zones',
+                          value: scoutZones.length.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SummaryStat(
+                          title: 'Risk cells',
+                          value:
+                              diseaseScreen?.riskCellsCount.toString() ??
+                              riskCells.length.toString(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _SummaryStat(
+                          title: 'Max risk',
+                          value: _riskLabel(maxRisk),
+                        ),
+                      ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (alertError != null) ...[
+            _FarmAlertCard(
+              alert: FarmAlertItem(
+                title: 'Alert refresh failed',
+                detail: alertError,
+                severity: 'high',
+                action:
+                    'Try again after checking network and API configuration.',
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          _SectionTitle(title: 'Important'),
+          const SizedBox(height: 10),
+          if (advice?.importantAlerts.isNotEmpty == true)
+            for (final alert in advice!.importantAlerts)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _FarmAlertCard(alert: alert),
+              )
+          else
+            const _FarmAlertEmptyState(
+              icon: Icons.notifications_active_outlined,
+              title: 'No important alerts yet',
+              detail:
+                  'Refresh alerts to screen this farm for disease and field risk.',
+            ),
+          const SizedBox(height: 16),
+          _SectionTitle(title: 'Weather'),
+          const SizedBox(height: 10),
+          if (weather != null) ...[
+            _SowingWeekWeatherCard(
+              daysAfterSowing: daysAfterSowing(selectedIndex),
+              stage: currentStage,
+              weather: weather,
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (advice?.weatherAlerts.isNotEmpty == true)
+            for (final alert in advice!.weatherAlerts)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _FarmAlertCard(alert: alert),
+              )
+          else if (weather != null)
+            _WeatherAlertSnapshot(
+              rain: _formatWeatherValue(weather['total_rain_mm'], ' mm'),
+              wetness: _formatWeatherValue(weather['leaf_wetness_hours'], ' h'),
+              temperature: _formatWeatherValue(weather['mean_temp_c'], ' C'),
+            )
+          else
+            const _FarmAlertEmptyState(
+              icon: Icons.cloud_outlined,
+              title: 'No weather alert yet',
+              detail:
+                  'Refresh alerts to check rain, wetness and temperature risk.',
+            ),
+          if (advice?.nextActions.isNotEmpty == true) ...[
+            const SizedBox(height: 16),
+            _Panel(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Next actions',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    for (final action in advice!.nextActions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.check_circle_outline,
+                              size: 18,
+                              color: AppTheme.green,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                action,
+                                style: const TextStyle(
+                                  color: AppTheme.textMuted,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _Panel(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _InventoryChip(
+                    label:
+                        'Last screen: ${_formatScanDate(diseaseScreen?.scanDate ?? '')}',
+                  ),
+                  _InventoryChip(
+                    label: 'Confidence: ${advice?.confidence ?? 'pending'}',
+                  ),
+                  _InventoryChip(
+                    label: 'Images: ${diseaseScreen?.imagesAnalyzed ?? 0}',
                   ),
                 ],
               ),
@@ -5455,7 +5472,6 @@ class _FarmPage extends StatelessWidget {
                 selected: i == selectedIndex,
                 onTap: () {
                   onSelectFarm(i);
-                  onOpenFarmInsight(i);
                 },
               ),
             ),
@@ -5466,39 +5482,813 @@ class _FarmPage extends StatelessWidget {
   }
 }
 
-class _DiagonalFarmActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String tooltip;
-  final VoidCallback onPressed;
+class _FarmAlertCard extends StatelessWidget {
+  final FarmAlertItem alert;
 
-  const _DiagonalFarmActionButton({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.onPressed,
+  const _FarmAlertCard({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _FarmPage._severityColor(alert.severity);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.priority_high_rounded, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        alert.title,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      alert.severity.toUpperCase(),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+                if (alert.detail.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    alert.detail,
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      height: 1.35,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                if (alert.action.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    alert.action,
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      height: 1.35,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeatherAlertSnapshot extends StatelessWidget {
+  final String rain;
+  final String wetness;
+  final String temperature;
+
+  const _WeatherAlertSnapshot({
+    required this.rain,
+    required this.wetness,
+    required this.temperature,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: SizedBox(
-        height: 46,
-        child: FloatingActionButton.extended(
-          heroTag: 'farm-diagnose-fab',
-          tooltip: tooltip,
-          onPressed: onPressed,
-          icon: Icon(icon),
-          label: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          backgroundColor: const Color(0xFF1B5E20),
-          foregroundColor: Colors.white,
-          shape: const StadiumBorder(),
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Expanded(
+              child: _SummaryStat(title: 'Rain', value: rain),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SummaryStat(title: 'Wetness', value: wetness),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _SummaryStat(title: 'Temp', value: temperature),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _IssueLegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+
+  const _IssueLegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeekWeatherAssessment {
+  final String level;
+  final String note;
+
+  const _WeekWeatherAssessment({required this.level, required this.note});
+}
+
+/// Reads the 7-day weather context against the crop's week after sowing: the
+/// same rain or leaf wetness is a different risk at germination, tillering and
+/// grain filling.
+_WeekWeatherAssessment _assessSowingWeekWeather({
+  required int daysAfterSowing,
+  required String stage,
+  required Map<String, dynamic> weather,
+}) {
+  double read(Object? value) => value is num ? value.toDouble() : 0;
+  final rain = read(weather['total_rain_mm']);
+  final wetness = read(weather['leaf_wetness_hours']);
+  final temp = read(weather['mean_temp_c']);
+  final week = daysAfterSowing ~/ 7 + 1;
+
+  final fungalWeather = wetness >= 30 && temp >= 18 && temp <= 30;
+  final level = (wetness >= 48 || rain >= 80)
+      ? 'high'
+      : (fungalWeather || rain >= 40)
+      ? 'medium'
+      : 'low';
+
+  String note;
+  if (daysAfterSowing <= 25) {
+    if (rain >= 40) {
+      note =
+          'Heavy rain in week $week can waterlog young plants and cause damping-off. Check drainage in low spots of the field.';
+    } else if (rain < 5) {
+      note =
+          'Very little rain in week $week — seedlings may need irrigation to establish.';
+    } else {
+      note =
+          'Weather is manageable for the $stage stage in week $week. Keep checking for germination gaps.';
+    }
+  } else if (daysAfterSowing <= 55) {
+    note = fungalWeather
+        ? '${wetness.round()} h of leaf wetness in week $week favours leaf spot and blast during $stage. Scout the marked spots first.'
+        : 'No strong weather trigger in week $week. Continue weekly scouting during $stage.';
+  } else {
+    note = (fungalWeather || rain >= 40)
+        ? 'Wet weather in week $week is risky during $stage — flowers and filling grain are sensitive to fungal spread and grain mould.'
+        : 'Weather is stable in week $week ($stage). Watch for sudden rain before harvest decisions.';
+  }
+  return _WeekWeatherAssessment(level: level, note: note);
+}
+
+class _SowingWeekWeatherCard extends StatelessWidget {
+  final int daysAfterSowing;
+  final String stage;
+  final Map<String, dynamic> weather;
+
+  const _SowingWeekWeatherCard({
+    required this.daysAfterSowing,
+    required this.stage,
+    required this.weather,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final assessment = _assessSowingWeekWeather(
+      daysAfterSowing: daysAfterSowing,
+      stage: stage,
+      weather: weather,
+    );
+    final color = _FarmPage._severityColor(assessment.level);
+    final week = daysAfterSowing ~/ 7 + 1;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.cloud_rounded, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Week $week after sowing • $stage',
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                assessment.level.toUpperCase(),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            assessment.note,
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FarmIssueSheet extends StatefulWidget {
+  final String farmName;
+  final FarmIssueCell issue;
+  final LatLng farmCenter;
+  final int daysAfterSowing;
+  final String growthStage;
+  final Map<String, dynamic>? weatherContext;
+  final Future<FarmAlertAdvice> Function() fetchGuidance;
+  final Future<FarmPhotoDiagnosis?> Function(HarvestMachineImageSource source)
+  captureAndDiagnose;
+
+  const _FarmIssueSheet({
+    required this.farmName,
+    required this.issue,
+    required this.farmCenter,
+    required this.daysAfterSowing,
+    required this.growthStage,
+    required this.weatherContext,
+    required this.fetchGuidance,
+    required this.captureAndDiagnose,
+  });
+
+  @override
+  State<_FarmIssueSheet> createState() => _FarmIssueSheetState();
+}
+
+class _FarmIssueSheetState extends State<_FarmIssueSheet> {
+  FarmAlertAdvice? _advice;
+  String? _adviceError;
+  bool _adviceLoading = true;
+  FarmPhotoDiagnosis? _diagnosis;
+  String? _diagnosisError;
+  bool _photoBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGuidance();
+  }
+
+  Future<void> _loadGuidance() async {
+    setState(() {
+      _adviceLoading = true;
+      _adviceError = null;
+    });
+    try {
+      final advice = await widget.fetchGuidance();
+      if (!mounted) return;
+      setState(() {
+        _advice = advice;
+        _adviceLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _adviceError = e.toString().replaceFirst('SatelliteApiException: ', '');
+        _adviceLoading = false;
+      });
+    }
+  }
+
+  Future<void> _takePhoto(HarvestMachineImageSource source) async {
+    if (_photoBusy) return;
+    setState(() {
+      _photoBusy = true;
+      _diagnosisError = null;
+    });
+    try {
+      final diagnosis = await widget.captureAndDiagnose(source);
+      if (!mounted) return;
+      setState(() {
+        _diagnosis = diagnosis ?? _diagnosis;
+        _photoBusy = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _diagnosisError = e.toString().replaceFirst(
+          'SatelliteApiException: ',
+          '',
+        );
+        _photoBusy = false;
+      });
+    }
+  }
+
+  int get _distanceMeters {
+    return const Distance()
+        .as(
+          LengthUnit.Meter,
+          widget.farmCenter,
+          LatLng(widget.issue.lat, widget.issue.lng),
+        )
+        .round();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final issue = widget.issue;
+    final color = _FarmPage._issueColor(issue);
+    final weather = widget.weatherContext;
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.74,
+      minChildSize: 0.45,
+      maxChildSize: 0.95,
+      builder: (context, controller) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+          ),
+          child: ListView(
+            controller: controller,
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 28),
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.black12,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _FarmPage._issueIcon(issue),
+                      color: color,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _FarmPage._issueTitle(issue),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.farmName,
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '${_FarmPage._riskLabel(issue.compositeRisk)} • ${(issue.compositeRisk * 100).round()}%',
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                issue.isDisease
+                    ? 'Satellite screening flags this spot as a possible disease patch. It is a pre-screen, not a confirmed diagnosis — walk there and check the plants before any treatment.'
+                    : 'This spot looks stressed by water or heat rather than disease. Walk there to check soil moisture and plant condition.',
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  height: 1.4,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.greenPale,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.directions_walk_rounded,
+                      color: AppTheme.greenDark,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '≈ $_distanceMeters m from the field centre',
+                            style: const TextStyle(
+                              color: AppTheme.greenDark,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            '${issue.lat.toStringAsFixed(5)}, ${issue.lng.toStringAsFixed(5)}',
+                            style: const TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (weather != null) ...[
+                const SizedBox(height: 12),
+                _SowingWeekWeatherCard(
+                  daysAfterSowing: widget.daysAfterSowing,
+                  stage: widget.growthStage,
+                  weather: weather,
+                ),
+              ],
+              const SizedBox(height: 18),
+              const Text(
+                'AI guidance for this spot',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (_adviceLoading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(strokeWidth: 2.5),
+                        SizedBox(height: 8),
+                        Text(
+                          'Asking the farm advisor…',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_adviceError != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Could not load guidance: $_adviceError',
+                      style: const TextStyle(
+                        color: AppTheme.textMuted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _loadGuidance,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                )
+              else if (_advice != null) ...[
+                for (final alert in _advice!.importantAlerts)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _FarmAlertCard(alert: alert),
+                  ),
+                if (_advice!.nextActions.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  for (final action in _advice!.nextActions)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.check_circle_outline,
+                            size: 18,
+                            color: AppTheme.green,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              action,
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontWeight: FontWeight.w700,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+              const SizedBox(height: 18),
+              const Text(
+                'Confirm with a photo (optional)',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'When you reach the spot, photograph the affected leaves for an AI diagnosis with more specific guidance.',
+                style: TextStyle(
+                  color: AppTheme.textMuted,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 10),
+              if (_photoBusy)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        CircularProgressIndicator(strokeWidth: 2.5),
+                        SizedBox(height: 8),
+                        Text(
+                          'Uploading photo and diagnosing…',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            _takePhoto(HarvestMachineImageSource.camera),
+                        icon: const Icon(Icons.photo_camera_rounded),
+                        label: const Text('Take photo'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            _takePhoto(HarvestMachineImageSource.gallery),
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('From gallery'),
+                      ),
+                    ),
+                  ],
+                ),
+              if (_diagnosisError != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Photo diagnosis failed: $_diagnosisError',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+              if (_diagnosis != null) ...[
+                const SizedBox(height: 12),
+                _PhotoDiagnosisCard(diagnosis: _diagnosis!),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PhotoDiagnosisCard extends StatelessWidget {
+  final FarmPhotoDiagnosis diagnosis;
+
+  const _PhotoDiagnosisCard({required this.diagnosis});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _FarmPage._severityColor(diagnosis.severity);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.biotech_rounded, color: color, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  diagnosis.diagnosis,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              Text(
+                '${(diagnosis.confidence * 100).round()}%',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          if (diagnosis.evidence.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (final item in diagnosis.evidence)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '• $item',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+          ],
+          if (diagnosis.scoutAction.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              diagnosis.scoutAction,
+              style: const TextStyle(
+                color: AppTheme.greenDark,
+                height: 1.35,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FarmAlertEmptyState extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  const _FarmAlertEmptyState({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.green),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detail,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -5578,10 +6368,10 @@ class _SelectedFarmHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-                Text(
-                  '${farm.location} • ${farm.crop} • ${farm.variety}',
-                  style: const TextStyle(color: AppTheme.textMuted),
-                ),
+              Text(
+                '${farm.location} • ${farm.crop} • ${farm.variety}',
+                style: const TextStyle(color: AppTheme.textMuted),
+              ),
             ],
           ),
         ),
@@ -5598,38 +6388,35 @@ class _FarmMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: AppTheme.textMuted,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.greenDark,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppTheme.greenDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -5716,10 +6503,7 @@ class _FarmMapInsightPage extends StatelessWidget {
         : '${lastUpdated!.day.toString().padLeft(2, '0')}/${lastUpdated!.month.toString().padLeft(2, '0')} ${lastUpdated!.hour.toString().padLeft(2, '0')}:${lastUpdated!.minute.toString().padLeft(2, '0')}';
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(farm.name),
-        elevation: 0,
-      ),
+      appBar: AppBar(title: Text(farm.name), elevation: 0),
       backgroundColor: AppTheme.surface,
       floatingActionButton: Column(
         mainAxisSize: MainAxisSize.min,
@@ -5762,9 +6546,20 @@ class _FarmMapInsightPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      _FarmMetric(label: 'Area', value: farm.area),
-                      _FarmMetric(label: 'NDVI', value: farm.ndvi),
-                      _FarmMetric(label: 'Moisture', value: farm.moisture),
+                      Expanded(
+                        child: _FarmMetric(label: 'Area', value: farm.area),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _FarmMetric(label: 'NDVI', value: farm.ndvi),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _FarmMetric(
+                          label: 'Moisture',
+                          value: farm.moisture,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -5806,8 +6601,8 @@ class _FarmMapInsightPage extends StatelessWidget {
                       value: _isMilestoneCurrent(milestone)
                           ? 'Active now'
                           : _isMilestoneComplete(milestone)
-                              ? 'Completed'
-                              : 'Upcoming (${milestone.startDay}-${milestone.endDay} day)',
+                          ? 'Completed'
+                          : 'Upcoming (${milestone.startDay}-${milestone.endDay} day)',
                     ),
                   _InfoStrip(
                     icon: Icons.info_outline,
@@ -5842,7 +6637,8 @@ class _FarmMapInsightPage extends StatelessWidget {
                           subtitle: 'Satellite index graphs',
                           icon: Icons.trending_up_rounded,
                           color: const Color(0xFFECF6E8),
-                          onTap: () => Get.to(() => _NdviHistoryDetailPage(farm: farm)),
+                          onTap: () =>
+                              Get.to(() => _NdviHistoryDetailPage(farm: farm)),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -5852,7 +6648,9 @@ class _FarmMapInsightPage extends StatelessWidget {
                           subtitle: 'pH, NPK & Moisture',
                           icon: Icons.science_outlined,
                           color: const Color(0xFFFFF3E0),
-                          onTap: () => Get.to(() => _SoilDiagnosticsDetailPage(farm: farm)),
+                          onTap: () => Get.to(
+                            () => _SoilDiagnosticsDetailPage(farm: farm),
+                          ),
                         ),
                       ),
                     ],
@@ -5866,7 +6664,9 @@ class _FarmMapInsightPage extends StatelessWidget {
                           subtitle: 'Humidity & rainfall logs',
                           icon: Icons.wb_cloudy_rounded,
                           color: const Color(0xFFE8F5FF),
-                          onTap: () => Get.to(() => _WeatherImpactDetailPage(farm: farm)),
+                          onTap: () => Get.to(
+                            () => _WeatherImpactDetailPage(farm: farm),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -5876,7 +6676,9 @@ class _FarmMapInsightPage extends StatelessWidget {
                           subtitle: 'Expected harvest index',
                           icon: Icons.bar_chart_rounded,
                           color: const Color(0xFFF3E8FF),
-                          onTap: () => Get.to(() => _YieldPrognosisDetailPage(farm: farm)),
+                          onTap: () => Get.to(
+                            () => _YieldPrognosisDetailPage(farm: farm),
+                          ),
                         ),
                       ),
                     ],
@@ -5995,7 +6797,9 @@ class _InsightDetailCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.greenPale.withValues(alpha: 0.3)),
+            border: Border.all(
+              color: AppTheme.greenPale.withValues(alpha: 0.3),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -6004,12 +6808,20 @@ class _InsightDetailCard extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark, fontSize: 13),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.greenDark,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(color: AppTheme.textMuted, fontSize: 10, height: 1.3),
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 10,
+                  height: 1.3,
+                ),
               ),
             ],
           ),
@@ -6029,11 +6841,21 @@ class _NdviHistoryDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: Text('${farm.name} • NDVI Analysis', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark, fontSize: 18)),
+        title: Text(
+          '${farm.name} • NDVI Analysis',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: AppTheme.greenDark,
+            fontSize: 18,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6047,9 +6869,18 @@ class _NdviHistoryDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('NDVI Health Index Trend', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'NDVI Health Index Trend',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    const Text('NDVI ranges from 0.0 to 1.0. Higher values (0.6 - 0.8) indicate healthy green vegetative growth.', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    const Text(
+                      'NDVI ranges from 0.0 to 1.0. Higher values (0.6 - 0.8) indicate healthy green vegetative growth.',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                    ),
                     const SizedBox(height: 16),
                     Container(
                       height: 160,
@@ -6060,18 +6891,40 @@ class _NdviHistoryDetailPage extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: const Color(0xFFE5E7EB)),
                       ),
-                      child: CustomPaint(
-                        painter: _NdviCurvePainter(),
-                      ),
+                      child: CustomPaint(painter: _NdviCurvePainter()),
                     ),
                     const SizedBox(height: 14),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        Text('Sowing (0.15)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                        Text('Veg (0.42)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                        Text('Flowering (0.76)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                        Text('Filling (0.68)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                        Text(
+                          'Sowing (0.15)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        Text(
+                          'Veg (0.42)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        Text(
+                          'Flowering (0.76)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
+                        Text(
+                          'Filling (0.68)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppTheme.textMuted,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -6085,15 +6938,41 @@ class _NdviHistoryDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Satellite Overpasses', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'Satellite Overpasses',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 10),
-                    _buildPassRow('June 08, 2026', 'Sentinel-2B', '0.76', '0.2% Cloud'),
+                    _buildPassRow(
+                      'June 08, 2026',
+                      'Sentinel-2B',
+                      '0.76',
+                      '0.2% Cloud',
+                    ),
                     const Divider(),
-                    _buildPassRow('May 28, 2026', 'Sentinel-2A', '0.64', '1.5% Cloud'),
+                    _buildPassRow(
+                      'May 28, 2026',
+                      'Sentinel-2A',
+                      '0.64',
+                      '1.5% Cloud',
+                    ),
                     const Divider(),
-                    _buildPassRow('May 18, 2026', 'Sentinel-2B', '0.45', '12% Cloud'),
+                    _buildPassRow(
+                      'May 18, 2026',
+                      'Sentinel-2B',
+                      '0.45',
+                      '12% Cloud',
+                    ),
                     const Divider(),
-                    _buildPassRow('May 08, 2026', 'Sentinel-2A', '0.28', '0.0% Cloud'),
+                    _buildPassRow(
+                      'May 08, 2026',
+                      'Sentinel-2A',
+                      '0.28',
+                      '0.0% Cloud',
+                    ),
                   ],
                 ),
               ),
@@ -6114,14 +6993,26 @@ class _NdviHistoryDetailPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(date, style: const TextStyle(fontWeight: FontWeight.w700)),
-              Text(sat, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+              Text(
+                sat,
+                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
             ],
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(ndvi, style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark)),
-              Text(cloud, style: const TextStyle(fontSize: 11, color: Colors.blueAccent)),
+              Text(
+                ndvi,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.greenDark,
+                ),
+              ),
+              Text(
+                cloud,
+                style: const TextStyle(fontSize: 11, color: Colors.blueAccent),
+              ),
             ],
           ),
         ],
@@ -6152,9 +7043,12 @@ class _NdviCurvePainter extends CustomPainter {
     final path = ui.Path();
     path.moveTo(0, size.height * 0.85);
     path.cubicTo(
-      size.width * 0.3, size.height * 0.8,
-      size.width * 0.6, size.height * 0.1,
-      size.width * 0.8, size.height * 0.25,
+      size.width * 0.3,
+      size.height * 0.8,
+      size.width * 0.6,
+      size.height * 0.1,
+      size.width * 0.8,
+      size.height * 0.25,
     );
     path.lineTo(size.width, size.height * 0.4);
 
@@ -6170,7 +7064,11 @@ class _NdviCurvePainter extends CustomPainter {
       ..color = AppTheme.greenDark
       ..style = PaintingStyle.fill;
 
-    canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.25), 5, dotPaint);
+    canvas.drawCircle(
+      Offset(size.width * 0.8, size.height * 0.25),
+      5,
+      dotPaint,
+    );
   }
 
   @override
@@ -6187,11 +7085,21 @@ class _SoilDiagnosticsDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: Text('${farm.name} • Soil Health', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark, fontSize: 18)),
+        title: Text(
+          '${farm.name} • Soil Health',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: AppTheme.greenDark,
+            fontSize: 18,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6205,18 +7113,53 @@ class _SoilDiagnosticsDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('NPK & Soil Chemistry', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'NPK & Soil Chemistry',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 12),
-                    _buildNutrientBar('Nitrogen (N)', 0.65, 'Optimal (65 kg/ha)', Colors.blue),
-                    _buildNutrientBar('Phosphorus (P)', 0.42, 'Moderate (28 kg/ha)', Colors.orange),
-                    _buildNutrientBar('Potassium (K)', 0.85, 'High (195 kg/ha)', Colors.purple),
-                    _buildNutrientBar('Organic Carbon', 0.55, 'Moderate (0.55%)', Colors.green),
+                    _buildNutrientBar(
+                      'Nitrogen (N)',
+                      0.65,
+                      'Optimal (65 kg/ha)',
+                      Colors.blue,
+                    ),
+                    _buildNutrientBar(
+                      'Phosphorus (P)',
+                      0.42,
+                      'Moderate (28 kg/ha)',
+                      Colors.orange,
+                    ),
+                    _buildNutrientBar(
+                      'Potassium (K)',
+                      0.85,
+                      'High (195 kg/ha)',
+                      Colors.purple,
+                    ),
+                    _buildNutrientBar(
+                      'Organic Carbon',
+                      0.55,
+                      'Moderate (0.55%)',
+                      Colors.green,
+                    ),
                     const Divider(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: const [
-                        Text('Soil pH Value:', style: TextStyle(fontWeight: FontWeight.w700)),
-                        Text('6.7 (Slightly Acidic • Ideal)', style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.greenDark)),
+                        Text(
+                          'Soil pH Value:',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '6.7 (Slightly Acidic • Ideal)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.greenDark,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -6230,13 +7173,29 @@ class _SoilDiagnosticsDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Text('Advisory for Millets', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.greenDark)),
+                    Text(
+                      'Advisory for Millets',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.greenDark,
+                      ),
+                    ),
                     SizedBox(height: 10),
-                    Text('• Apply 20 kg/ha of phosphorus before upcoming rain shower.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Apply 20 kg/ha of phosphorus before upcoming rain shower.',
+                      style: TextStyle(height: 1.4),
+                    ),
                     SizedBox(height: 6),
-                    Text('• Top-dress with nitrogen during vegetative growth at day 35.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Top-dress with nitrogen during vegetative growth at day 35.',
+                      style: TextStyle(height: 1.4),
+                    ),
                     SizedBox(height: 6),
-                    Text('• Organic carbon level is slightly low; add vermicompost or farmyard manure after current harvest.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Organic carbon level is slightly low; add vermicompost or farmyard manure after current harvest.',
+                      style: TextStyle(height: 1.4),
+                    ),
                   ],
                 ),
               ),
@@ -6256,8 +7215,21 @@ class _SoilDiagnosticsDetailPage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              Text(text, style: TextStyle(color: col, fontWeight: FontWeight.w700, fontSize: 11)),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                text,
+                style: TextStyle(
+                  color: col,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 6),
@@ -6286,11 +7258,21 @@ class _WeatherImpactDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: Text('${farm.name} • Weather Impact', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark, fontSize: 18)),
+        title: Text(
+          '${farm.name} • Weather Impact',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: AppTheme.greenDark,
+            fontSize: 18,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6304,7 +7286,13 @@ class _WeatherImpactDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Microclimate Statistics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'Microclimate Statistics',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     _buildStatRow('Avg Soil Moisture', farm.moisture),
                     _buildStatRow('Solar Radiation', '820 W/m²'),
@@ -6322,11 +7310,24 @@ class _WeatherImpactDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Text('Weather Hazards Outlook', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.greenDark)),
+                    Text(
+                      'Weather Hazards Outlook',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.greenDark,
+                      ),
+                    ),
                     SizedBox(height: 10),
-                    Text('• Fungal Disease Risk: Low (Humidity remains under 70%)', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Fungal Disease Risk: Low (Humidity remains under 70%)',
+                      style: TextStyle(height: 1.4),
+                    ),
                     SizedBox(height: 6),
-                    Text('• Heat Stress: Moderate (Top temps exceeding 31°C; ensure evening soil dampness)', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Heat Stress: Moderate (Top temps exceeding 31°C; ensure evening soil dampness)',
+                      style: TextStyle(height: 1.4),
+                    ),
                   ],
                 ),
               ),
@@ -6344,7 +7345,13 @@ class _WeatherImpactDetailPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(val, style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.greenDark)),
+          Text(
+            val,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppTheme.greenDark,
+            ),
+          ),
         ],
       ),
     );
@@ -6361,11 +7368,21 @@ class _YieldPrognosisDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: Text('${farm.name} • Yield Prognosis', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.greenDark, fontSize: 18)),
+        title: Text(
+          '${farm.name} • Yield Prognosis',
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            color: AppTheme.greenDark,
+            fontSize: 18,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6379,12 +7396,24 @@ class _YieldPrognosisDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Expected Yield Prognosis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'Expected Yield Prognosis',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 14),
                     _buildYieldRow('Est. Production', '850 - 950 kg/acre'),
-                    _buildYieldRow('Current Stage Projection', 'On Track (102%)'),
+                    _buildYieldRow(
+                      'Current Stage Projection',
+                      'On Track (102%)',
+                    ),
                     _buildYieldRow('Est. Harvest Window', 'July 15 - July 20'),
-                    _buildYieldRow('Quality Grade Prediction', 'A (High density grains)'),
+                    _buildYieldRow(
+                      'Quality Grade Prediction',
+                      'A (High density grains)',
+                    ),
                   ],
                 ),
               ),
@@ -6396,13 +7425,29 @@ class _YieldPrognosisDetailPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
-                    Text('Pre-harvest Checklist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.greenDark)),
+                    Text(
+                      'Pre-harvest Checklist',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.greenDark,
+                      ),
+                    ),
                     SizedBox(height: 10),
-                    Text('• Arrange drying yards and ensure moisture is under 12%.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Arrange drying yards and ensure moisture is under 12%.',
+                      style: TextStyle(height: 1.4),
+                    ),
                     SizedBox(height: 6),
-                    Text('• Procure 18 jute bags (50kg capacity) ahead of time.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Procure 18 jute bags (50kg capacity) ahead of time.',
+                      style: TextStyle(height: 1.4),
+                    ),
                     SizedBox(height: 6),
-                    Text('• Clean harvester blades to prevent contamination.', style: TextStyle(height: 1.4)),
+                    Text(
+                      '• Clean harvester blades to prevent contamination.',
+                      style: TextStyle(height: 1.4),
+                    ),
                   ],
                 ),
               ),
@@ -6420,7 +7465,13 @@ class _YieldPrognosisDetailPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-          Text(val, style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.greenDark)),
+          Text(
+            val,
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppTheme.greenDark,
+            ),
+          ),
         ],
       ),
     );
@@ -6475,7 +7526,7 @@ class _FarmChoiceCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                Text(
+                    Text(
                       '${farm.location} • ${farm.variety} • ${farm.area}',
                       style: const TextStyle(color: AppTheme.textMuted),
                     ),
@@ -6520,7 +7571,10 @@ class _FarmHistoryIndexPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6561,7 +7615,9 @@ class _FarmHistoryIndexPage extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _Panel(
-                  tint: i == selectedIndex ? AppTheme.greenPale.withValues(alpha: 0.35) : null,
+                  tint: i == selectedIndex
+                      ? AppTheme.greenPale.withValues(alpha: 0.35)
+                      : null,
                   child: InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () => onOpenFarm(i),
@@ -6582,7 +7638,10 @@ class _FarmHistoryIndexPage extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              const Icon(Icons.chevron_right_rounded, color: AppTheme.green),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppTheme.green,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -6606,7 +7665,9 @@ class _FarmHistoryIndexPage extends StatelessWidget {
                             children: [
                               _InventoryChip(label: farms[i].location),
                               if (farms[i].previousCrop.isNotEmpty)
-                                _InventoryChip(label: 'Previous ${farms[i].previousCrop}'),
+                                _InventoryChip(
+                                  label: 'Previous ${farms[i].previousCrop}',
+                                ),
                               if (farms[i].season.isNotEmpty)
                                 _InventoryChip(label: farms[i].season),
                             ],
@@ -6659,7 +7720,8 @@ class _HistoryPage extends StatelessWidget {
   }
 
   bool _isCurrent(_GrowthMilestone milestone) {
-    return daysAfterSowing >= milestone.startDay && daysAfterSowing <= milestone.endDay;
+    return daysAfterSowing >= milestone.startDay &&
+        daysAfterSowing <= milestone.endDay;
   }
 
   bool _isCompleted(_GrowthMilestone milestone) {
@@ -6701,7 +7763,10 @@ class _HistoryPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -6764,11 +7829,20 @@ class _HistoryPage extends StatelessWidget {
                     const SizedBox(height: 10),
                     Row(
                       children: [
-                        _FarmMetric(label: 'Stage', value: currentStage),
-                        SizedBox(width: 8),
-                        _FarmMetric(
-                          label: 'Status',
-                          value: statusUpdatedAt == null ? 'Pending' : 'Updated',
+                        Expanded(
+                          child: _FarmMetric(
+                            label: 'Stage',
+                            value: currentStage,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _FarmMetric(
+                            label: 'Status',
+                            value: statusUpdatedAt == null
+                                ? 'Pending'
+                                : 'Updated',
+                          ),
                         ),
                       ],
                     ),
@@ -6781,7 +7855,9 @@ class _HistoryPage extends StatelessWidget {
                         _InventoryChip(label: 'Health ${farm.health}'),
                         _InventoryChip(label: 'Moisture ${farm.moisture}'),
                         if (farm.previousCrop.isNotEmpty)
-                          _InventoryChip(label: 'Previous ${farm.previousCrop}'),
+                          _InventoryChip(
+                            label: 'Previous ${farm.previousCrop}',
+                          ),
                         if (farm.season.isNotEmpty)
                           _InventoryChip(label: farm.season),
                         if (farm.irrigation.isNotEmpty)
@@ -6818,11 +7894,15 @@ class _HistoryPage extends StatelessWidget {
                         runSpacing: 8,
                         children: [
                           if (farm.previousCrop.isNotEmpty)
-                            _InventoryChip(label: 'Previous crop: ${farm.previousCrop}'),
+                            _InventoryChip(
+                              label: 'Previous crop: ${farm.previousCrop}',
+                            ),
                           if (farm.soilType.isNotEmpty)
                             _InventoryChip(label: 'Soil: ${farm.soilType}'),
                           if (farm.ownershipType.isNotEmpty)
-                            _InventoryChip(label: 'Land: ${farm.ownershipType}'),
+                            _InventoryChip(
+                              label: 'Land: ${farm.ownershipType}',
+                            ),
                           if (farm.seedSource.isNotEmpty)
                             _InventoryChip(label: 'Seed: ${farm.seedSource}'),
                           if (farm.harvestIntent.isNotEmpty)
@@ -6857,8 +7937,8 @@ class _HistoryPage extends StatelessWidget {
                         detail: _isCurrent(milestone)
                             ? 'Active now • ${milestone.startDay}-${milestone.endDay}'
                             : _isCompleted(milestone)
-                                ? 'Completed'
-                                : 'Starts at day ${milestone.startDay}',
+                            ? 'Completed'
+                            : 'Starts at day ${milestone.startDay}',
                         active: _isCurrent(milestone),
                       ),
                     const SizedBox(height: 8),
@@ -6906,12 +7986,16 @@ class _HistoryPage extends StatelessWidget {
                                 children: [
                                   Text(
                                     lot.lotLabel,
-                                    style: const TextStyle(fontWeight: FontWeight.w900),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     '${lot.crop} • ${lot.variety} • ${lot.grade} • ${lot.estimatedYieldKg.toStringAsFixed(1)}kg',
-                                    style: const TextStyle(color: AppTheme.textMuted),
+                                    style: const TextStyle(
+                                      color: AppTheme.textMuted,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -6931,7 +8015,8 @@ class _HistoryPage extends StatelessWidget {
                   child: _HistoryEmptyState(
                     icon: Icons.inventory_2_outlined,
                     title: 'No harvest history yet',
-                    detail: 'When grading and bagging are completed, harvest lots for this selected farm will appear in the timeline.',
+                    detail:
+                        'When grading and bagging are completed, harvest lots for this selected farm will appear in the timeline.',
                   ),
                 ),
               ),
@@ -6974,12 +8059,14 @@ class _HistoryPage extends StatelessWidget {
                   child: _HistoryEmptyState(
                     icon: Icons.note_alt_outlined,
                     title: 'No field notes yet',
-                    detail: 'Disease checks, status updates and farmer observations will sync into this history screen.',
+                    detail:
+                        'Disease checks, status updates and farmer observations will sync into this history screen.',
                   ),
                 ),
               ),
             ],
-            if (satelliteOverview != null && satelliteOverview!.tiles.isNotEmpty) ...[
+            if (satelliteOverview != null &&
+                satelliteOverview!.tiles.isNotEmpty) ...[
               const SizedBox(height: 14),
               _Panel(
                 child: Padding(
@@ -7012,7 +8099,8 @@ class _HistoryPage extends StatelessWidget {
                 ),
               ),
             ],
-            if (satelliteOverview == null || satelliteOverview!.tiles.isEmpty) ...[
+            if (satelliteOverview == null ||
+                satelliteOverview!.tiles.isEmpty) ...[
               const SizedBox(height: 14),
               _Panel(
                 child: const Padding(
@@ -7020,7 +8108,8 @@ class _HistoryPage extends StatelessWidget {
                   child: _HistoryEmptyState(
                     icon: Icons.satellite_alt_outlined,
                     title: 'Remote index data pending',
-                    detail: 'Satellite NDVI, moisture and vegetation trend cards will appear after the remote farm feed returns data.',
+                    detail:
+                        'Satellite NDVI, moisture and vegetation trend cards will appear after the remote farm feed returns data.',
                   ),
                 ),
               ),
@@ -7124,7 +8213,8 @@ class _MarketPageState extends State<MarketPage> {
     if (widget.farmName != null && widget.farmName!.trim().isNotEmpty) {
       _selectedFarm = widget.farmName!.trim();
     }
-    if (_selectedFarm != _allFarmsLabel && !_farmOptions.contains(_selectedFarm)) {
+    if (_selectedFarm != _allFarmsLabel &&
+        !_farmOptions.contains(_selectedFarm)) {
       _selectedFarm = _allFarmsLabel;
     }
   }
@@ -7161,7 +8251,9 @@ class _MarketPageState extends State<MarketPage> {
     final searched = searchFilter.isEmpty
         ? scoped
         : scoped.where((lot) {
-            return (lot['batchId'] ?? '').toLowerCase().contains(searchFilter) ||
+            return (lot['batchId'] ?? '').toLowerCase().contains(
+                  searchFilter,
+                ) ||
                 (lot['crop'] ?? '').toLowerCase().contains(searchFilter) ||
                 (lot['variety'] ?? '').toLowerCase().contains(searchFilter) ||
                 (lot['grade'] ?? '').toLowerCase().contains(searchFilter);
@@ -7171,18 +8263,24 @@ class _MarketPageState extends State<MarketPage> {
       ..sort((a, b) {
         switch (_sortBy) {
           case 'Newest':
-            return _parseDate(b['harvestedAt']).compareTo(_parseDate(a['harvestedAt']));
+            return _parseDate(
+              b['harvestedAt'],
+            ).compareTo(_parseDate(a['harvestedAt']));
           case 'Highest grade':
             return _toInt(b['score']).compareTo(_toInt(a['score']));
           case 'Lowest moisture':
             return _toDouble(a['moisture']).compareTo(_toDouble(b['moisture']));
           case 'Highest qty':
-            return _toDouble(b['estimatedYield']).compareTo(_toDouble(a['estimatedYield']));
+            return _toDouble(
+              b['estimatedYield'],
+            ).compareTo(_toDouble(a['estimatedYield']));
           case 'Recommended':
           default:
             final score = _toInt(b['score']).compareTo(_toInt(a['score']));
             if (score != 0) return score;
-            return _toDouble(b['estimatedYield']).compareTo(_toDouble(a['estimatedYield']));
+            return _toDouble(
+              b['estimatedYield'],
+            ).compareTo(_toDouble(a['estimatedYield']));
         }
       });
 
@@ -7219,7 +8317,9 @@ class _MarketPageState extends State<MarketPage> {
     final scopedLots = _scopedLots;
     final selectedLot = _selectedLot;
     final selectedLotId = selectedLot?['batchId'];
-    final scopeLabel = _selectedFarm == _allFarmsLabel ? 'all farms' : _selectedFarm;
+    final scopeLabel = _selectedFarm == _allFarmsLabel
+        ? 'all farms'
+        : _selectedFarm;
     final totalLots = scopedLots.length;
     final totalQty = scopedLots.fold<double>(
       0,
@@ -7228,11 +8328,14 @@ class _MarketPageState extends State<MarketPage> {
     final avgScore = totalLots == 0
         ? 0
         : scopedLots.fold<double>(0, (sum, lot) => sum + _toInt(lot['score'])) /
-            totalLots;
+              totalLots;
     final avgMoisture = totalLots == 0
         ? 0
-        : scopedLots.fold<double>(0, (sum, lot) => sum + _toDouble(lot['moisture'])) /
-            totalLots;
+        : scopedLots.fold<double>(
+                0,
+                (sum, lot) => sum + _toDouble(lot['moisture']),
+              ) /
+              totalLots;
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -7248,7 +8351,10 @@ class _MarketPageState extends State<MarketPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -7266,7 +8372,10 @@ class _MarketPageState extends State<MarketPage> {
                       scopeLabel == 'all farms'
                           ? 'Market desk'
                           : 'Market desk • ${scopeLabel}',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     const Text(
@@ -7410,171 +8519,190 @@ class _MarketPageState extends State<MarketPage> {
               ),
             ),
             const SizedBox(height: 12),
-          if (scopedLots.isEmpty)
-            _Panel(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.inventory_2_outlined, color: AppTheme.green),
-                        SizedBox(width: 8),
-                        Text(
-                          'No active market lots',
-                          style: TextStyle(
-                            color: AppTheme.greenDark,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
+            if (scopedLots.isEmpty)
+              _Panel(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(
+                            Icons.inventory_2_outlined,
+                            color: AppTheme.green,
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _selectedFarm == _allFarmsLabel
-                          ? 'Harvest lots from all farms will appear here after grading.'
-                          : 'No graded lot is ready for $_selectedFarm yet. Complete harvest grading first, then create a market listing.',
-                      style: const TextStyle(color: AppTheme.textDark, height: 1.4),
-                    ),
-                    const SizedBox(height: 10),
-                    const Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _InventoryChip(label: 'Awaiting harvest'),
-                        _InventoryChip(label: 'Grade required'),
-                        _InventoryChip(label: 'Remote-ready'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            ...scopedLots.map((lot) {
-              final batchId = lot['batchId'] ?? 'Lot';
-              final crop = lot['crop'] ?? '--';
-              final variety = lot['variety'] ?? '--';
-              final grade = lot['grade'] ?? '--';
-              final bagCount = _toInt(lot['bagCount']);
-              final bagSize = _toDouble(lot['bagSizeKg']);
-              final moisture = _toDouble(lot['moisture']);
-              final score = _toInt(lot['score']);
-              final yieldEstimate = _toDouble(lot['estimatedYield']);
-              final isSelected = selectedLotId != null && selectedLotId == batchId;
-              final harvestRate = 2100 + (score * 24);
-              final expectedValue = (yieldEstimate / 1000) * harvestRate;
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _Panel(
-                  tint: isSelected ? AppTheme.greenPale.withValues(alpha: 0.2) : null,
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                batchId,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.black,
-                                  fontSize: 16,
-                                ),
-                              ),
+                          SizedBox(width: 8),
+                          Text(
+                            'No active market lots',
+                            style: TextStyle(
+                              color: AppTheme.greenDark,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w900,
                             ),
-                            Icon(
-                              Icons.check_circle_rounded,
-                              color: isSelected ? AppTheme.green : AppTheme.textMuted,
-                              size: 18,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            _InventoryChip(label: crop),
-                            _InventoryChip(label: variety),
-                            _InventoryChip(label: 'Grade $grade'),
-                            _InventoryChip(label: 'Score $score'),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _SummaryStat(
-                                title: 'Qty',
-                                value: '${yieldEstimate.toStringAsFixed(1)} kg',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _SummaryStat(
-                                title: 'Moisture',
-                                value: '${moisture.toStringAsFixed(1)}%',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _SummaryStat(
-                                title: 'Bags',
-                                value: '$bagCount × ${bagSize.toStringAsFixed(0)}kg',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Expected lot value: Rs ${(expectedValue).toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            color: AppTheme.greenDark,
-                            fontWeight: FontWeight.w900,
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _selectedFarm == _allFarmsLabel
+                            ? 'Harvest lots from all farms will appear here after grading.'
+                            : 'No graded lot is ready for $_selectedFarm yet. Complete harvest grading first, then create a market listing.',
+                        style: const TextStyle(
+                          color: AppTheme.textDark,
+                          height: 1.4,
                         ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: () => Get.snackbar(
-                                  'Market',
-                                  'Prepare listing for $batchId',
-                                  snackPosition: SnackPosition.BOTTOM,
-                                ),
-                                icon: const Icon(Icons.storefront_rounded, size: 18),
-                                label: const Text('Create listing'),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  Get.snackbar(
-                                    'Market',
-                                    'Opening demand trend for $batchId',
-                                    snackPosition: SnackPosition.BOTTOM,
-                                  );
-                                },
-                                icon: const Icon(Icons.trending_up_rounded, size: 18),
-                                label: const Text('Demand trend'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 10),
+                      const Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _InventoryChip(label: 'Awaiting harvest'),
+                          _InventoryChip(label: 'Grade required'),
+                          _InventoryChip(label: 'Remote-ready'),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }),
+              )
+            else
+              ...scopedLots.map((lot) {
+                final batchId = lot['batchId'] ?? 'Lot';
+                final crop = lot['crop'] ?? '--';
+                final variety = lot['variety'] ?? '--';
+                final grade = lot['grade'] ?? '--';
+                final bagCount = _toInt(lot['bagCount']);
+                final bagSize = _toDouble(lot['bagSizeKg']);
+                final moisture = _toDouble(lot['moisture']);
+                final score = _toInt(lot['score']);
+                final yieldEstimate = _toDouble(lot['estimatedYield']);
+                final isSelected =
+                    selectedLotId != null && selectedLotId == batchId;
+                final harvestRate = 2100 + (score * 24);
+                final expectedValue = (yieldEstimate / 1000) * harvestRate;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _Panel(
+                    tint: isSelected
+                        ? AppTheme.greenPale.withValues(alpha: 0.2)
+                        : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  batchId,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.black,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: isSelected
+                                    ? AppTheme.green
+                                    : AppTheme.textMuted,
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              _InventoryChip(label: crop),
+                              _InventoryChip(label: variety),
+                              _InventoryChip(label: 'Grade $grade'),
+                              _InventoryChip(label: 'Score $score'),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _SummaryStat(
+                                  title: 'Qty',
+                                  value:
+                                      '${yieldEstimate.toStringAsFixed(1)} kg',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _SummaryStat(
+                                  title: 'Moisture',
+                                  value: '${moisture.toStringAsFixed(1)}%',
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _SummaryStat(
+                                  title: 'Bags',
+                                  value:
+                                      '$bagCount × ${bagSize.toStringAsFixed(0)}kg',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Expected lot value: Rs ${(expectedValue).toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: AppTheme.greenDark,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => Get.snackbar(
+                                    'Market',
+                                    'Prepare listing for $batchId',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.storefront_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Create listing'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Get.snackbar(
+                                      'Market',
+                                      'Opening demand trend for $batchId',
+                                      snackPosition: SnackPosition.BOTTOM,
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.trending_up_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Demand trend'),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
           ],
         ),
       ),
@@ -7673,10 +8801,7 @@ class NewsPage extends StatelessWidget {
   final String? farmName;
   final String? farmLocation;
 
-  const NewsPage({
-    this.farmName,
-    this.farmLocation,
-  });
+  const NewsPage({this.farmName, this.farmLocation});
 
   static const List<Map<String, String>> _newsFeed = [
     {
@@ -7688,7 +8813,8 @@ class NewsPage extends StatelessWidget {
     },
     {
       'title': 'Monsoon outlook: lighter showers expected',
-      'summary': 'Weather advisories suggest staggered irrigation in low-lying fields.',
+      'summary':
+          'Weather advisories suggest staggered irrigation in low-lying fields.',
       'time': 'Yesterday',
       'tag': 'Weather',
       'impact': 'Review irrigation window for active millet farms.',
@@ -7704,7 +8830,9 @@ class NewsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contextTitle = farmName == null ? 'News & Advisories' : 'News • ${farmName!}';
+    final contextTitle = farmName == null
+        ? 'News & Advisories'
+        : 'News • ${farmName!}';
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
@@ -7719,7 +8847,10 @@ class NewsPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -7751,15 +8882,19 @@ class NewsPage extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
-                        const Icon(Icons.rss_feed_rounded, color: AppTheme.greenDark),
+                        const Icon(
+                          Icons.rss_feed_rounded,
+                          color: AppTheme.greenDark,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             farmName == null
                                 ? (farmLocation ?? 'Local farm area')
-                                : (farmLocation == null || farmLocation!.trim().isEmpty
-                                    ? '${farmName!} • farm updates'
-                                    : '${farmName!} • ${farmLocation!}'),
+                                : (farmLocation == null ||
+                                          farmLocation!.trim().isEmpty
+                                      ? '${farmName!} • farm updates'
+                                      : '${farmName!} • ${farmLocation!}'),
                             style: const TextStyle(
                               color: AppTheme.greenDark,
                               height: 1.35,
@@ -7805,7 +8940,10 @@ class NewsPage extends StatelessWidget {
                       children: [
                         Text(
                           item['title']!,
-                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Wrap(
@@ -7819,7 +8957,10 @@ class NewsPage extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           item['summary']!,
-                          style: const TextStyle(color: AppTheme.textDark, height: 1.4),
+                          style: const TextStyle(
+                            color: AppTheme.textDark,
+                            height: 1.4,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
@@ -7856,7 +8997,9 @@ class _NewsCategoryChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: selected ? AppTheme.green : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: selected ? AppTheme.green : const Color(0xFFE5E7EB)),
+        border: Border.all(
+          color: selected ? AppTheme.green : const Color(0xFFE5E7EB),
+        ),
       ),
       child: Text(
         label,
@@ -7874,10 +9017,7 @@ class SchemesPage extends StatelessWidget {
   final String? farmName;
   final String? farmLocation;
 
-  const SchemesPage({
-    this.farmName,
-    this.farmLocation,
-  });
+  const SchemesPage({this.farmName, this.farmLocation});
 
   static const List<Map<String, String>> _schemes = [
     {
@@ -7902,7 +9042,9 @@ class SchemesPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contextTitle = farmName == null ? 'Government Schemes' : 'Schemes • ${farmName!}';
+    final contextTitle = farmName == null
+        ? 'Government Schemes'
+        : 'Schemes • ${farmName!}';
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
@@ -7917,7 +9059,10 @@ class SchemesPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.greenDark),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: AppTheme.greenDark,
+          ),
           onPressed: () => Get.back(),
         ),
       ),
@@ -7929,7 +9074,10 @@ class SchemesPage extends StatelessWidget {
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search_rounded),
                 hintText: 'Search schemes, subsidies, and programs',
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
@@ -7946,15 +9094,19 @@ class SchemesPage extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     child: Row(
                       children: [
-                        const Icon(Icons.assignment_turned_in_outlined, color: AppTheme.greenDark),
+                        const Icon(
+                          Icons.assignment_turned_in_outlined,
+                          color: AppTheme.greenDark,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             farmName == null
                                 ? (farmLocation ?? 'Local scheme center')
-                                : (farmLocation == null || farmLocation!.trim().isEmpty
-                                    ? '${farmName!} • local scheme center'
-                                    : '${farmName!} • ${farmLocation!}'),
+                                : (farmLocation == null ||
+                                          farmLocation!.trim().isEmpty
+                                      ? '${farmName!} • local scheme center'
+                                      : '${farmName!} • ${farmLocation!}'),
                             style: const TextStyle(
                               color: AppTheme.greenDark,
                               height: 1.35,
@@ -7976,20 +9128,28 @@ class SchemesPage extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.assignment_rounded, color: AppTheme.green),
+                        const Icon(
+                          Icons.assignment_rounded,
+                          color: AppTheme.green,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                  scheme['title']!,
-                                  style: const TextStyle(fontWeight: FontWeight.w900),
+                                scheme['title']!,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
                                 ),
+                              ),
                               const SizedBox(height: 6),
                               Text(
                                 scheme['desc']!,
-                                style: const TextStyle(color: AppTheme.textDark, height: 1.35),
+                                style: const TextStyle(
+                                  color: AppTheme.textDark,
+                                  height: 1.35,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Wrap(
@@ -8002,11 +9162,15 @@ class SchemesPage extends StatelessWidget {
                               ),
                               const SizedBox(height: 8),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Text(
                                     scheme['status']!,
-                                    style: const TextStyle(fontWeight: FontWeight.w700, color: AppTheme.greenDark),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.greenDark,
+                                    ),
                                   ),
                                   TextButton(
                                     onPressed: () {
@@ -8386,16 +9550,16 @@ class _ProfilePage extends StatelessWidget {
           _Panel(
             child: Column(
               children: [
-                  _ProfileMenuRow(
-                    icon: Icons.grass_outlined,
-                    title: 'Farm Details',
-                    subtitle: 'Review farm and crop health',
-                    onTap: () => Get.snackbar(
-                      'Farm Details',
-                      'Open the Farm tab to switch farm.',
-                      snackPosition: SnackPosition.BOTTOM,
-                    ),
+                _ProfileMenuRow(
+                  icon: Icons.grass_outlined,
+                  title: 'Farm Details',
+                  subtitle: 'Review farm and crop health',
+                  onTap: () => Get.snackbar(
+                    'Farm Details',
+                    'Open the Farm tab to switch farm.',
+                    snackPosition: SnackPosition.BOTTOM,
                   ),
+                ),
                 const Divider(height: 1),
                 _ProfileMenuRow(
                   icon: Icons.support_agent_rounded,
@@ -8574,10 +9738,7 @@ class _SideUtilityItem extends StatelessWidget {
   final _SideUtilityItemData item;
   final bool expanded;
 
-  const _SideUtilityItem({
-    required this.item,
-    required this.expanded,
-  });
+  const _SideUtilityItem({required this.item, required this.expanded});
 
   @override
   Widget build(BuildContext context) {
@@ -8593,8 +9754,9 @@ class _SideUtilityItem extends StatelessWidget {
             vertical: 10,
           ),
           child: Row(
-            mainAxisAlignment:
-                expanded ? MainAxisAlignment.start : MainAxisAlignment.center,
+            mainAxisAlignment: expanded
+                ? MainAxisAlignment.start
+                : MainAxisAlignment.center,
             children: [
               Icon(item.icon, color: AppTheme.greenDark, size: 21),
               if (expanded) ...[
@@ -8659,8 +9821,9 @@ class _SideNavHeader extends StatelessWidget {
           ),
         ),
         child: Column(
-          crossAxisAlignment:
-              expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          crossAxisAlignment: expanded
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.center,
           children: [
             Container(
               width: expanded ? double.infinity : 68,
@@ -8722,10 +9885,7 @@ class _SideAvatar extends StatelessWidget {
   final String asset;
   final double size;
 
-  const _SideAvatar({
-    required this.asset,
-    required this.size,
-  });
+  const _SideAvatar({required this.asset, required this.size});
 
   @override
   Widget build(BuildContext context) {
@@ -8746,10 +9906,7 @@ class _SideAvatarStack extends StatelessWidget {
   final String primaryAsset;
   final bool compact;
 
-  const _SideAvatarStack({
-    required this.primaryAsset,
-    this.compact = false,
-  });
+  const _SideAvatarStack({required this.primaryAsset, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -8829,10 +9986,7 @@ class _SideMenuDotButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool compact;
 
-  const _SideMenuDotButton({
-    required this.onTap,
-    this.compact = false,
-  });
+  const _SideMenuDotButton({required this.onTap, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -8865,10 +10019,7 @@ class _SideHeaderDot extends StatelessWidget {
   final int delayMs;
   final Color color;
 
-  const _SideHeaderDot({
-    required this.delayMs,
-    this.color = Colors.white,
-  });
+  const _SideHeaderDot({required this.delayMs, this.color = Colors.white});
 
   @override
   Widget build(BuildContext context) {
@@ -8889,10 +10040,7 @@ class _SideHeaderDot extends StatelessWidget {
           color: color.withValues(alpha: 0.86),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(
-              color: color.withValues(alpha: 0.25),
-              blurRadius: 8,
-            ),
+            BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 8),
           ],
         ),
       ),
@@ -8904,10 +10052,7 @@ class _SideNavLogoutButton extends StatelessWidget {
   final bool expanded;
   final VoidCallback onTap;
 
-  const _SideNavLogoutButton({
-    required this.expanded,
-    required this.onTap,
-  });
+  const _SideNavLogoutButton({required this.expanded, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -8956,10 +10101,7 @@ class _PageScaffold extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const _PageScaffold({
-    required this.title,
-    required this.child,
-  });
+  const _PageScaffold({required this.title, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -8985,10 +10127,7 @@ class _Panel extends StatelessWidget {
   final Widget child;
   final Color? tint;
 
-  const _Panel({
-    required this.child,
-    this.tint,
-  });
+  const _Panel({required this.child, this.tint});
 
   @override
   Widget build(BuildContext context) {
@@ -9015,10 +10154,7 @@ class _StatusPill extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _StatusPill({
-    required this.icon,
-    required this.label,
-  });
+  const _StatusPill({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {

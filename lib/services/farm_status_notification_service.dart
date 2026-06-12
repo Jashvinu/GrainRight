@@ -8,6 +8,10 @@ import '../config/supabase_config.dart';
 class FarmStatusNotificationService {
   static const _notifyFunctionUrl =
       '${SupabaseConfig.edgeFunctionsBase}/farm-status-notify';
+  final http.Client _client;
+
+  FarmStatusNotificationService({http.Client? client})
+    : _client = client ?? http.Client();
 
   Future<bool> sendFarmStatusNotification({
     required String farmerId,
@@ -40,7 +44,7 @@ class FarmStatusNotificationService {
         'updatedAt': DateTime.now().toIso8601String(),
       };
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse(_notifyFunctionUrl),
         headers: {
           'Content-Type': 'application/json',
