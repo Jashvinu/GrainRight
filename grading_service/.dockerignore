@@ -1,0 +1,53 @@
+# Secrets and local environment
+.env
+.env.*
+*.env
+
+# VCS and agent/tool state
+.git/
+.code-review-graph/
+graphify-out/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Logs and local app output
+*.log
+*.pid
+
+# Local caches and temporary directories
+.hf-cache/
+.cache/
+frontend/node_modules/
+frontend/
+node_modules/
+tmp*/
+.tmp_streamlit_test/
+tmp2a5sfseq/
+tmp81f78zpr/
+tmpl7imlqgf/
+__MACOSX__/
+.dist/
+
+# Runtime state and excluded model artifacts
+data/feedback/
+data/logs/
+data/feedback/feedback_data/
+data/rag/*.embeddings.npz
+models/
+
+# Non-runtime project material
+docs/archive/
+docs/prompts/
+docs/specs/
+archive/
+legacy/
+scripts/
+supabase/
+tests/

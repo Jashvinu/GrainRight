@@ -1,0 +1,54 @@
+services:
+  backend:
+    build:
+      context: .
+    image: ai-grain-grade:local
+    env_file:
+      - .env
+    environment:
+      QWEN_VL_PROVIDER: ${QWEN_VL_PROVIDER:-dashscope}
+    ports:
+      - "8000:8000"
+    volumes:
+      - feedback_data:/app/data/feedback/feedback_data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  grading-worker:
+    build:
+      context: .
+    image: ai-grain-grade:local
+    command: python -m backend.worker
+    env_file:
+      - .env
+    environment:
+      QWEN_VL_PROVIDER: ${QWEN_VL_PROVIDER:-dashscope}
+      GRADING_BACKGROUND_ON_SUBMIT: "0"
+    volumes:
+      - feedback_data:/app/data/feedback/feedback_data
+    depends_on:
+      - backend
+  frontend:
+    image: node:22-alpine
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run dev"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+    depends_on:
+      - backend
+
+volumes:
+  feedback_data:

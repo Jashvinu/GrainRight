@@ -16,6 +16,10 @@ class SatelliteMapView extends StatelessWidget {
   final double height;
   final bool showZoomControls;
 
+  /// Fallback center when there is no polygon (e.g. a point-only farm). Used
+  /// before [SatelliteConfig.defaultCenter] so the map opens on the farm.
+  final LatLng? center;
+
   const SatelliteMapView({
     super.key,
     this.tileUrl,
@@ -27,6 +31,7 @@ class SatelliteMapView extends StatelessWidget {
     this.markers,
     this.height = 260,
     this.showZoomControls = false,
+    this.center,
   });
 
   @override
@@ -41,6 +46,7 @@ class SatelliteMapView extends StatelessWidget {
       markers: markers,
       height: height,
       showZoomControls: showZoomControls,
+      center: center,
       key: key,
     );
   }
@@ -56,6 +62,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final List<Marker>? markers;
   final double height;
   final bool showZoomControls;
+  final LatLng? center;
 
   const _SatelliteMapViewInternal({
     super.key,
@@ -68,6 +75,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.markers,
     this.height = 260,
     this.showZoomControls = false,
+    this.center,
   });
 
   @override
@@ -89,6 +97,11 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
           widget.farmPolygon!.length;
       return LatLng(lat, lng);
     }
+    final markerPoints = _contentPoints();
+    if (markerPoints.isNotEmpty) {
+      return markerPoints.first;
+    }
+    if (widget.center != null) return widget.center!;
     if (widget.rasterBounds != null) {
       return widget.rasterBounds!.center;
     }
@@ -96,9 +109,35 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
   }
 
   double _initialZoom() {
-    return widget.farmPolygon?.isNotEmpty == true
-        ? 17
-        : SatelliteConfig.defaultZoom;
+    if (widget.farmPolygon?.isNotEmpty == true) return 17;
+    if (widget.center != null || _contentPoints().isNotEmpty) return 16;
+    return SatelliteConfig.defaultZoom;
+  }
+
+  /// Every on-map point we want visible: farm boundary, issue markers, and
+  /// heat/scout circles. Used to fit the camera so issues are never off-screen.
+  List<LatLng> _contentPoints() {
+    return [
+      ...?widget.farmPolygon,
+      ...?widget.markers?.map((m) => m.point),
+      ...?widget.heatCircles?.map((c) => c.point),
+    ];
+  }
+
+  /// After the map is ready, frame all content so markers placed away from the
+  /// farm centroid (or a point-only farm) are brought into view.
+  void _fitToContent() {
+    final points = _contentPoints();
+    if (points.length < 2) return;
+    try {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(points),
+          padding: const EdgeInsets.all(32),
+          maxZoom: 17,
+        ),
+      );
+    } catch (_) {}
   }
 
   void _zoomBy(double delta) {
@@ -132,6 +171,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 maxZoom: mapTileMaxZoom,
                 onMapReady: () {
                   _mapReady = true;
+                  _fitToContent();
                   setState(() {});
                 },
               ),

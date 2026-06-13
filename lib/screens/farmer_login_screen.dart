@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../widgets/farm_hills_background.dart';
@@ -38,7 +39,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
   Future<void> _continue() async {
     final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (digits.length != 10) {
-      setState(() => _phoneError = 'Enter a valid 10 digit mobile number');
+      setState(() => _phoneError = UiStrings.t('invalid_phone'));
       return;
     }
 
@@ -92,7 +93,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                       Row(
                         children: [
                           _RoundIconButton(
-                            tooltip: 'Back',
+                            tooltip: UiStrings.t('back'),
                             icon: Icons.arrow_back_rounded,
                             onPressed: _goBack,
                           ),
@@ -159,10 +160,10 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      const Text(
-                        'Farmer Login',
+                      Text(
+                        UiStrings.t('farmer_login'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.greenDark,
                           fontSize: 34,
                           fontWeight: FontWeight.w900,
@@ -190,9 +191,9 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'Mobile Number',
-                              style: TextStyle(
+                            Text(
+                              UiStrings.t('mobile_number'),
+                              style: const TextStyle(
                                 color: AppTheme.greenDark,
                                 fontSize: 15,
                                 fontWeight: FontWeight.w800,
@@ -227,7 +228,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                     ),
                                   ),
                                 ),
-                                hintText: 'Enter mobile number',
+                                hintText: UiStrings.t('enter_mobile'),
                                 suffixIcon: const Icon(Icons.phone_outlined),
                               ),
                             ),
@@ -253,7 +254,9 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                   )
                                 : const Icon(Icons.arrow_forward_rounded),
                             label: Text(
-                              auth.isLoading.value ? 'Please wait' : 'Continue',
+                              auth.isLoading.value
+                                  ? UiStrings.t('please_wait')
+                                  : UiStrings.t('continue_'),
                             ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.greenDark,
@@ -297,34 +300,34 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
                           onTap: () => Get.snackbar(
-                            'Support',
-                            'Contact your field coordinator for login help.',
+                            UiStrings.t('support_title'),
+                            UiStrings.t('support_body'),
                             snackPosition: SnackPosition.BOTTOM,
                           ),
-                          child: const Padding(
-                            padding: EdgeInsets.symmetric(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 14,
                             ),
                             child: Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.support_agent_rounded,
                                   color: AppTheme.green,
                                   size: 26,
                                 ),
-                                SizedBox(width: 12),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    'Need help? Contact support',
-                                    style: TextStyle(
+                                    UiStrings.t('need_help'),
+                                    style: const TextStyle(
                                       color: AppTheme.textDark,
                                       fontSize: 15,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                 ),
-                                Icon(
+                                const Icon(
                                   Icons.chevron_right_rounded,
                                   color: AppTheme.green,
                                   size: 28,
@@ -384,20 +387,20 @@ class _LoginNote extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
         border: Border.all(color: const Color(0xFFDDEBD7)),
       ),
-      child: const Padding(
-        padding: EdgeInsets.all(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.verified_user_outlined,
               color: AppTheme.green,
               size: 24,
             ),
-            SizedBox(width: 10),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
-                'Use the mobile number registered with your field coordinator.',
-                style: TextStyle(
+                UiStrings.t('login_note'),
+                style: const TextStyle(
                   color: AppTheme.textMuted,
                   height: 1.35,
                   fontWeight: FontWeight.w600,
@@ -427,14 +430,14 @@ class _SecureStrip extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
             border: Border.all(color: const Color(0xFFE1E8DE)),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.shield_outlined, color: AppTheme.green, size: 20),
-              SizedBox(width: 8),
+              const Icon(Icons.shield_outlined, color: AppTheme.green, size: 20),
+              const SizedBox(width: 8),
               Text(
-                'Secure & Private',
-                style: TextStyle(
+                UiStrings.t('secure_private'),
+                style: const TextStyle(
                   color: AppTheme.green,
                   fontWeight: FontWeight.w800,
                 ),

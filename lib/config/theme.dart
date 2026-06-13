@@ -155,7 +155,17 @@ class AppTheme {
     chipTheme: ChipThemeData(
       backgroundColor: greenPale,
       selectedColor: green,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      // Explicit colors: without them M3 falls back to labelLarge (white),
+      // which renders invisibly on the pale chip background (e.g. the add-farm
+      // answer chips). Unselected = dark text; selected (green fill) = white.
+      labelStyle: const TextStyle(
+        color: textDark,
+        fontWeight: FontWeight.w600,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
       side: const BorderSide(color: Color(0xFFD9E8D6)),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radiusSmall),

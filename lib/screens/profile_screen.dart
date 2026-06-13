@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
 
 class FarmerProfileScreen extends StatelessWidget {
@@ -42,7 +43,7 @@ class FarmerProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: const Text('Detailed Profile'),
+        title: Text(UiStrings.t('detailed_profile')),
         elevation: 0,
       ),
       body: ListView(
@@ -58,7 +59,7 @@ class FarmerProfileScreen extends StatelessWidget {
           const SizedBox(height: 20),
           _RevealSection(
             delayMs: 60,
-            child: _SectionHeader(title: 'Farmer Identity QR'),
+            child: _SectionHeader(title: UiStrings.t('farmer_identity_qr')),
           ),
           _RevealSection(
             delayMs: 90,
@@ -67,50 +68,50 @@ class FarmerProfileScreen extends StatelessWidget {
           const SizedBox(height: 24),
           _RevealSection(
             delayMs: 120,
-            child: _SectionHeader(title: 'Personal Information'),
+            child: _SectionHeader(title: UiStrings.t('personal_information')),
           ),
           const SizedBox(height: 8),
           _RevealSection(
             delayMs: 140,
             child: _InfoCard(items: [
-              _InfoItem(label: 'Farmer ID', value: profile.farmerId),
-              _InfoItem(label: 'Phone Number', value: profile.phone),
-              _InfoItem(label: 'Location', value: '${profile.location ?? profile.village}'),
-              const _InfoItem(label: 'Gender', value: 'Male'),
-              const _InfoItem(label: 'Age', value: '42 years'),
+              _InfoItem(label: UiStrings.t('farmer_id'), value: profile.farmerId),
+              _InfoItem(label: UiStrings.t('phone_number'), value: profile.phone),
+              _InfoItem(label: UiStrings.t('location'), value: '${profile.location ?? profile.village}'),
+              _InfoItem(label: UiStrings.t('gender'), value: UiStrings.t('male')),
+              _InfoItem(label: UiStrings.t('age'), value: '42 ${UiStrings.t('years')}'),
             ]),
           ),
           const SizedBox(height: 24),
           _RevealSection(
             delayMs: 180,
-            child: _SectionHeader(title: 'Farm Statistics'),
+            child: _SectionHeader(title: UiStrings.t('farm_statistics')),
           ),
           const SizedBox(height: 8),
           _RevealSection(
             delayMs: 210,
             child: _InfoCard(
               items: [
-                _InfoItem(label: 'Primary Farm', value: farm.name),
-                const _InfoItem(label: 'Total Area', value: '4.0 acres'),
-              _InfoItem(label: 'Current Crop', value: farm.crop),
-              const _InfoItem(label: 'Soil Health', value: 'Excellent'),
+                _InfoItem(label: UiStrings.t('primary_farm'), value: farm.name),
+                _InfoItem(label: UiStrings.t('total_area'), value: '4.0 acres'),
+                _InfoItem(label: UiStrings.t('current_crop'), value: farm.crop),
+                _InfoItem(label: UiStrings.t('soil_health'), value: UiStrings.t('excellent')),
               ],
             ),
           ),
           const SizedBox(height: 24),
           _RevealSection(
             delayMs: 240,
-            child: _SectionHeader(title: 'Rewards & Achievements'),
+            child: _SectionHeader(title: UiStrings.t('rewards_achievements')),
           ),
           const SizedBox(height: 10),
           const _RevealSection(
             delayMs: 270,
             child: _RewardsSection(),
-          ),
+          ), // labels localized inside _RewardsSection
           const SizedBox(height: 24),
           _RevealSection(
             delayMs: 300,
-            child: _SectionHeader(title: 'Settings & Support'),
+            child: _SectionHeader(title: UiStrings.t('settings_support')),
           ),
           const SizedBox(height: 10),
           _RevealSection(
@@ -124,27 +125,27 @@ class FarmerProfileScreen extends StatelessWidget {
               children: [
                 _MenuRow(
                   icon: Icons.settings_outlined,
-                  title: 'Account Settings',
+                  title: UiStrings.t('account_settings'),
                   onTap: () => Get.snackbar(
-                    'Account Settings',
-                    'Available in next update.',
+                    UiStrings.t('account_settings'),
+                    UiStrings.t('available_next_update'),
                     snackPosition: SnackPosition.BOTTOM,
                   ),
                 ),
                 const Divider(height: 1),
                 _MenuRow(
                   icon: Icons.support_agent_rounded,
-                  title: 'Help & Support',
+                  title: UiStrings.t('help_support'),
                   onTap: () => Get.snackbar(
-                    'Help & Support',
-                    'Contact your local coordinator for help.',
+                    UiStrings.t('help_support'),
+                    UiStrings.t('contact_coordinator'),
                     snackPosition: SnackPosition.BOTTOM,
                   ),
                 ),
                 const Divider(height: 1),
                 _MenuRow(
                   icon: Icons.logout_rounded,
-                  title: 'Logout',
+                  title: UiStrings.t('logout'),
                   color: Colors.redAccent,
                   onTap: auth.logout,
                 ),
@@ -209,22 +210,22 @@ class _ProfileHeader extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Detailed Farmer Profile',
-                  style: TextStyle(
+                Text(
+                  UiStrings.t('detailed_farmer_profile'),
+                  style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
                 const SizedBox(height: 10),
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.verified_rounded, color: AppTheme.green, size: 16),
-                    SizedBox(width: 4),
+                    const Icon(Icons.verified_rounded, color: AppTheme.green, size: 16),
+                    const SizedBox(width: 4),
                     Text(
-                      'Verified Farmer',
-                      style: TextStyle(
+                      UiStrings.t('verified_farmer'),
+                      style: const TextStyle(
                         color: AppTheme.green,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -259,13 +260,13 @@ class _ProfileHeaderBlock extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Farmer ID: ${profile.farmerId}',
+              '${UiStrings.t('farmer_id')}: ${profile.farmerId}',
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
           ),
           const Icon(Icons.verified_user_outlined, color: AppTheme.green),
           const SizedBox(width: 6),
-          const Text('Trusted Profile', style: TextStyle(color: AppTheme.green)),
+          Text(UiStrings.t('trusted_profile'), style: const TextStyle(color: AppTheme.green)),
         ],
       ),
     );
@@ -397,23 +398,23 @@ class _RewardsSection extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: const [
+        children: [
           _RewardBadge(
             icon: Icons.emoji_events_rounded,
-            label: 'Top Harvester',
-            color: Color(0xFFF59E0B),
+            label: UiStrings.t('top_harvester'),
+            color: const Color(0xFFF59E0B),
           ),
           _RewardBadge(
             icon: Icons.eco_rounded,
-            label: 'Organic Pro',
-            color: Color(0xFF16A34A),
+            label: UiStrings.t('organic_pro'),
+            color: const Color(0xFF16A34A),
           ),
           _RewardBadge(
             icon: Icons.star_rounded,
-            label: 'Early Adopter',
-            color: Color(0xFF2563EB),
+            label: UiStrings.t('early_adopter'),
+            color: const Color(0xFF2563EB),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
         ],
       ),
     );
@@ -510,7 +511,7 @@ class _ProfileFooter extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Text(
-        'Verified for farm access: ${profile.farmerId}',
+        '${UiStrings.t('verified_for_access')} ${profile.farmerId}',
         textAlign: TextAlign.center,
         style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
       ),
