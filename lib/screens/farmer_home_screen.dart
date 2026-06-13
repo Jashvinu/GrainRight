@@ -5223,6 +5223,9 @@ class _FarmPage extends StatelessWidget {
                     height: 196,
                     child: SatelliteMapView(
                       farmPolygon: selectedPolygon,
+                      center: selected.latitude != null && selected.longitude != null
+                          ? LatLng(selected.latitude!, selected.longitude!)
+                          : null,
                       heatCircles: _alertCircles(
                         localMarkers: diseaseMarkers,
                         scoutZones: scoutZones,

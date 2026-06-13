@@ -1,0 +1,1 @@
+{"image_uri": "Rice dataset.zip::missing/rice_miss_b.jpg", "crop": "rice", "label": null, "sample_id": "b7f93dcc520106d1fd04", "source_archive_path": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives\\Rice dataset.zip", "member_path": "missing/rice_miss_b.jpg", "quality_flags": ["missing_label", "flat_archive_path"], "split": "val"}

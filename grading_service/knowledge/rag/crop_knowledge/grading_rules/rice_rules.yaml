@@ -1,0 +1,74 @@
+crop: rice
+
+supported_varieties:
+  - Indrayani
+  - Basmati
+  - Kolam
+
+grading_engine:
+
+  moisture:
+    grade_a: {max: 12.0}
+    grade_b: {max: 13.0}
+    grade_c: {max: 14.0}
+
+  broken_grains:
+    grade_a: {max: 4.0}
+    grade_b: {max: 8.0}
+    grade_c: {max: 15.0}
+
+  damaged_grains:
+    grade_a: {max: 1.0}
+    grade_b: {max: 2.0}
+    grade_c: {max: 5.0}
+
+  chalky_grains:
+    grade_a: {max: 2.0}
+    grade_b: {max: 4.0}
+    grade_c: {max: 8.0}
+
+  foreign_matter:
+    grade_a: {max: 0.10}
+    grade_b: {max: 0.25}
+    grade_c: {max: 0.50}
+
+  color_uniformity:
+    grade_a: {min: 95}
+    grade_b: {min: 80}
+    grade_c: {min: 60}
+
+  size_uniformity:
+    grade_a: {min: 90}
+    grade_b: {min: 75}
+    grade_c: {min: 60}
+
+  shape_uniformity:
+    grade_a: {min: 90}
+    grade_b: {min: 75}
+    grade_c: {min: 60}
+
+  surface_defects:
+    grade_a: {max: 2}
+    grade_b: {max: 5}
+    grade_c: {max: 10}
+
+scoring_weights:
+  moisture: 20
+  broken_grains: 20
+  damaged_grains: 15
+  color_uniformity: 10
+  size_uniformity: 10
+  shape_uniformity: 10
+  surface_defects: 10
+  purity: 5
+
+grade_decision:
+  grade_a_score: 90
+  grade_b_score: 75
+  grade_c_score: 60
+
+final_output:
+  grades:
+    - A
+    - B
+    - C

@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-06-10T19:58:29.221364+00:00",
+  "seed": 1337,
+  "source_dir": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives",
+  "train_ratio": 0.5,
+  "require_labels": false,
+  "totals": {
+    "archives": 2,
+    "malformed_archives": 0,
+    "images": 4,
+    "archives_without_images": 0,
+    "labels": {
+      "A": 2,
+      "missing": 2
+    },
+    "label_unknown": 2
+  },
+  "archive_errors": {
+    "Ragi dataset.zip": [
+      "extension_profile:.jpg:1"
+    ],
+    "Rice dataset.zip": [
+      "extension_profile:.jpg:3"
+    ]
+  },
+  "crops": {
+    "ragi": {
+      "total": 1,
+      "label_counts": {
+        "A": 1
+      },
+      "missing_labels": 0,
+      "sample_ids": [
+        "751055226753834c1650"
+      ],
+      "split": {
+        "train": [],
+        "val": [
+          "751055226753834c1650"
+        ]
+      }
+    },
+    "rice": {
+      "total": 3,
+      "label_counts": {
+        "missing": 2,
+        "A": 1
+      },
+      "missing_labels": 2,
+      "sample_ids": [
+        "cc24f22211989cc8b071",
+        "b7f93dcc520106d1fd04",
+        "517aeee1f838e1865b59"
+      ],
+      "split": {
+        "train": [
+          "cc24f22211989cc8b071"
+        ],
+        "val": [
+          "517aeee1f838e1865b59",
+          "b7f93dcc520106d1fd04"
+        ]
+      }
+    }
+  },
+  "samples": [
+    {
+      "sample_id": "751055226753834c1650",
+      "archive_name": "Ragi dataset.zip",
+      "member_path": "grade_a/ragi_ok_a.jpg",
+      "crop": "ragi",
+      "label": "A",
+      "image_uri": "Ragi dataset.zip::grade_a/ragi_ok_a.jpg",
+      "source_archive_path": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives\\Ragi dataset.zip",
+      "quality_flags": [
+        "flat_archive_path"
+      ]
+    },
+    {
+      "sample_id": "cc24f22211989cc8b071",
+      "archive_name": "Rice dataset.zip",
+      "member_path": "grain_miss_a.jpg",
+      "crop": "rice",
+      "label": null,
+      "image_uri": "Rice dataset.zip::grain_miss_a.jpg",
+      "source_archive_path": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives\\Rice dataset.zip",
+      "quality_flags": [
+        "missing_label",
+        "flat_archive_path"
+      ]
+    },
+    {
+      "sample_id": "b7f93dcc520106d1fd04",
+      "archive_name": "Rice dataset.zip",
+      "member_path": "missing/rice_miss_b.jpg",
+      "crop": "rice",
+      "label": null,
+      "image_uri": "Rice dataset.zip::missing/rice_miss_b.jpg",
+      "source_archive_path": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives\\Rice dataset.zip",
+      "quality_flags": [
+        "missing_label",
+        "flat_archive_path"
+      ]
+    },
+    {
+      "sample_id": "517aeee1f838e1865b59",
+      "archive_name": "Rice dataset.zip",
+      "member_path": "grade_a/rice_ok_a.jpg",
+      "crop": "rice",
+      "label": "A",
+      "image_uri": "Rice dataset.zip::grade_a/rice_ok_a.jpg",
+      "source_archive_path": "D:\\Grain Detection\\GrainGrade-Detection\\scripts\\golden_case\\sample_archives\\Rice dataset.zip",
+      "quality_flags": [
+        "flat_archive_path"
+      ]
+    }
+  ],
+  "splits": {
+    "ragi": {
+      "train": [],
+      "val": [
+        "751055226753834c1650"
+      ]
+    },
+    "rice": {
+      "train": [
+        "cc24f22211989cc8b071"
+      ],
+      "val": [
+        "517aeee1f838e1865b59",
+        "b7f93dcc520106d1fd04"
+      ]
+    }
+  }
+}

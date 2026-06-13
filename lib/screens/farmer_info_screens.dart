@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 
 class WeatherPage extends StatelessWidget {
   final String? farmName;
@@ -105,8 +106,8 @@ class WeatherPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final contextTitle = farmName == null || farmName!.trim().isEmpty
-        ? 'Weather Forecast'
-        : 'Weather • ${farmName!}';
+        ? UiStrings.t('weather_forecast')
+        : '${UiStrings.t('weather')} • ${farmName!}';
 
     return Scaffold(
       backgroundColor: AppTheme.surface,
@@ -153,14 +154,14 @@ class WeatherPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Hourly Temperature Trend',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.greenDark),
+                      Text(
+                        UiStrings.t('hourly_temp_trend'),
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: AppTheme.greenDark),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Expected daily variations in temperature over the next 12 hours.',
-                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      Text(
+                        UiStrings.t('hourly_temp_sub'),
+                        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
                       ),
                       const SizedBox(height: 12),
                       const _HourlyTempChart(),
@@ -169,21 +170,21 @@ class WeatherPage extends StatelessWidget {
                         children: [
                           _WeatherMetricTile(
                             icon: Icons.wb_sunny_rounded,
-                            title: 'Condition',
+                            title: UiStrings.t('condition'),
                             value: _forecast[0]['condition'] as String,
                             tint: AppTheme.greenPale,
                           ),
                           const SizedBox(width: 8),
                           _WeatherMetricTile(
                             icon: Icons.air,
-                            title: 'Wind',
+                            title: UiStrings.t('wind'),
                             value: _forecast[0]['wind'] as String,
                             tint: const Color(0xFFE8F5FF),
                           ),
                           const SizedBox(width: 8),
                           _WeatherMetricTile(
                             icon: Icons.opacity,
-                            title: 'Rain Prob.',
+                            title: UiStrings.t('rain_prob'),
                             value: _forecast[0]['rain'] as String,
                             tint: const Color(0xFFF3E8FF),
                           ),
@@ -398,26 +399,26 @@ class _WeatherRiskSummaryCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Row(
-              children: const [
+              children: [
                 _WeatherMetricTile(
                   icon: Icons.water_drop_outlined,
-                  title: 'Irrigation',
+                  title: UiStrings.t('irrigation'),
                   value: 'Evening',
-                  tint: Color(0xFFEAF6FF),
+                  tint: const Color(0xFFEAF6FF),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 _WeatherMetricTile(
                   icon: Icons.bug_report_outlined,
-                  title: 'Pest risk',
+                  title: UiStrings.t('pest_risk'),
                   value: 'Low',
-                  tint: Color(0xFFFFF8E1),
+                  tint: const Color(0xFFFFF8E1),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 _WeatherMetricTile(
                   icon: Icons.cloud_sync_outlined,
-                  title: 'Sync',
+                  title: UiStrings.t('sync'),
                   value: 'Ready',
-                  tint: Color(0xFFE8F5E9),
+                  tint: const Color(0xFFE8F5E9),
                 ),
               ],
             ),

@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
+import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../widgets/farm_hills_background.dart';
+import '../widgets/language_selector_button.dart';
 
 class MainLoginScreen extends StatefulWidget {
   const MainLoginScreen({super.key});
@@ -46,12 +49,23 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Obx(() {
+                          final language = Get.find<LanguageController>();
+                          return LanguageSelectorButton(
+                            code: language.language.value,
+                            onChanged: language.setLanguage,
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 8),
                       const _AnimatedEntrance(delay: 0, child: _BrandHeader()),
                       const SizedBox(height: 26),
-                      const Text(
-                        'Welcome!',
+                      Text(
+                        UiStrings.t('welcome'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.greenDark,
                           fontSize: 28,
                           fontWeight: FontWeight.w900,
@@ -59,10 +73,10 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Choose how you want to continue',
+                      Text(
+                        UiStrings.t('choose_continue'),
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: AppTheme.textMuted,
                           fontSize: 17,
                           fontWeight: FontWeight.w500,
@@ -73,8 +87,8 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         delay: 90,
                         child: _RoleCard(
                           icon: Icons.agriculture_outlined,
-                          title: 'Farmer',
-                          subtitle: 'Login with mobile',
+                          title: UiStrings.t('role_farmer'),
+                          subtitle: UiStrings.t('role_farmer_sub'),
                           color: const Color(0xFF0B7A3B),
                           tint: const Color(0xFFE8F5E9),
                           isDisabled: false,
@@ -86,8 +100,8 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         delay: 160,
                         child: _RoleCard(
                           icon: Icons.groups_2_outlined,
-                          title: 'FPO / FPC',
-                          subtitle: 'Login with FPC details',
+                          title: UiStrings.t('role_fpo'),
+                          subtitle: UiStrings.t('role_fpo_sub'),
                           color: const Color(0xFF1976D2),
                           tint: const Color(0xFFE3F2FD),
                           isDisabled: false,
@@ -99,8 +113,8 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         delay: 230,
                         child: _RoleCard(
                           icon: Icons.admin_panel_settings_outlined,
-                          title: 'Admin',
-                          subtitle: 'System administration',
+                          title: UiStrings.t('role_admin'),
+                          subtitle: UiStrings.t('role_admin_sub'),
                           color: const Color(0xFF673AB7),
                           tint: const Color(0xFFF1E8FF),
                           isDisabled: false,
@@ -108,15 +122,15 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      const _DividerLabel(label: 'or'),
+                      _DividerLabel(label: UiStrings.t('or')),
                       const SizedBox(height: 24),
                       Obx(
                         () => _AnimatedEntrance(
                           delay: 300,
                           child: _RoleCard(
                             icon: Icons.person_outline_rounded,
-                            title: 'Continue as Guest',
-                            subtitle: 'Fill survey form only\n(Limited Access)',
+                            title: UiStrings.t('guest'),
+                            subtitle: UiStrings.t('guest_sub'),
                             color: const Color(0xFFB8860B),
                             tint: const Color(0xFFFFF8E1),
                             isLoading:
@@ -442,16 +456,16 @@ class _SecurityStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.verified_user_rounded, color: Color(0xFF52B788), size: 22),
-        SizedBox(width: 10),
+        const Icon(Icons.verified_user_rounded, color: Color(0xFF52B788), size: 22),
+        const SizedBox(width: 10),
         Flexible(
           child: Text(
-            'Your data is safe and secure with us',
+            UiStrings.t('data_safe'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppTheme.greenDark,
               fontSize: 15,
               fontWeight: FontWeight.w600,

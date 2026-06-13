@@ -1,0 +1,79 @@
+crop: fingermillet
+
+supported_varieties:
+  - GPU28
+  - GPU45
+  - GPU48
+  - DapoliNachani
+
+grading_engine:
+
+  moisture:
+    grade_a: {max: 12.0}
+    grade_b: {max: 13.0}
+    grade_c: {max: 14.0}
+
+  organic_extraneous_matter:
+    grade_a: {max: 0.10}
+    grade_b: {max: 0.25}
+    grade_c: {max: 0.50}
+
+  inorganic_extraneous_matter:
+    grade_a: {max: 0.05}
+    grade_b: {max: 0.10}
+    grade_c: {max: 0.20}
+
+  damaged_grains:
+    grade_a: {max: 0.20}
+    grade_b: {max: 0.50}
+    grade_c: {max: 1.00}
+
+  immature_grains:
+    grade_a: {max: 2.0}
+    grade_b: {max: 3.0}
+    grade_c: {max: 5.0}
+
+  weevilled_grains:
+    grade_a: {max: 1.0}
+    grade_b: {max: 2.0}
+    grade_c: {max: 4.0}
+
+  color_uniformity:
+    grade_a: {min: 95}
+    grade_b: {min: 80}
+    grade_c: {min: 60}
+
+  size_uniformity:
+    grade_a: {min: 90}
+    grade_b: {min: 75}
+    grade_c: {min: 60}
+
+  shape_uniformity:
+    grade_a: {min: 90}
+    grade_b: {min: 75}
+    grade_c: {min: 60}
+
+  surface_defects:
+    grade_a: {max: 2}
+    grade_b: {max: 5}
+    grade_c: {max: 10}
+
+scoring_weights:
+  moisture: 25
+  color_uniformity: 15
+  size_uniformity: 15
+  shape_uniformity: 10
+  damaged_grains: 15
+  surface_defects: 10
+  purity: 10
+
+grade_decision:
+  grade_a_score: 90
+  grade_b_score: 75
+  grade_c_score: 60
+
+final_output:
+  grades:
+    - A
+    - B
+    - C
