@@ -23,6 +23,9 @@ class RuntimeConfig {
   static const _offlineTileSourceLabelFallback = String.fromEnvironment(
     'OFFLINE_TILE_SOURCE_LABEL',
   );
+  static const _publicTraceBaseUrlFallback = String.fromEnvironment(
+    'PUBLIC_TRACE_BASE_URL',
+  );
 
   static Map<String, String> _localConfig = const {};
 
@@ -67,6 +70,17 @@ class RuntimeConfig {
 
   static String mapTilerHybridTileUrlTemplate(String apiKey) {
     return 'https://api.maptiler.com/maps/hybrid/256/{z}/{x}/{y}@2x.jpg?key=$apiKey';
+  }
+
+  static String get publicTraceBaseUrl {
+    final fallback = _stripTrailingSlash(_publicTraceBaseUrlFallback.trim());
+    if (_isUsable(fallback)) return fallback;
+    final local = _stripTrailingSlash(_localConfigValue('PUBLIC_TRACE_BASE_URL'));
+    return local.isEmpty ? 'https://grainright.app' : local;
+  }
+
+  static String publicTraceUrl(String token) {
+    return '$publicTraceBaseUrl/#/trace/$token';
   }
 
   static Future<String> mapTilerApiKeyRuntime() {
@@ -128,6 +142,10 @@ class RuntimeConfig {
 
   static bool _isMapTilerTemplate(String template) {
     return template.contains('api.maptiler.com');
+  }
+
+  static String _stripTrailingSlash(String value) {
+    return value.replaceFirst(RegExp(r'/+$'), '');
   }
 
   static String _localConfigValue(String key) {

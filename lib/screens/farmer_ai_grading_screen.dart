@@ -5,14 +5,17 @@ import 'package:get/get.dart';
 
 import '../config/grading_strings.dart';
 import '../config/theme.dart';
+import '../controllers/farm_controller.dart';
+import '../controllers/main_auth_controller.dart';
 import '../models/grading/crop_option.dart';
 import '../models/grading/grade_result.dart';
+import '../models/satellite/farm_model.dart';
 import '../services/grain_grading_service.dart';
 import '../utils/harvest_machine_capture.dart';
+import '../widgets/fpc_bottom_nav.dart';
 
-/// Real AI grain-grading flow wired to the vendored FastAPI service.
-/// One decision per screen (crop → grain photo → moisture → result), tuned for
-/// low-literacy, Marathi/Hindi-first use. See docs/11_grain_grading_integration.md.
+/// Standalone AI grain-grading flow.
+/// Farm/batch → moisture OCR/confirmation → grain photo → result.
 class FarmerAiGradingScreen extends StatefulWidget {
   const FarmerAiGradingScreen({super.key});
 
@@ -20,14 +23,18 @@ class FarmerAiGradingScreen extends StatefulWidget {
   State<FarmerAiGradingScreen> createState() => _FarmerAiGradingScreenState();
 }
 
-enum _Step { crop, grain, moisture, result }
+enum _Step { setup, moisture, grain, result }
 
 class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
   final GrainGradingService _service = GrainGradingService();
   final TextEditingController _manualMoistureCtrl = TextEditingController();
+  final TextEditingController _batchCtrl = TextEditingController();
+  final TextEditingController _bagSizeCtrl = TextEditingController(text: '50');
+  final TextEditingController _bagCountCtrl = TextEditingController(text: '1');
 
-  _Step _step = _Step.crop;
+  _Step _step = _Step.setup;
   bool _loadingCrops = true;
+  bool _readingMoisture = false;
   bool _grading = false;
   bool _notConfigured = false;
 
@@ -39,34 +46,100 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
   String _grainName = 'grain.jpg';
   Uint8List? _moistureBytes;
   String _moistureName = 'moisture.jpg';
+  String? _moistureImagePath;
+  MoistureOcrResult? _moistureReading;
 
   GradeResult? _result;
 
-  Map<String, String> get _farmArgs {
+  Map<String, dynamic> get _routeArgs {
     final args = Get.arguments;
-    if (args is Map) {
-      return {
-        'farmName': '${args['farmName'] ?? 'Rajur Millet Plot'}',
-        'crop': '${args['crop'] ?? 'Finger Millet'}',
-        'village': '${args['village'] ?? 'Rajur'}',
-      };
-    }
-    return const {
-      'farmName': 'Rajur Millet Plot',
-      'crop': 'Finger Millet',
-      'village': 'Rajur',
+    return args is Map ? Map<String, dynamic>.from(args) : const {};
+  }
+
+  String _arg(String key, [String fallback = '']) {
+    final value = _routeArgs[key];
+    final text = value == null ? '' : '$value'.trim();
+    return text.isEmpty ? fallback : text;
+  }
+
+  bool get _isFpcMode => _arg('mode').toLowerCase() == 'fpc';
+
+  String get _actorRole => _isFpcMode ? 'fpc' : 'farmer';
+
+  String get _fpcCustomerId => _arg('fpcCustomerId');
+
+  String get _fpcCustomerName => _arg('fpcCustomerName', _arg('farmerName'));
+
+  Map<String, String> get _farmArgs {
+    return {
+      'farmName': _arg('farmName', 'Rajur Millet Plot'),
+      'farmId': _arg('farmId'),
+      'crop': _arg('crop', 'Finger Millet'),
+      'variety': _arg('variety', 'Local'),
+      'village': _arg('village', 'Rajur'),
+      'product': _arg('product'),
+      'actorRole': _actorRole,
+      'fpcCustomerId': _fpcCustomerId,
+      'fpcCustomerName': _fpcCustomerName,
     };
+  }
+
+  Farm? get _selectedRemoteFarm {
+    if (_isFpcMode) return null;
+    if (!Get.isRegistered<FarmController>()) return null;
+    return Get.find<FarmController>().selectedFarm.value;
+  }
+
+  String get _farmId {
+    final remote = _selectedRemoteFarm?.id ?? '';
+    if (remote.trim().isNotEmpty) return remote.trim();
+    return (_farmArgs['farmId'] ?? '').trim();
+  }
+
+  String get _farmName {
+    final remote = _selectedRemoteFarm?.name ?? '';
+    if (remote.trim().isNotEmpty) return remote.trim();
+    return (_farmArgs['farmName'] ?? '').trim();
+  }
+
+  String get _farmerId {
+    final argFarmerId = _arg('farmerId');
+    if (argFarmerId.isNotEmpty) return argFarmerId;
+    if (_isFpcMode && _fpcCustomerId.isNotEmpty) return _fpcCustomerId;
+    if (!Get.isRegistered<MainAuthController>()) return '';
+    return Get.find<MainAuthController>().verifiedFarmer.value?.farmerId ?? '';
+  }
+
+  String get _farmerName {
+    final argFarmerName = _arg('farmerName');
+    if (argFarmerName.isNotEmpty) return argFarmerName;
+    if (_isFpcMode && _fpcCustomerName.isNotEmpty) return _fpcCustomerName;
+    if (!Get.isRegistered<MainAuthController>()) return '';
+    return Get.find<MainAuthController>().verifiedFarmer.value?.farmerName ?? '';
+  }
+
+  bool get _setupComplete {
+    return _crop != null &&
+        _batchCtrl.text.trim().isNotEmpty &&
+        double.tryParse(_bagSizeCtrl.text.trim()) != null &&
+        int.tryParse(_bagCountCtrl.text.trim()) != null &&
+        _farmerId.isNotEmpty &&
+        _farmName.isNotEmpty;
   }
 
   @override
   void initState() {
     super.initState();
+    _batchCtrl.text = _batchId();
     _loadCrops();
   }
 
   @override
   void dispose() {
     _manualMoistureCtrl.dispose();
+    _batchCtrl.dispose();
+    _bagSizeCtrl.dispose();
+    _bagCountCtrl.dispose();
     _service.dispose();
     super.dispose();
   }
@@ -85,9 +158,10 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     }
     try {
       final crops = await _service.fetchCrops();
+      final loaded = crops.isEmpty ? _fallbackCrops : crops;
       setState(() {
-        _crops = crops.isEmpty ? _fallbackCrops : crops;
-        _crop = _crops.first;
+        _crops = loaded;
+        _crop = _initialCrop(loaded);
         _variety = _crop!.varieties.isNotEmpty ? _crop!.varieties.first : null;
         _loadingCrops = false;
       });
@@ -96,11 +170,26 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       // works even when the catalog endpoint is unreachable.
       setState(() {
         _crops = _fallbackCrops;
-        _crop = _crops.first;
+        _crop = _initialCrop(_crops);
         _variety = _crop!.varieties.isNotEmpty ? _crop!.varieties.first : null;
         _loadingCrops = false;
       });
     }
+  }
+
+  CropOption _initialCrop(List<CropOption> crops) {
+    final desired = (_selectedRemoteFarm?.crop ?? _farmArgs['crop'] ?? '')
+        .toLowerCase()
+        .trim();
+    if (desired.isEmpty) return crops.first;
+    return crops.firstWhere(
+      (crop) {
+        final label = crop.label.toLowerCase();
+        final value = crop.value.toLowerCase();
+        return label.contains(desired) || desired.contains(label) || value == desired;
+      },
+      orElse: () => crops.first,
+    );
   }
 
   static const List<CropOption> _fallbackCrops = [
@@ -124,8 +213,51 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       } else {
         _moistureBytes = result.bytes;
         _moistureName = result.name;
+        _moistureImagePath = null;
+        _moistureReading = null;
       }
     });
+  }
+
+  Future<void> _readMoisture() async {
+    final manual = double.tryParse(_manualMoistureCtrl.text.trim());
+    if (_moistureBytes == null && manual == null) {
+      Get.snackbar(
+        GradingStrings.t('step_moisture'),
+        GradingStrings.t('moisture_hint'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
+    setState(() => _readingMoisture = true);
+    try {
+      final reading = await _service.readMoisture(
+        moistureImageBytes: _moistureBytes,
+        moistureImageName: _moistureName,
+        manualMoisturePercent: manual,
+      );
+      if (!mounted) return;
+      setState(() {
+        _readingMoisture = false;
+        _moistureReading = reading;
+        _moistureImagePath = reading.imagePath?.isEmpty == true
+            ? null
+            : reading.imagePath;
+        if (reading.percent != null) {
+          _manualMoistureCtrl.text = reading.percent!.toStringAsFixed(1);
+        }
+        _step = _Step.grain;
+      });
+    } on GradingException catch (e) {
+      if (!mounted) return;
+      setState(() => _readingMoisture = false);
+      Get.snackbar(
+        GradingStrings.t('error_generic'),
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
   }
 
   Future<void> _analyze() async {
@@ -133,7 +265,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     final grain = _grainBytes;
     if (crop == null || grain == null) return;
     final manual = double.tryParse(_manualMoistureCtrl.text.trim());
-    if (_moistureBytes == null && manual == null) {
+    if (_moistureImagePath == null && _moistureBytes == null && manual == null) {
       Get.snackbar(
         GradingStrings.t('step_moisture'),
         GradingStrings.t('moisture_hint'),
@@ -151,11 +283,21 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       final result = await _service.analyze(
         grainImageBytes: grain,
         grainImageName: _grainName,
-        moistureImageBytes: _moistureBytes,
+        moistureImageBytes: _moistureImagePath == null ? _moistureBytes : null,
         moistureImageName: _moistureName,
-        manualMoisturePercent: _moistureBytes == null ? manual : null,
+        moistureImagePath: _moistureImagePath,
+        manualMoisturePercent: manual,
         cropType: crop.value,
         cropVariety: _variety?.value ?? '',
+        farmerId: _farmerId,
+        farmId: _farmId,
+        batchId: _batchCtrl.text.trim(),
+        bagSizeKg: double.tryParse(_bagSizeCtrl.text.trim()),
+        bagCount: int.tryParse(_bagCountCtrl.text.trim()),
+        actorRole: _actorRole,
+        fpcCustomerId: _isFpcMode ? _fpcCustomerId : null,
+        fpcCustomerName: _isFpcMode ? _fpcCustomerName : null,
+        source: _isFpcMode ? 'fpc_grain_grading' : 'farmer_grain_grading',
       );
       setState(() {
         _result = result;
@@ -168,25 +310,63 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         e.message,
         snackPosition: SnackPosition.BOTTOM,
       );
-      setState(() => _step = _Step.moisture);
+      setState(() => _step = _Step.grain);
     }
   }
 
   void _goToHarvestQr() {
     final result = _result;
     if (result == null) return;
+    if (result.manualReviewRequired) {
+      Get.snackbar(
+        GradingStrings.t('needs_human_check'),
+        'FPO approval is required before QR generation.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    final bagSize = double.tryParse(_bagSizeCtrl.text.trim());
+    final bagCount = int.tryParse(_bagCountCtrl.text.trim());
+    if (_farmerId.isEmpty ||
+        _farmId.isEmpty ||
+        _farmName.isEmpty ||
+        _batchCtrl.text.trim().isEmpty ||
+        bagSize == null ||
+        bagCount == null ||
+        result.analysisId.isEmpty) {
+      Get.snackbar(
+        GradingStrings.t('generate_qr'),
+        'Complete farmer, farm, batch, bag, and grading details first.',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
     final farm = _farmArgs;
     final moisture = result.moisturePercent;
     Get.toNamed('/farmer/harvest-qr', arguments: {
       ...farm,
+      'analysisId': result.analysisId,
+      'farmId': _farmId,
+      'farmName': _farmName,
+      'farmerId': _farmerId,
+      'farmerName': _farmerName,
       'crop': _crop?.label ?? farm['crop'],
       'variety': _variety?.label ?? 'Local',
       'grade': result.grade,
-      'score': result.confidenceOverall?.round().toString() ?? '--',
+      'score': result.finalScore?.round().toString() ??
+          result.confidenceOverall?.round().toString() ??
+          '--',
       'moisture': moisture != null ? '${moisture.toStringAsFixed(1)}%' : '--',
       'moistureSource': result.moistureSource.isEmpty ? '--' : result.moistureSource,
       'grader': 'AI grading',
-      'batchId': _batchId(),
+      'batchId': _batchCtrl.text.trim(),
+      'bagSizeKg': bagSize.toStringAsFixed(1),
+      'bagCount': bagCount.toString(),
+      'totalKg': (bagSize * bagCount).toStringAsFixed(1),
+      'reviewStatus': 'approved',
+      'actorRole': _actorRole,
+      if (_isFpcMode) 'fpcCustomerId': _fpcCustomerId,
+      if (_isFpcMode) 'fpcCustomerName': _fpcCustomerName,
     });
   }
 
@@ -201,7 +381,11 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppBar(title: Text(GradingStrings.t('title'))),
+      bottomNavigationBar:
+          _isFpcMode ? const FpcBottomNavBar(current: FpcNavTab.grading) : null,
+      appBar: AppBar(
+        title: Text(_isFpcMode ? 'FPC Grain Grading' : GradingStrings.t('title')),
+      ),
       body: SafeArea(
         child: _notConfigured
             ? _NotConfiguredState(onRetry: _loadCrops)
@@ -220,8 +404,16 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       return const Center(child: CircularProgressIndicator());
     }
     switch (_step) {
-      case _Step.crop:
-        return _CropStep(
+      case _Step.setup:
+        return _SetupStep(
+          farmName: _farmName,
+          farmId: _farmId,
+          farmerId: _farmerId,
+          farmerName: _farmerName,
+          actorLabel: _isFpcMode ? 'FPC customer lot' : 'Farmer farm lot',
+          batchController: _batchCtrl,
+          bagSizeController: _bagSizeCtrl,
+          bagCountController: _bagCountCtrl,
           crops: _crops,
           selectedCrop: _crop,
           selectedVariety: _variety,
@@ -230,7 +422,8 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
             _variety = c.varieties.isNotEmpty ? c.varieties.first : null;
           }),
           onVariety: (v) => setState(() => _variety = v),
-          onNext: () => setState(() => _step = _Step.grain),
+          onChanged: () => setState(() {}),
+          onNext: _setupComplete ? () => setState(() => _step = _Step.moisture) : null,
         );
       case _Step.grain:
         return _PhotoStep(
@@ -239,21 +432,23 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           hint: GradingStrings.t('grain_hint'),
           icon: Icons.grain_rounded,
           bytes: _grainBytes,
+          primaryLabel: GradingStrings.t('check_grade'),
+          primaryIcon: Icons.verified_rounded,
           onCamera: () => _pick(grain: true, source: HarvestMachineImageSource.camera),
           onGallery: () => _pick(grain: true, source: HarvestMachineImageSource.gallery),
-          onBack: () => setState(() => _step = _Step.crop),
-          onNext: _grainBytes == null
-              ? null
-              : () => setState(() => _step = _Step.moisture),
+          onBack: () => setState(() => _step = _Step.moisture),
+          onNext: _grainBytes == null ? null : _analyze,
         );
       case _Step.moisture:
         return _MoistureStep(
           bytes: _moistureBytes,
+          reading: _moistureReading,
+          readingMoisture: _readingMoisture,
           manualController: _manualMoistureCtrl,
           onCamera: () => _pick(grain: false, source: HarvestMachineImageSource.camera),
           onGallery: () => _pick(grain: false, source: HarvestMachineImageSource.gallery),
-          onBack: () => setState(() => _step = _Step.grain),
-          onAnalyze: _analyze,
+          onBack: () => setState(() => _step = _Step.setup),
+          onReadMoisture: _readMoisture,
           onManualChanged: (_) => setState(() {}),
         );
       case _Step.result:
@@ -264,10 +459,15 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           result: result,
           onFeedback: () => _openFeedback(result),
           onHarvestQr: _goToHarvestQr,
+          primaryLabel: _isFpcMode
+              ? 'Generate public trace QR'
+              : GradingStrings.t('generate_qr'),
           onAgain: () => setState(() {
-            _step = _Step.crop;
+            _step = _Step.setup;
             _grainBytes = null;
             _moistureBytes = null;
+            _moistureImagePath = null;
+            _moistureReading = null;
             _manualMoistureCtrl.clear();
             _result = null;
           }),
@@ -308,12 +508,12 @@ class _StepBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const steps = [_Step.crop, _Step.grain, _Step.moisture, _Step.result];
-    const labels = ['step_crop', 'step_grain', 'step_moisture', 'step_result'];
+    const steps = [_Step.setup, _Step.moisture, _Step.grain, _Step.result];
+    const labels = ['step_setup', 'step_moisture', 'step_grain', 'step_result'];
     const icons = [
-      Icons.eco_rounded,
-      Icons.grain_rounded,
+      Icons.inventory_2_rounded,
       Icons.water_drop_rounded,
+      Icons.grain_rounded,
       Icons.verified_rounded,
     ];
     final activeIndex = steps.indexOf(current);
@@ -384,22 +584,40 @@ class _StepBar extends StatelessWidget {
   }
 }
 
-// ─── Step 1: crop ────────────────────────────────────────────────────────────
+// ─── Step 1: setup ───────────────────────────────────────────────────────────
 
-class _CropStep extends StatelessWidget {
+class _SetupStep extends StatelessWidget {
+  final String farmName;
+  final String farmId;
+  final String farmerId;
+  final String farmerName;
+  final String actorLabel;
+  final TextEditingController batchController;
+  final TextEditingController bagSizeController;
+  final TextEditingController bagCountController;
   final List<CropOption> crops;
   final CropOption? selectedCrop;
   final CropVariety? selectedVariety;
   final ValueChanged<CropOption> onCrop;
   final ValueChanged<CropVariety> onVariety;
-  final VoidCallback onNext;
+  final VoidCallback onChanged;
+  final VoidCallback? onNext;
 
-  const _CropStep({
+  const _SetupStep({
+    required this.farmName,
+    required this.farmId,
+    required this.farmerId,
+    required this.farmerName,
+    required this.actorLabel,
+    required this.batchController,
+    required this.bagSizeController,
+    required this.bagCountController,
     required this.crops,
     required this.selectedCrop,
     required this.selectedVariety,
     required this.onCrop,
     required this.onVariety,
+    required this.onChanged,
     required this.onNext,
   });
 
@@ -412,6 +630,54 @@ class _CropStep extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
+              _StepTitle(text: GradingStrings.t('setup_batch'), icon: Icons.inventory_2_rounded),
+              const SizedBox(height: 12),
+              _ContextCard(
+                farmName: farmName,
+                farmId: farmId,
+                farmerId: farmerId,
+                farmerName: farmerName,
+                actorLabel: actorLabel,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: batchController,
+                onChanged: (_) => onChanged(),
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'Batch ID',
+                  prefixIcon: Icon(Icons.qr_code_2_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: bagSizeController,
+                      onChanged: (_) => onChanged(),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Bag kg',
+                        prefixIcon: Icon(Icons.scale_rounded),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: bagCountController,
+                      onChanged: (_) => onChanged(),
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Bags',
+                        prefixIcon: Icon(Icons.inventory_rounded),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
               _StepTitle(text: GradingStrings.t('choose_crop'), icon: Icons.eco_rounded),
               const SizedBox(height: 12),
               ...crops.map((c) => _SelectTile(
@@ -448,9 +714,78 @@ class _CropStep extends StatelessWidget {
         _BottomBar(
           primaryLabel: GradingStrings.t('next'),
           primaryIcon: Icons.arrow_forward_rounded,
-          onPrimary: selectedCrop == null ? null : onNext,
+          onPrimary: onNext,
         ),
       ],
+    );
+  }
+}
+
+class _ContextCard extends StatelessWidget {
+  final String farmName;
+  final String farmId;
+  final String farmerId;
+  final String farmerName;
+  final String actorLabel;
+
+  const _ContextCard({
+    required this.farmName,
+    required this.farmId,
+    required this.farmerId,
+    required this.farmerName,
+    required this.actorLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final missingFarmId = farmId.trim().isEmpty;
+    final missingFarmer = farmerId.trim().isEmpty;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        border: Border.all(
+          color: missingFarmId || missingFarmer
+              ? AppTheme.gold
+              : const Color(0xFFE5ECE2),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.agriculture_rounded, color: AppTheme.green),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  farmName.isEmpty ? 'No farm selected' : farmName,
+                  style: const TextStyle(
+                    color: AppTheme.textDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  [
+                    actorLabel,
+                    if (farmerName.isNotEmpty) farmerName,
+                    if (farmerId.isNotEmpty) 'Farmer $farmerId',
+                    if (farmId.isNotEmpty) 'Farm $farmId',
+                    if (farmId.isEmpty) 'Farm ID missing',
+                  ].join(' • '),
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -462,6 +797,8 @@ class _PhotoStep extends StatelessWidget {
   final String hint;
   final IconData icon;
   final Uint8List? bytes;
+  final String primaryLabel;
+  final IconData primaryIcon;
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onBack;
@@ -473,6 +810,8 @@ class _PhotoStep extends StatelessWidget {
     required this.hint,
     required this.icon,
     required this.bytes,
+    this.primaryLabel = '',
+    this.primaryIcon = Icons.arrow_forward_rounded,
     required this.onCamera,
     required this.onGallery,
     required this.onBack,
@@ -499,8 +838,10 @@ class _PhotoStep extends StatelessWidget {
         ),
         _BottomBar(
           onBack: onBack,
-          primaryLabel: GradingStrings.t('next'),
-          primaryIcon: Icons.arrow_forward_rounded,
+          primaryLabel: primaryLabel.isEmpty
+              ? GradingStrings.t('next')
+              : primaryLabel,
+          primaryIcon: primaryIcon,
           onPrimary: onNext,
         ),
       ],
@@ -512,20 +853,24 @@ class _PhotoStep extends StatelessWidget {
 
 class _MoistureStep extends StatelessWidget {
   final Uint8List? bytes;
+  final MoistureOcrResult? reading;
+  final bool readingMoisture;
   final TextEditingController manualController;
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onBack;
-  final VoidCallback onAnalyze;
+  final VoidCallback onReadMoisture;
   final ValueChanged<String> onManualChanged;
 
   const _MoistureStep({
     required this.bytes,
+    required this.reading,
+    required this.readingMoisture,
     required this.manualController,
     required this.onCamera,
     required this.onGallery,
     required this.onBack,
-    required this.onAnalyze,
+    required this.onReadMoisture,
     required this.onManualChanged,
   });
 
@@ -571,16 +916,80 @@ class _MoistureStep extends StatelessWidget {
                   prefixIcon: const Icon(Icons.percent_rounded),
                 ),
               ),
+              if (reading != null) ...[
+                const SizedBox(height: 14),
+                _MoistureReadingCard(reading: reading!),
+              ],
             ],
           ),
         ),
         _BottomBar(
           onBack: onBack,
-          primaryLabel: GradingStrings.t('check_grade'),
-          primaryIcon: Icons.verified_rounded,
-          onPrimary: canAnalyze ? onAnalyze : null,
+          primaryLabel: readingMoisture
+              ? GradingStrings.t('checking')
+              : GradingStrings.t('read_moisture'),
+          primaryIcon: readingMoisture
+              ? Icons.hourglass_top_rounded
+              : Icons.speed_rounded,
+          onPrimary: canAnalyze && !readingMoisture ? onReadMoisture : null,
         ),
       ],
+    );
+  }
+}
+
+class _MoistureReadingCard extends StatelessWidget {
+  final MoistureOcrResult reading;
+
+  const _MoistureReadingCard({required this.reading});
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = reading.percent;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.greenPale,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        border: Border.all(color: AppTheme.green.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.speed_rounded, color: AppTheme.green),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Moisture reading',
+                  style: TextStyle(
+                    color: AppTheme.greenDark,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${reading.source}${reading.confidence == null ? '' : ' • ${(reading.confidence! * 100).round()}% confidence'}',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            percent == null ? '--' : '${percent.toStringAsFixed(1)}%',
+            style: const TextStyle(
+              color: AppTheme.greenDark,
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -623,12 +1032,14 @@ class _ResultStep extends StatelessWidget {
   final GradeResult result;
   final VoidCallback onFeedback;
   final VoidCallback onHarvestQr;
+  final String primaryLabel;
   final VoidCallback onAgain;
 
   const _ResultStep({
     required this.result,
     required this.onFeedback,
     required this.onHarvestQr,
+    required this.primaryLabel,
     required this.onAgain,
   });
 
@@ -645,6 +1056,8 @@ class _ResultStep extends StatelessWidget {
                 const SizedBox(height: 12),
                 _ReviewBanner(),
               ],
+              const SizedBox(height: 12),
+              _CloudModelAnalysisCard(result: result),
               const SizedBox(height: 12),
               _MoistureCard(result: result),
               if (result.signalHighlights.isNotEmpty) ...[
@@ -665,7 +1078,7 @@ class _ResultStep extends StatelessWidget {
         _BottomBar(
           backLabel: GradingStrings.t('grade_again'),
           onBack: onAgain,
-          primaryLabel: GradingStrings.t('generate_qr'),
+          primaryLabel: primaryLabel,
           primaryIcon: Icons.qr_code_2_rounded,
           onPrimary: onHarvestQr,
         ),
@@ -681,6 +1094,7 @@ class _GradeHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _gradeColor(result.grade);
+    final score = result.finalScore;
     final confidence = result.confidenceOverall;
     return Container(
       padding: const EdgeInsets.all(20),
@@ -710,7 +1124,7 @@ class _GradeHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  GradingStrings.t('grade_label'),
+                  'Grade from cloud score',
                   style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
@@ -718,7 +1132,13 @@ class _GradeHero extends StatelessWidget {
                   _gradeWord(result.grade),
                   style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
                 ),
-                if (confidence != null) ...[
+                if (score != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Score: ${score.round()}/100',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  ),
+                ] else if (confidence != null) ...[
                   const SizedBox(height: 10),
                   Text(
                     '${GradingStrings.t('confidence')}: ${confidence.round()}%',
@@ -766,6 +1186,164 @@ class _ReviewBanner extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CloudModelAnalysisCard extends StatelessWidget {
+  final GradeResult result;
+
+  const _CloudModelAnalysisCard({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final finalScore = result.finalScore;
+    final grainScore = result.grainScore;
+    final moistureScore = result.moistureScore;
+    final modelGrade = result.modelGrade.isEmpty ? '--' : result.modelGrade;
+    final scoreGrade = result.scoreGrade.isEmpty ? result.grade : result.scoreGrade;
+    final moisture = result.moisturePercent;
+    final rows = <Widget>[
+      _AnalysisMetric(
+        label: 'Cloud score',
+        value: finalScore == null ? '--' : '${finalScore.round()}/100',
+      ),
+      _AnalysisMetric(label: 'Score grade', value: scoreGrade),
+      _AnalysisMetric(label: 'Model suggested', value: modelGrade),
+      _AnalysisMetric(
+        label: 'Grain score',
+        value: grainScore == null ? '--' : '${grainScore.round()}/100',
+      ),
+      _AnalysisMetric(
+        label: 'Moisture score',
+        value: moistureScore == null ? '--' : '${moistureScore.round()}/100',
+      ),
+      _AnalysisMetric(
+        label: 'Moisture',
+        value: moisture == null
+            ? _riskLabel(result.moistureRisk)
+            : '${moisture.toStringAsFixed(1)}% - ${_riskLabel(result.moistureRisk)}',
+      ),
+      _AnalysisMetric(
+        label: 'Broken grain',
+        value: result.brokenGrainPercent == null
+            ? '--'
+            : '${result.brokenGrainPercent!.toStringAsFixed(1)}%',
+      ),
+      _AnalysisMetric(
+        label: 'Foreign matter',
+        value: result.foreignMatterPercent == null
+            ? '--'
+            : '${result.foreignMatterPercent!.toStringAsFixed(2)}%',
+      ),
+      _AnalysisMetric(
+        label: 'Damaged grain',
+        value: result.damagedPercent == null
+            ? '--'
+            : '${result.damagedPercent!.toStringAsFixed(1)}%',
+      ),
+      _AnalysisMetric(
+        label: 'Uniformity',
+        value: result.uniformityScore == null
+            ? '--'
+            : '${result.uniformityScore!.round()}/100',
+      ),
+    ];
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.cloud_done_outlined, color: AppTheme.green),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Cloud Model Analysis',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'The visible grade is calculated from the score received from the cloud grading response.',
+              style: TextStyle(
+                color: AppTheme.textMuted,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Wrap(spacing: 12, runSpacing: 12, children: rows),
+            if (result.operatorSummary.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Text(
+                result.operatorSummary,
+                style: const TextStyle(
+                  color: AppTheme.textDark,
+                  fontWeight: FontWeight.w700,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnalysisMetric extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _AnalysisMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 142,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE5ECE2)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                value,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.greenDark,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -849,6 +1427,8 @@ class _WhyCard extends StatelessWidget {
         ('Broken', '${result.brokenGrainPercent!.toStringAsFixed(0)}%'),
       if (result.foreignMatterPercent != null)
         ('Foreign matter', '${result.foreignMatterPercent!.toStringAsFixed(0)}%'),
+      if (result.damagedPercent != null)
+        ('Damaged', '${result.damagedPercent!.toStringAsFixed(0)}%'),
       if (result.uniformityScore != null)
         ('Uniformity', result.uniformityScore!.toStringAsFixed(0)),
     ];

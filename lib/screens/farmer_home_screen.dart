@@ -1893,12 +1893,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     );
   }
 
-  void _openGrainGradingPage() {
+  Future<void> _openGrainGradingPage() async {
+    final farmId = await _resolveSatelliteFarmId(_farm, _selectedFarm);
     Get.to(
       () => const FarmerAiGradingScreen(),
       arguments: {
+        if (farmId.trim().isNotEmpty) 'farmId': farmId,
         'farmName': _farm.name,
         'crop': _farm.crop,
+        'variety': _farm.variety,
+        'product': _farm.product,
         'village': _profile.location,
       },
     );
@@ -9391,6 +9395,36 @@ class _ProfilePage extends StatelessWidget {
       'lotGrade': farm.health,
       'source': 'remote_supabase',
       'verified': true,
+      'fpcRating': 'Not rated',
+      'lastYield': 'Pending',
+      'lastGrade': 'Pending',
+      'detail': 'Farmer profile verified for FPC procurement and grading.',
+      'currentCrop': {
+        'season': farm.season.isEmpty ? 'Current' : farm.season,
+        'crop': farm.crop,
+        'variety': farm.variety,
+        'expectedYield': 'Pending',
+        'grade': 'Pending',
+        'detail': '${farm.name} - ${farm.area} - ${farm.health}',
+      },
+      'productionHistory': [
+        {
+          'season': 'Last season',
+          'crop': farm.previousCrop.isEmpty ? farm.crop : farm.previousCrop,
+          'yield': 'Pending',
+          'grade': 'Pending',
+          'detail': 'Update after FPC grading or procurement.',
+        },
+      ],
+      'sellingHistory': [
+        {
+          'date': 'Pending',
+          'buyer': 'FPC procurement',
+          'quantity': 'Pending',
+          'rate': 'Pending',
+          'rating': 'Pending',
+        },
+      ],
     });
     return _PageScaffold(
       title: 'Profile',

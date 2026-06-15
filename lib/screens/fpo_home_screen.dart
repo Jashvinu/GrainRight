@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
 import '../controllers/main_auth_controller.dart';
+import '../widgets/fpc_bottom_nav.dart';
 import '../widgets/brand_text.dart';
 
 class FpoHomeScreen extends StatelessWidget {
@@ -12,11 +13,8 @@ class FpoHomeScreen extends StatelessWidget {
     final auth = Get.find<MainAuthController>();
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Get.toNamed('/fpo/scan-farmer'),
-        icon: const Icon(Icons.qr_code_scanner_rounded),
-        label: const Text('Scan Farmer QR'),
-      ),
+      extendBody: true,
+      bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.home),
       appBar: AppBar(
         title: const Text('FPO Dashboard'),
         leading: IconButton(
@@ -33,7 +31,7 @@ class FpoHomeScreen extends StatelessWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 112),
         children: [
           const _FpoHeader(),
           const SizedBox(height: 22),
@@ -59,14 +57,29 @@ class FpoHomeScreen extends StatelessWidget {
               _FpoAction(
                 icon: Icons.inventory_2_outlined,
                 title: 'Procurement',
-                subtitle: 'Track crop lots',
+                subtitle: 'Review grain grading jobs',
                 color: const Color(0xFF1976D2),
                 tint: const Color(0xFFEAF4FF),
-                onTap: () => Get.snackbar(
-                  'Procurement',
-                  'Procurement tracking will be connected here.',
-                  snackPosition: SnackPosition.BOTTOM,
+                onTap: () => Get.toNamed('/fpo/grading-review'),
+              ),
+              _FpoAction(
+                icon: Icons.grain_rounded,
+                title: 'Grain Grading',
+                subtitle: 'Grade FPC customer lots',
+                color: const Color(0xFF795548),
+                tint: const Color(0xFFF2E8E3),
+                onTap: () => Get.toNamed(
+                  '/fpo/grain-grading',
+                  arguments: FpcBottomNavBar.gradingArgs,
                 ),
+              ),
+              _FpoAction(
+                icon: Icons.assignment_turned_in_outlined,
+                title: 'Receiver',
+                subtitle: 'Scan harvest QR and save purchases',
+                color: const Color(0xFF00897B),
+                tint: const Color(0xFFE0F2F1),
+                onTap: () => Get.toNamed('/fpo/receiver'),
               ),
               _FpoAction(
                 icon: Icons.map_outlined,

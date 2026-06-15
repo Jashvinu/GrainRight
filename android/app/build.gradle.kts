@@ -107,7 +107,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.wrkfarm.millets_now"
+        applicationId = "grainright.wrkfarm"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

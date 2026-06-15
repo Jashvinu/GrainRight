@@ -63,8 +63,14 @@ class GradeResult {
   // Quality
   final String grade; // A | B | C
   final String grainGrade;
+  final String modelGrade;
+  final String scoreGrade;
+  final double? finalScore;
+  final double? grainScore;
+  final double? moistureScore;
   final double? brokenGrainPercent;
   final double? foreignMatterPercent;
+  final double? damagedPercent;
   final double? uniformityScore;
   final bool moldVisible;
   final bool rejectRecommended;
@@ -90,8 +96,14 @@ class GradeResult {
     required this.analysisId,
     required this.grade,
     required this.grainGrade,
+    this.modelGrade = '',
+    this.scoreGrade = '',
+    this.finalScore,
+    this.grainScore,
+    this.moistureScore,
     this.brokenGrainPercent,
     this.foreignMatterPercent,
+    this.damagedPercent,
     this.uniformityScore,
     this.moldVisible = false,
     this.rejectRecommended = false,
@@ -120,10 +132,16 @@ class GradeResult {
 
     return GradeResult(
       analysisId: '${json['analysis_id'] ?? ''}',
-      grade: _grade(quality['grade']),
+      grade: _scoreGrade(_toDouble(quality['score'])) ?? _grade(quality['score_grade'] ?? quality['grade']),
       grainGrade: _grade(quality['grain_grade'] ?? quality['grade']),
+      modelGrade: _grade(quality['model_grade']),
+      scoreGrade: _scoreGrade(_toDouble(quality['score'])) ?? _grade(quality['score_grade']),
+      finalScore: _toDouble(quality['score']),
+      grainScore: _toDouble(quality['grain_score']),
+      moistureScore: _toDouble(quality['moisture_score']),
       brokenGrainPercent: _toDouble(quality['broken_grain_percent']),
       foreignMatterPercent: _toDouble(quality['foreign_matter_percent']),
+      damagedPercent: _toDouble(quality['damaged_percent']),
       uniformityScore: _toDouble(quality['uniformity_score']),
       moldVisible: quality['mold_visible'] == true,
       rejectRecommended: quality['reject_recommended'] == true,
@@ -150,6 +168,13 @@ class GradeResult {
   static String _grade(dynamic raw) {
     final value = '${raw ?? ''}'.toUpperCase().trim();
     return (value == 'A' || value == 'B' || value == 'C') ? value : 'B';
+  }
+
+  static String? _scoreGrade(double? score) {
+    if (score == null) return null;
+    if (score >= 85) return 'A';
+    if (score >= 70) return 'B';
+    return 'C';
   }
 
   static List<String> _stringList(dynamic raw) {

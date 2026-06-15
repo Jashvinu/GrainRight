@@ -97,6 +97,12 @@ function gradeValue(value: unknown): Grade {
   return "B";
 }
 
+function gradeFromScore(score: number): Grade {
+  if (score >= 85) return "A";
+  if (score >= 70) return "B";
+  return "C";
+}
+
 async function signUrl(
   // deno-lint-ignore no-explicit-any
   supabase: any,
@@ -215,7 +221,25 @@ Deno.serve(async (req) => {
     const variety = String(body.crop_variety ?? body.variety ?? "");
     const confidenceThreshold = Number(body.confidence_threshold ?? 60);
     const operatorId = body.operator_id ? String(body.operator_id) : null;
+    const actorRoleRaw = String(body.actor_role ?? "farmer").toLowerCase();
+    const actorRole = actorRoleRaw === "fpc" ? "fpc" : "farmer";
+    const fpcId = body.fpc_id
+      ? String(body.fpc_id)
+      : actorRole === "fpc"
+      ? operatorId
+      : null;
+    const fpcCustomerId = body.fpc_customer_id ? String(body.fpc_customer_id) : null;
+    const fpcCustomerName = body.fpc_customer_name ? String(body.fpc_customer_name) : null;
+    const source = body.source ? String(body.source) : "app";
     const batchId = body.batch_id ? String(body.batch_id) : null;
+    const farmerId = body.farmer_id ? String(body.farmer_id) : null;
+    const farmId = body.farm_id ? String(body.farm_id) : null;
+    const bagSizeKg = body.bag_size_kg != null ? Number(body.bag_size_kg) : null;
+    const bagCount = body.bag_count != null ? Number(body.bag_count) : null;
+    const totalKg = bagSizeKg != null && Number.isFinite(bagSizeKg) &&
+        bagCount != null && Number.isFinite(bagCount)
+      ? bagSizeKg * bagCount
+      : null;
 
     const supabase = createServiceClient();
 
@@ -236,8 +260,11 @@ Deno.serve(async (req) => {
       score: rules.finalScore,
       grain_score: rules.grainScore,
       moisture_score: rules.moistureScore,
+      model_grade: signals.modelGrade,
+      score_grade: gradeFromScore(rules.finalScore),
       broken_grain_percent: signals.brokenGrainPercent,
       foreign_matter_percent: signals.foreignMatterPercent,
+      damaged_percent: signals.damagedPercent,
       uniformity_score: signals.uniformityScore,
       mold_visible: signals.moldVisible,
       reject_recommended: rules.rejectRecommended,
@@ -257,7 +284,14 @@ Deno.serve(async (req) => {
       .from("analysis_jobs")
       .insert({
         operator_id: operatorId,
+        actor_role: actorRole,
+        fpc_id: fpcId,
+        fpc_customer_id: fpcCustomerId,
+        fpc_customer_name: fpcCustomerName,
+        source,
         batch_id: batchId,
+        farmer_id: farmerId,
+        farm_id: farmId,
         crop_type: cropType,
         variety,
         status: "completed",
@@ -273,10 +307,25 @@ Deno.serve(async (req) => {
         moisture_risk: moistureRisk,
         moisture_source: moisture.source,
         moisture_confidence: moisture.confidence,
+        bag_size_kg: bagSizeKg,
+        bag_count: bagCount,
+        total_kg: totalKg,
+        review_status: manualReviewRequired ? "pending" : "not_required",
         reject_recommended: rules.rejectRecommended,
         reject_reasons: rules.rejectReasons,
         applied_rules: rules.appliedRules,
         quality_metrics: quality,
+        result_payload: {
+          quality,
+          moisture: moisturePayload,
+          confidence: {
+            overall: overallConfidence,
+            pass1_safety_gate: overallConfidence,
+            pass2_grading: rules.finalScore,
+          },
+          selection: { selected_crop: cropType, selected_variety: variety },
+          manual_review_required: manualReviewRequired,
+        },
         rule_version: RULE_VERSION,
         completed_at: new Date().toISOString(),
       })
@@ -298,6 +347,7 @@ Deno.serve(async (req) => {
       selection: { selected_crop: cropType, selected_variety: variety },
       applied_rules: rules.appliedRules,
       manual_review_required: manualReviewRequired,
+      review_status: manualReviewRequired ? "pending" : "not_required",
       operator_summary: operatorSummary(rules.grade, moistureRisk, rules.rejectRecommended),
       signal_highlights: rules.signalHighlights,
     });

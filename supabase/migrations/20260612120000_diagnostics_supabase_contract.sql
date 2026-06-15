@@ -65,6 +65,7 @@ create policy "farms delete own"
 on public.farms for delete to authenticated
 using (user_id = auth.uid());
 
+drop function if exists public.list_farms_geojson();
 create or replace function public.list_farms_geojson()
 returns table (
   id uuid,
@@ -85,31 +86,71 @@ returns table (
   harvest_intent text,
   created_at timestamptz
 )
-language sql
+language plpgsql
 stable
 security invoker
 as $$
-  select
-    f.id,
-    f.name,
-    f.geometry,
-    f.bounds,
-    f.area_hectares,
-    f.area_acres,
-    f.user_id,
-    f.crop,
-    f.variety,
-    f.previous_crop,
-    f.season,
-    f.irrigation,
-    f.soil_type,
-    f.ownership_type,
-    f.seed_source,
-    f.harvest_intent,
-    f.created_at
-  from public.farms f
-  where f.user_id = auth.uid()
-  order by f.created_at desc;
+declare
+  geometry_type text;
+begin
+  select format_type(a.atttypid, a.atttypmod)
+  into geometry_type
+  from pg_attribute a
+  where a.attrelid = 'public.farms'::regclass
+    and a.attname = 'geometry'
+    and not a.attisdropped;
+
+  if geometry_type = 'jsonb' then
+    return query execute $q$
+      select
+        f.id,
+        f.name,
+        f.geometry,
+        f.bounds,
+        f.area_hectares,
+        f.area_acres,
+        f.user_id,
+        f.crop,
+        f.variety,
+        f.previous_crop,
+        f.season,
+        f.irrigation,
+        f.soil_type,
+        f.ownership_type,
+        f.seed_source,
+        f.harvest_intent,
+        f.created_at
+      from public.farms f
+      where f.user_id = auth.uid()
+      order by f.created_at desc
+    $q$;
+    return;
+  end if;
+
+  return query execute $q$
+    select
+      f.id,
+      f.name,
+      st_asgeojson(f.geometry)::jsonb,
+      f.bounds,
+      f.area_hectares,
+      f.area_acres,
+      f.user_id,
+      f.crop,
+      f.variety,
+      f.previous_crop,
+      f.season,
+      f.irrigation,
+      f.soil_type,
+      f.ownership_type,
+      f.seed_source,
+      f.harvest_intent,
+      f.created_at
+    from public.farms f
+    where f.user_id = auth.uid()
+    order by f.created_at desc
+  $q$;
+end;
 $$;
 
 grant execute on function public.list_farms_geojson() to authenticated;

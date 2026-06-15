@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,6 +8,15 @@ import '../services/network_status_service.dart';
 import '../services/secure_app_storage.dart';
 import 'auth_controller.dart';
 import 'survey_controller.dart';
+
+class FarmerVerificationException implements Exception {
+  final String message;
+
+  const FarmerVerificationException(this.message);
+
+  @override
+  String toString() => message;
+}
 
 class MainAuthController extends GetxController {
   static const _localGuestIdKey = 'local_guest_id';
@@ -21,6 +31,8 @@ class MainAuthController extends GetxController {
   final isLoading = false.obs;
   final errorMessage = ''.obs;
   final Rxn<VerifiedFarmerRecord> verifiedFarmer = Rxn<VerifiedFarmerRecord>();
+
+  bool get _farmerPhoneVerificationEnabled => false;
 
   @override
   void onInit() {
@@ -191,8 +203,12 @@ class MainAuthController extends GetxController {
       verifiedFarmer.value = record;
       isLoggedIn.value = true;
       await _afterSignIn(nextRoute);
+    } on FarmerVerificationException catch (e) {
+      errorMessage.value = e.message;
     } catch (_) {
-      errorMessage.value = 'Could not verify farmer profile.';
+      errorMessage.value = _farmerPhoneVerificationEnabled
+          ? 'Could not verify farmer profile.'
+          : 'Could not start farmer session.';
     } finally {
       isLoading.value = false;
     }
@@ -288,11 +304,17 @@ class MainAuthController extends GetxController {
   String _normalizePhone(String phone) => phone.replaceAll(RegExp(r'\D'), '');
 
   Future<VerifiedFarmerRecord> _signInAndSyncRemoteFarmer(String phone) async {
+    final verifiedRecord = _farmerPhoneVerificationEnabled
+        ? await _verifyFarmerPhone(phone)
+        : _unverifiedFarmerRecord(phone);
+
     if (_auth.currentSession == null) {
       await _auth.signInAnonymously(
         data: {
           'role': 'farmer',
           'phone': phone,
+          'farmer_id': verifiedRecord.farmerId,
+          'farmer_name': verifiedRecord.farmerName,
         },
       );
     }
@@ -303,16 +325,20 @@ class MainAuthController extends GetxController {
       throw StateError('No Supabase farmer session.');
     }
 
-    final farmerId = 'FMR-$phone';
-    final farmerName = 'Farmer $phone';
     await _client.from('farmer_phone_profiles').upsert(
       {
         'user_id': user.id,
         'phone': phone,
-        'farmer_id': farmerId,
-        'farmer_name': farmerName,
-        'default_location': 'Remote farm profile',
+        'farmer_id': verifiedRecord.farmerId,
+        'farmer_name': verifiedRecord.farmerName,
+        'default_location': verifiedRecord.defaultLocation,
         'auth_method': 'anonymous_link',
+        'status': 'active',
+        if (_farmerPhoneVerificationEnabled)
+          'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
+        'source': _farmerPhoneVerificationEnabled
+            ? 'registry_fallback'
+            : 'verification_disabled',
       },
       onConflict: 'user_id',
     );
@@ -323,13 +349,58 @@ class MainAuthController extends GetxController {
       user.email ?? 'farmer-$phone@anonymous.local',
     );
 
+    return verifiedRecord;
+  }
+
+  VerifiedFarmerRecord _unverifiedFarmerRecord(String phone) {
     return VerifiedFarmerRecord(
       phone: phone,
-      farmerId: farmerId,
-      farmerName: farmerName,
-      defaultLocation: 'Remote farm profile',
+      farmerId: 'FMR-$phone',
+      farmerName: 'Farmer',
+      defaultLocation: 'Kalsubai Farms',
       lots: const [],
     );
+  }
+
+  Future<VerifiedFarmerRecord> _verifyFarmerPhone(String phone) async {
+    try {
+      final response = await _client.functions.invoke(
+        'verify-farmer-phone',
+        body: {'phone': phone},
+      );
+      final data = _responseMap(response.data);
+      if (data['success'] == false) {
+        throw FarmerVerificationException(
+          '${data['error'] ?? 'Could not verify farmer profile.'}',
+        );
+      }
+      final farmer = data['farmer'];
+      if (farmer is! Map) {
+        throw const FarmerVerificationException(
+          'No approved farmer profile found for this number.',
+        );
+      }
+      return VerifiedFarmerRecord.fromJson(
+        Map<String, dynamic>.from(farmer as Map),
+      );
+    } on FarmerVerificationException {
+      rethrow;
+    } catch (_) {
+      throw const FarmerVerificationException(
+        'Could not verify farmer profile. Check the number or contact admin.',
+      );
+    }
+  }
+
+  Map<String, dynamic> _responseMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    if (data is String && data.trim().isNotEmpty) {
+      final decoded = jsonDecode(data);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    }
+    return const <String, dynamic>{};
   }
 
   Future<VerifiedFarmerRecord?> _loadRemoteFarmerProfile() async {

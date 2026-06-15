@@ -38,6 +38,36 @@ class FarmerProfileScreen extends StatelessWidget {
       'variety': farm.variety,
       'source': 'remote_supabase',
       'verified': true,
+      'fpcRating': 'Not rated',
+      'lastYield': 'Pending',
+      'lastGrade': 'Pending',
+      'detail': 'Farmer profile verified for FPC procurement and grading.',
+      'currentCrop': {
+        'season': 'Current',
+        'crop': farm.crop,
+        'variety': farm.variety,
+        'expectedYield': 'Pending',
+        'grade': 'Pending',
+        'detail': '${farm.name} - ${farm.area}',
+      },
+      'productionHistory': [
+        {
+          'season': 'Last season',
+          'crop': farm.crop,
+          'yield': 'Pending',
+          'grade': 'Pending',
+          'detail': 'Update after FPC grading or procurement.',
+        },
+      ],
+      'sellingHistory': [
+        {
+          'date': 'Pending',
+          'buyer': 'FPC procurement',
+          'quantity': 'Pending',
+          'rate': 'Pending',
+          'rating': 'Pending',
+        },
+      ],
     });
 
     return Scaffold(

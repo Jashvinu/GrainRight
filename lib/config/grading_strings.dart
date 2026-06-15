@@ -23,12 +23,18 @@ class GradingStrings {
 
   static const Map<String, Map<String, String>> _data = {
     'title': {'en': 'Grain Grading', 'hi': 'अनाज ग्रेडिंग', 'mr': 'धान्य ग्रेडिंग'},
+    'step_setup': {'en': 'Batch', 'hi': 'बैच', 'mr': 'बॅच'},
     'step_crop': {'en': 'Crop', 'hi': 'फसल', 'mr': 'पीक'},
     'step_grain': {'en': 'Grain photo', 'hi': 'अनाज फोटो', 'mr': 'धान्य फोटो'},
     'step_moisture': {'en': 'Moisture', 'hi': 'नमी', 'mr': 'ओलावा'},
     'step_result': {'en': 'Result', 'hi': 'परिणाम', 'mr': 'निकाल'},
 
     'choose_crop': {'en': 'Choose your crop', 'hi': 'अपनी फसल चुनें', 'mr': 'तुमचे पीक निवडा'},
+    'setup_batch': {
+      'en': 'Farm and batch details',
+      'hi': 'खेत और बैच विवरण',
+      'mr': 'शेत आणि बॅच तपशील',
+    },
     'choose_variety': {'en': 'Choose variety', 'hi': 'किस्म चुनें', 'mr': 'वाण निवडा'},
     'next': {'en': 'Next', 'hi': 'आगे', 'mr': 'पुढे'},
     'back': {'en': 'Back', 'hi': 'पीछे', 'mr': 'मागे'},
@@ -64,6 +70,7 @@ class GradingStrings {
     'moisture_percent': {'en': 'Moisture %', 'hi': 'नमी %', 'mr': 'ओलावा %'},
 
     'check_grade': {'en': 'Check grade', 'hi': 'ग्रेड जाँचें', 'mr': 'ग्रेड तपासा'},
+    'read_moisture': {'en': 'Read moisture', 'hi': 'नमी पढ़ें', 'mr': 'ओलावा वाचा'},
     'checking': {'en': 'Checking…', 'hi': 'जाँच हो रही है…', 'mr': 'तपासत आहे…'},
     'checking_hint': {
       'en': 'Reading your photos and grading rules.',
