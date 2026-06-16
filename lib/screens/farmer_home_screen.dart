@@ -739,7 +739,21 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     return _FarmSatelliteOverview(
       tiles: [crop, heat, canopy, trend],
       note: entries.isNotEmpty ? 'Updated: ${entries.last.date}' : null,
+      ndvi: _latestGroupedValue(grouped, const ['ndvi']),
+      moisture: _latestGroupedValue(grouped, const ['moisture', 'ndwi']),
     );
+  }
+
+  /// Latest mean value for the first available index in [candidates].
+  double? _latestGroupedValue(
+    Map<String, List<TimelineEntry>> grouped,
+    List<String> candidates,
+  ) {
+    for (final index in candidates) {
+      final list = grouped[index];
+      if (list != null && list.isNotEmpty) return list.last.meanValue;
+    }
+    return null;
   }
 
   void _initializeFarmState(int index) {
@@ -941,6 +955,21 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         const <FarmIssueCell>[];
   }
 
+  /// Highest disease risk seen on the selected farm's latest screen, used by
+  /// the home Farm Overview "Disease Risk" card. Returns 0 when not screened.
+  double _diseaseMaxRiskForFarm(int index) {
+    final screen = _diseaseScreenByFarmIndex[index];
+    if (screen == null) return 0;
+    var maxRisk = 0.0;
+    for (final value in screen.topDiseaseRisks.values) {
+      maxRisk = math.max(maxRisk, value);
+    }
+    for (final cell in screen.riskCells) {
+      maxRisk = math.max(maxRisk, cell.compositeRisk);
+    }
+    return maxRisk;
+  }
+
   void _openFarmIssue(int index, FarmIssueCell issue) {
     if (index < 0 || index >= _farms.length) return;
     _initializeFarmState(index);
@@ -1013,7 +1042,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         'taken_lat': issue.lat,
         'taken_lng': issue.lng,
         'crop': _diseaseCropForFarm(farm),
-        'growth_stage': _farmGrowthStage[index],
+        'growth_stage': _farmGrowthStage[index] ?? _growthStageForFarm(index),
         'satellite_context': issue.toJson(),
       },
     );
@@ -1667,6 +1696,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         onOpenMarket: _openMarketPage,
         satelliteOverview: _satelliteOverviewByFarmIndex[_selectedFarm],
         isSatelliteLoading: _satelliteOverviewLoading.contains(_selectedFarm),
+        weatherContext:
+            _diseaseScreenByFarmIndex[_selectedFarm]?.weatherContext,
+        diseaseMaxRisk: _diseaseMaxRiskForFarm(_selectedFarm),
       ),
       _FarmPage(
         farms: _farms,
@@ -2689,6 +2721,8 @@ class _FarmerDashboard extends StatelessWidget {
   final VoidCallback onOpenMarket;
   final _FarmSatelliteOverview? satelliteOverview;
   final bool isSatelliteLoading;
+  final Map<String, dynamic>? weatherContext;
+  final double diseaseMaxRisk;
 
   const _FarmerDashboard({
     required this.profile,
@@ -2701,6 +2735,8 @@ class _FarmerDashboard extends StatelessWidget {
     required this.onOpenMarket,
     required this.satelliteOverview,
     required this.isSatelliteLoading,
+    required this.weatherContext,
+    required this.diseaseMaxRisk,
   });
 
   @override
@@ -2752,6 +2788,8 @@ class _FarmerDashboard extends StatelessWidget {
                   child: FarmOverviewSection(
                     metrics: _overviewMetricsFromSatellite(
                       satelliteOverview,
+                      weatherContext,
+                      diseaseMaxRisk,
                       isSatelliteLoading,
                     ),
                     onDetailsTap: onOpenFarm,
@@ -2835,42 +2873,111 @@ class _HomeRevealSection extends StatelessWidget {
   }
 }
 
+/// Home "Farm Overview" cards for the selected farm: Weather Alert, Water,
+/// Crop Health Score and Disease Risk, all derived from that farm's real data.
 List<FarmMetricData> _overviewMetricsFromSatellite(
   _FarmSatelliteOverview? overview,
+  Map<String, dynamic>? weatherContext,
+  double diseaseMaxRisk,
   bool isLoading,
 ) {
-  const metrics = [
-    FarmMetricData(
-      label: 'NDVI',
-      icon: Icons.eco_rounded,
-      progress: 0.86,
-      color: Color(0xFF2EAF4A),
-      status: 'Healthy',
-    ),
-    FarmMetricData(
-      label: 'Moisture',
+  FarmMetricData placeholder(String label, IconData icon) => FarmMetricData(
+    label: label,
+    icon: icon,
+    progress: 0,
+    color: const Color(0xFF9AA0A6),
+    status: '--',
+  );
+
+  if (isLoading && overview == null && weatherContext == null) {
+    return [
+      placeholder('Weather Alert', Icons.cloud_rounded),
+      placeholder('Water', Icons.water_drop_rounded),
+      placeholder('Crop Health', Icons.eco_rounded),
+      placeholder('Disease Risk', Icons.shield_rounded),
+    ];
+  }
+
+  // Weather Alert: leaf wetness + rain drive a calm/watch/high reading.
+  double? readNum(String key) => (weatherContext?[key] as num?)?.toDouble();
+  final wetness = readNum('leaf_wetness_hours');
+  final rain = readNum('total_rain_mm');
+  final FarmMetricData weatherCard;
+  if (wetness == null && rain == null) {
+    weatherCard = placeholder('Weather Alert', Icons.cloud_rounded);
+  } else {
+    final wetScore = ((wetness ?? 0) / 12).clamp(0.0, 1.0);
+    final rainScore = ((rain ?? 0) / 50).clamp(0.0, 1.0);
+    final alert = math.max(wetScore, rainScore);
+    weatherCard = FarmMetricData(
+      label: 'Weather Alert',
+      icon: Icons.cloud_rounded,
+      progress: alert,
+      color: alert >= 0.66
+          ? const Color(0xFFD32F2F)
+          : alert >= 0.4
+          ? const Color(0xFFF57C00)
+          : const Color(0xFF2EAF4A),
+      status: alert >= 0.66
+          ? 'High'
+          : alert >= 0.4
+          ? 'Watch'
+          : 'Calm',
+    );
+  }
+
+  // Water: satellite moisture/NDWI for the farm.
+  final moisture = overview?.moisture;
+  final FarmMetricData waterCard;
+  if (moisture == null) {
+    waterCard = placeholder('Water', Icons.water_drop_rounded);
+  } else {
+    final level = moisture.clamp(0.0, 1.0);
+    waterCard = FarmMetricData(
+      label: 'Water',
       icon: Icons.water_drop_rounded,
-      progress: 0.72,
-      color: Color(0xFF3498DB),
-      status: 'Good',
-    ),
-    FarmMetricData(
-      label: 'Yield Prediction',
-      icon: Icons.agriculture_rounded,
-      progress: 0.91,
-      color: Color(0xFFF5B21D),
-      status: 'High',
-    ),
-    FarmMetricData(
-      label: 'Disease Risk',
-      icon: Icons.shield_rounded,
-      progress: 0.12,
-      color: Color(0xFF8BC34A),
-      status: 'Low',
-    ),
-  ];
-  if (isLoading && overview == null) return metrics;
-  return metrics;
+      progress: level,
+      color: const Color(0xFF3498DB),
+      status: level >= 0.4 ? 'Good' : 'Low',
+    );
+  }
+
+  // Crop Health: NDVI band for the farm.
+  final ndvi = overview?.ndvi;
+  final FarmMetricData cropCard;
+  if (ndvi == null) {
+    cropCard = placeholder('Crop Health', Icons.eco_rounded);
+  } else {
+    final level = ndvi.clamp(0.0, 1.0);
+    cropCard = FarmMetricData(
+      label: 'Crop Health',
+      icon: Icons.eco_rounded,
+      progress: level,
+      color: level >= 0.6
+          ? const Color(0xFF2EAF4A)
+          : level >= 0.4
+          ? const Color(0xFFF5B21D)
+          : const Color(0xFFD32F2F),
+      status: level >= 0.6
+          ? 'Healthy'
+          : level >= 0.4
+          ? 'Fair'
+          : 'Poor',
+    );
+  }
+
+  // Disease Risk: highest screened risk for the farm.
+  final diseaseCard = diseaseMaxRisk <= 0
+      ? placeholder('Disease Risk', Icons.shield_rounded)
+      : FarmMetricData(
+          label: 'Disease Risk',
+          icon: Icons.shield_rounded,
+          progress: diseaseMaxRisk.clamp(0.0, 1.0),
+          color: _FarmPage._riskColor(diseaseMaxRisk),
+          status: _FarmPage._riskLabel(diseaseMaxRisk),
+        );
+
+  return [weatherCard, waterCard, cropCard, diseaseCard];
 }
 
 class FarmMetricData {
@@ -2895,36 +3002,7 @@ class FarmOverviewSection extends StatelessWidget {
 
   const FarmOverviewSection({
     super.key,
-    this.metrics = const [
-      FarmMetricData(
-        label: 'NDVI',
-        icon: Icons.eco_rounded,
-        progress: 0.86,
-        color: Color(0xFF2EAF4A),
-        status: 'Healthy',
-      ),
-      FarmMetricData(
-        label: 'Moisture',
-        icon: Icons.water_drop_rounded,
-        progress: 0.72,
-        color: Color(0xFF3498DB),
-        status: 'Good',
-      ),
-      FarmMetricData(
-        label: 'Yield Prediction',
-        icon: Icons.agriculture_rounded,
-        progress: 0.91,
-        color: Color(0xFFF5B21D),
-        status: 'High',
-      ),
-      FarmMetricData(
-        label: 'Disease Risk',
-        icon: Icons.shield_rounded,
-        progress: 0.12,
-        color: Color(0xFF8BC34A),
-        status: 'Low',
-      ),
-    ],
+    required this.metrics,
     this.onDetailsTap,
   });
 
@@ -3326,18 +3404,6 @@ class _CircularProgressPainter extends CustomPainter {
     return oldDelegate.progress != progress ||
         oldDelegate.color != color ||
         oldDelegate.strokeWidth != strokeWidth;
-  }
-}
-
-class FarmOverviewExampleScreen extends StatelessWidget {
-  const FarmOverviewExampleScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(child: FarmOverviewSection()),
-    );
   }
 }
 
@@ -4002,8 +4068,15 @@ class _HarvestReadinessCard extends StatelessWidget {
 class _FarmSatelliteOverview {
   final List<_SatelliteMetricTileData> tiles;
   final String? note;
+  final double? ndvi;
+  final double? moisture;
 
-  const _FarmSatelliteOverview({required this.tiles, this.note});
+  const _FarmSatelliteOverview({
+    required this.tiles,
+    this.note,
+    this.ndvi,
+    this.moisture,
+  });
 }
 
 class _SatelliteMetricTileData {
@@ -5037,17 +5110,38 @@ class _FarmPage extends StatelessWidget {
     return 'Possible $names';
   }
 
-  /// Issue locations worth a walk: every flagged cell, or the top few when
-  /// nothing crosses the risk floor so the farmer still sees where to check.
+  /// Issue locations worth a walk: disease cells only when symptoms are strong
+  /// or severe (High + Watch, composite risk >= 0.55) so we never send the
+  /// farmer to photograph a weak cell, plus water/heat-stress cells regardless.
   static List<FarmIssueCell> _visibleIssues(List<FarmIssueCell> cells) {
-    final flagged = cells
-        .where((cell) => cell.compositeRisk >= 0.30)
+    return cells
+        .where(
+          (cell) => cell.isDisease ? cell.compositeRisk >= 0.55 : cell.likelyAbiotic,
+        )
         .take(40)
         .toList(growable: false);
-    if (flagged.isNotEmpty) return flagged;
-    final sorted = [...cells]
-      ..sort((a, b) => b.compositeRisk.compareTo(a.compositeRisk));
-    return sorted.take(5).toList(growable: false);
+  }
+
+  /// Severity in 0..1 used to calibrate cell size and gradient intensity.
+  /// Disease cells map the meaningful 0.55..1.0 band onto 0..1; water/heat
+  /// stress cells use their stress signal but never read as faint.
+  static double _issueLevel(FarmIssueCell issue) {
+    if (issue.isScoutZone) return 1.0;
+    final raw = issue.isDisease
+        ? issue.compositeRisk
+        : (issue.weatherRisk ?? issue.compositeRisk);
+    final t = ((raw - 0.55) / 0.45).clamp(0.0, 1.0);
+    return issue.isDisease ? t : math.max(t, 0.35);
+  }
+
+  static double _issueDiameter(FarmIssueCell issue) {
+    if (issue.isScoutZone) return 80;
+    return 34 + (70 - 34) * _issueLevel(issue);
+  }
+
+  static double _issueCenterAlpha(FarmIssueCell issue) {
+    final t = issue.isScoutZone ? 0.6 : _issueLevel(issue);
+    return 0.45 + (0.85 - 0.45) * t;
   }
 
   List<Marker> _issueMarkers({
@@ -5063,33 +5157,51 @@ class _FarmPage extends StatelessWidget {
     ];
     return [
       for (final issue in issues)
-        Marker(
-          point: LatLng(issue.lat, issue.lng),
-          width: issue.isScoutZone ? 30 : 24,
-          height: issue.isScoutZone ? 30 : 24,
-          child: GestureDetector(
-            onTap: () => onTap(issue),
-            child: Container(
-              decoration: BoxDecoration(
-                color: _issueColor(issue),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 4,
-                    offset: Offset(0, 1),
+        () {
+          final base = _issueColor(issue);
+          final diameter = _issueDiameter(issue);
+          return Marker(
+            point: LatLng(issue.lat, issue.lng),
+            width: diameter,
+            height: diameter,
+            child: GestureDetector(
+              onTap: () => onTap(issue),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      base.withValues(alpha: _issueCenterAlpha(issue)),
+                      base.withValues(alpha: 0.0),
+                    ],
                   ),
-                ],
-              ),
-              child: Icon(
-                _issueIcon(issue),
-                size: issue.isScoutZone ? 15 : 12,
-                color: Colors.white,
+                ),
+                alignment: Alignment.center,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: base,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 4,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    _issueIcon(issue),
+                    size: issue.isScoutZone ? 14 : 12,
+                    color: Colors.white,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        }(),
     ];
   }
 
