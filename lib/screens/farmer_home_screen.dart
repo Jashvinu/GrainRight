@@ -1881,7 +1881,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     });
   }
 
-  Future<bool> _syncInitialFarmServicesForFarm(int index, String key) async {
+  Future<bool> _syncInitialFarmServicesForFarm(
+    int index,
+    String key, {
+    bool requireDiseaseScan = false,
+  }) async {
     if (index < 0 || index >= _farms.length) return false;
     if (_initialFarmServiceReadyKey == key) return true;
     setState(() {
@@ -1902,7 +1906,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           refreshSummaryAfter: false,
         );
         if (!scanReady || !_hasDiseaseScanStateForFarm(index)) {
-          return false;
+          if (requireDiseaseScan) return false;
+          Get.log('Initial farm service sync completed without disease scan.');
         }
       }
       await _saveFarmDataSnapshotForFarm(
@@ -1915,8 +1920,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         _initialFarmServiceSyncError = false;
       });
       return true;
-    } catch (_) {
+    } catch (error) {
+      Get.log('Initial farm service sync failed: $error');
       if (!mounted || _initialFarmServiceActiveKey != key) return false;
+      if (!requireDiseaseScan) {
+        setState(() {
+          _initialFarmServiceReadyKey = key;
+          _initialFarmServiceSyncError = false;
+        });
+        return true;
+      }
       setState(() {
         _initialFarmServiceSyncError = true;
       });
@@ -4012,7 +4025,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     _syncSelectedRemoteFarmFromIndex();
     final key = _initialFarmServiceSyncKey(activeIndex);
     if (key == null) return false;
-    final ready = await _syncInitialFarmServicesForFarm(activeIndex, key);
+    final ready = await _syncInitialFarmServicesForFarm(
+      activeIndex,
+      key,
+      requireDiseaseScan: true,
+    );
     if (ready) {
       _quietInitialAlertFarmIds.remove(normalizedFarmId);
     }
