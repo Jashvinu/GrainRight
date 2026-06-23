@@ -192,6 +192,10 @@ class UiStrings {
     'borewell': 'opt_borewell',
     'canal': 'opt_canal',
     'drip': 'opt_drip',
+    'sprinkler': 'opt_sprinkler',
+    'good water': 'opt_good_water',
+    'limited water': 'opt_limited_water',
+    'water shortage': 'opt_water_shortage',
     'black soil': 'opt_black_soil',
     'red soil': 'opt_red_soil',
     'sandy loam': 'opt_sandy_loam',
@@ -208,6 +212,8 @@ class UiStrings {
     'market sale': 'opt_market_sale',
     'seed saving': 'opt_seed_saving',
     'processing': 'opt_processing',
+    'fpo sale': 'opt_fpo_sale',
+    'fodder': 'opt_fodder',
     'tomorrow': 'tomorrow',
     'wed': 'wednesday_short',
     'thu': 'thursday_short',
@@ -990,6 +996,11 @@ class UiStrings {
       'hi': 'पहले जवाब लिखें',
       'mr': 'आधी उत्तर लिहा',
     },
+    'select_one_option_first': {
+      'en': 'Select at least one option first',
+      'hi': 'पहले कम से कम एक विकल्प चुनें',
+      'mr': 'आधी किमान एक पर्याय निवडा',
+    },
     'mark_boundary_first': {
       'en': 'Mark the farm boundary first.',
       'hi': 'पहले खेत की सीमा चिन्हित करें।',
@@ -1340,6 +1351,26 @@ class UiStrings {
     'opt_borewell': {'en': 'Borewell', 'hi': 'बोरवेल', 'mr': 'बोअरवेल'},
     'opt_canal': {'en': 'Canal', 'hi': 'नहर', 'mr': 'कालवा'},
     'opt_drip': {'en': 'Drip', 'hi': 'ड्रिप', 'mr': 'ठिबक'},
+    'opt_sprinkler': {
+      'en': 'Sprinkler',
+      'hi': 'स्प्रिंकलर',
+      'mr': 'फवारणी सिंचन',
+    },
+    'opt_good_water': {
+      'en': 'Good water',
+      'hi': 'अच्छा पानी',
+      'mr': 'चांगले पाणी',
+    },
+    'opt_limited_water': {
+      'en': 'Limited water',
+      'hi': 'सीमित पानी',
+      'mr': 'मर्यादित पाणी',
+    },
+    'opt_water_shortage': {
+      'en': 'Water shortage',
+      'hi': 'पानी की कमी',
+      'mr': 'पाण्याची कमतरता',
+    },
     'opt_black_soil': {
       'en': 'Black soil',
       'hi': 'काली मिट्टी',
@@ -1396,6 +1427,8 @@ class UiStrings {
       'hi': 'प्रोसेसिंग',
       'mr': 'प्रक्रिया',
     },
+    'opt_fpo_sale': {'en': 'FPO sale', 'hi': 'FPO बिक्री', 'mr': 'FPO विक्री'},
+    'opt_fodder': {'en': 'Fodder', 'hi': 'चारा', 'mr': 'चारा'},
     'opt_today': {'en': 'Today', 'hi': 'आज', 'mr': 'आज'},
     'opt_yesterday': {'en': 'Yesterday', 'hi': 'कल', 'mr': 'काल'},
     'opt_three_days_ago': {

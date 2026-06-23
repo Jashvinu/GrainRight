@@ -99,6 +99,8 @@ class _FarmerFarmSetupChatScreenState
   String? _harvestIntent;
   DateTime? _sowingDate;
   double? _computedAcres;
+  final Set<String> _selectedIrrigationOptions = <String>{};
+  final Set<String> _selectedHarvestIntentOptions = <String>{};
 
   @override
   void initState() {
@@ -164,8 +166,25 @@ class _FarmerFarmSetupChatScreenState
   String _displayValue(String? value) {
     final text = value?.trim();
     if (text == null || text.isEmpty) return '-';
+    if (text.contains(',')) {
+      return text
+          .split(',')
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .map(UiStrings.label)
+          .join(', ');
+    }
     return UiStrings.label(text);
   }
+
+  bool get _isMultiSelectStep =>
+      _step == _SetupStep.irrigation || _step == _SetupStep.harvestIntent;
+
+  Set<String> get _activeMultiSelection => switch (_step) {
+    _SetupStep.irrigation => _selectedIrrigationOptions,
+    _SetupStep.harvestIntent => _selectedHarvestIntentOptions,
+    _ => <String>{},
+  };
 
   String get _acresText {
     final value = _computedAcres ?? 0;
@@ -189,7 +208,17 @@ class _FarmerFarmSetupChatScreenState
       case _SetupStep.season:
         return const ['Kharif', 'Rabi', 'Summer'];
       case _SetupStep.irrigation:
-        return const ['Rainfed', 'Well', 'Borewell', 'Canal', 'Drip'];
+        return const [
+          'Rainfed',
+          'Well',
+          'Borewell',
+          'Canal',
+          'Drip',
+          'Sprinkler',
+          'Good water',
+          'Limited water',
+          'Water shortage',
+        ];
       case _SetupStep.soilType:
         return const ['Black soil', 'Red soil', 'Sandy loam', 'Clay loam'];
       case _SetupStep.ownershipType:
@@ -197,7 +226,15 @@ class _FarmerFarmSetupChatScreenState
       case _SetupStep.seedSource:
         return const ['Own saved', 'FPO', 'Local market', 'Government source'];
       case _SetupStep.harvestIntent:
-        return const ['Home use', 'Market sale', 'Seed saving', 'Processing'];
+        return const [
+          'Home use',
+          'Market sale',
+          'Seed saving',
+          'Processing',
+          'FPO sale',
+          'Storage',
+          'Fodder',
+        ];
       case _SetupStep.sowingDate:
         return const ['Today', 'Yesterday', '3 days ago', '1 week ago'];
       case _SetupStep.review:
@@ -240,6 +277,10 @@ class _FarmerFarmSetupChatScreenState
       'Borewell' => 'opt_borewell',
       'Canal' => 'opt_canal',
       'Drip' => 'opt_drip',
+      'Sprinkler' => 'opt_sprinkler',
+      'Good water' => 'opt_good_water',
+      'Limited water' => 'opt_limited_water',
+      'Water shortage' => 'opt_water_shortage',
       'Black soil' => 'opt_black_soil',
       'Red soil' => 'opt_red_soil',
       'Sandy loam' => 'opt_sandy_loam',
@@ -256,6 +297,9 @@ class _FarmerFarmSetupChatScreenState
       'Market sale' => 'opt_market_sale',
       'Seed saving' => 'opt_seed_saving',
       'Processing' => 'opt_processing',
+      'FPO sale' => 'opt_fpo_sale',
+      'Storage' => 'storage',
+      'Fodder' => 'opt_fodder',
       'Today' => 'opt_today',
       'Yesterday' => 'opt_yesterday',
       '3 days ago' => 'opt_three_days_ago',
@@ -381,6 +425,31 @@ class _FarmerFarmSetupChatScreenState
     _appendUserText(value);
   }
 
+  void _toggleMultiSelectSuggestion(String suggestion) {
+    final selection = _activeMultiSelection;
+    setState(() {
+      if (selection.contains(suggestion)) {
+        selection.remove(suggestion);
+      } else {
+        selection.add(suggestion);
+      }
+    });
+  }
+
+  void _continueMultiSelectStep() {
+    final selection = _activeMultiSelection;
+    if (selection.isEmpty) {
+      _showToast(UiStrings.t('select_one_option_first'));
+      return;
+    }
+    final values = _quickSuggestionsForStep()
+        .where(selection.contains)
+        .toList(growable: false);
+    final valueText = values.join(', ');
+    final labelText = values.map(_suggestionLabel).join(', ');
+    _appendUserText(valueText, displayText: labelText);
+  }
+
   DateTime? _parseSowingDate(String value) {
     final normalized = value.trim().toLowerCase();
     if (normalized == 'today') return DateTime.now();
@@ -489,6 +558,10 @@ class _FarmerFarmSetupChatScreenState
       return;
     }
     if (_step == _SetupStep.review) return;
+    if (_isMultiSelectStep) {
+      _toggleMultiSelectSuggestion(suggestion);
+      return;
+    }
     _appendUserText(suggestion, displayText: label);
   }
 
@@ -585,20 +658,44 @@ class _FarmerFarmSetupChatScreenState
             if (_step != _SetupStep.review)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: quickSuggestions
-                      .map(
-                        (item) => ActionChip(
-                          label: Text(_suggestionLabel(item)),
-                          onPressed: () => _onQuickSelect(item),
-                        ),
-                      )
-                      .toList(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: quickSuggestions
+                          .map(
+                            (item) => _isMultiSelectStep
+                                ? FilterChip(
+                                    label: Text(_suggestionLabel(item)),
+                                    selected: _activeMultiSelection.contains(
+                                      item,
+                                    ),
+                                    onSelected: (_) => _onQuickSelect(item),
+                                  )
+                                : ActionChip(
+                                    label: Text(_suggestionLabel(item)),
+                                    onPressed: () => _onQuickSelect(item),
+                                  ),
+                          )
+                          .toList(),
+                    ),
+                    if (_isMultiSelectStep) ...[
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: _activeMultiSelection.isEmpty
+                            ? null
+                            : _continueMultiSelectStep,
+                        child: Text(UiStrings.t('continue_')),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            if (_step != _SetupStep.markPolygon && _step != _SetupStep.review)
+            if (_step != _SetupStep.markPolygon &&
+                _step != _SetupStep.review &&
+                !_isMultiSelectStep)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                 child: Row(
