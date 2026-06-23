@@ -166,6 +166,52 @@ interface ScoutZone {
   significance: "significant" | "marginal";
 }
 
+function numberFrom(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function centerFromBounds(
+  bounds: unknown,
+): { lat: number; lng: number } | null {
+  if (typeof bounds === "string") {
+    try {
+      return centerFromBounds(JSON.parse(bounds));
+    } catch {
+      return null;
+    }
+  }
+
+  if (Array.isArray(bounds) && bounds.length >= 2) {
+    const first = Array.isArray(bounds[0]) ? bounds[0] : null;
+    const second = Array.isArray(bounds[1]) ? bounds[1] : null;
+    const south = numberFrom(first?.[0]);
+    const west = numberFrom(first?.[1]);
+    const north = numberFrom(second?.[0]);
+    const east = numberFrom(second?.[1]);
+    if (south !== null && west !== null && north !== null && east !== null) {
+      return { lat: (south + north) / 2, lng: (west + east) / 2 };
+    }
+  }
+
+  if (bounds && typeof bounds === "object" && !Array.isArray(bounds)) {
+    const row = bounds as Record<string, unknown>;
+    const south = numberFrom(row.south ?? row.minLat ?? row.min_lat);
+    const west = numberFrom(row.west ?? row.minLng ?? row.min_lng);
+    const north = numberFrom(row.north ?? row.maxLat ?? row.max_lat);
+    const east = numberFrom(row.east ?? row.maxLng ?? row.max_lng);
+    if (south !== null && west !== null && north !== null && east !== null) {
+      return { lat: (south + north) / 2, lng: (west + east) / 2 };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Getis-Ord Gi* hotspot z-score for each cell over the composite-risk field.
  * A neighbourhood (incl. self) is the cells within HOTSPOT_DIST_M. Gi* tells us
@@ -389,10 +435,10 @@ Deno.serve(async (req) => {
 
     // Load farm geometry
     let geometry = body.geometry;
-    let farmBounds: number[][] | null = null;
+    let farmCenterFromBounds: { lat: number; lng: number } | null = null;
     if (farm) {
       if (!geometry && farm.geometry) geometry = farm.geometry;
-      if (farm.bounds) farmBounds = farm.bounds as number[][];
+      farmCenterFromBounds = centerFromBounds(farm.bounds);
     }
     if (!geometry) {
       return errorResponse(
@@ -508,11 +554,9 @@ Deno.serve(async (req) => {
     // Fetch weather once for the farm centroid
     let farmLat = 0;
     let farmLng = 0;
-    if (farmBounds) {
-      farmLat = ((farmBounds[0][0] as number) + (farmBounds[1][0] as number)) /
-        2;
-      farmLng = ((farmBounds[0][1] as number) + (farmBounds[1][1] as number)) /
-        2;
+    if (farmCenterFromBounds) {
+      farmLat = farmCenterFromBounds.lat;
+      farmLng = farmCenterFromBounds.lng;
     } else {
       const centroid: any = await evaluate(eeGeometry.centroid());
       farmLng = centroid.coordinates?.[0] ?? 0;

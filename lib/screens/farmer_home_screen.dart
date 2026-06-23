@@ -1883,6 +1883,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         index,
         runRiskScreenIfEmpty: true,
       );
+      if (!_hasDiseaseScanStateForFarm(index)) {
+        final scanReady = await _runDiseaseScreenForFarm(
+          index,
+          showFailureSnack: false,
+          showInlineError: true,
+          refreshSummaryAfter: false,
+        );
+        if (!scanReady || !_hasDiseaseScanStateForFarm(index)) {
+          return false;
+        }
+      }
       await _saveFarmDataSnapshotForFarm(
         index,
         source: 'initial_farmer_home_sync',
@@ -3449,7 +3460,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     if (normalized.contains('auth token') || normalized.contains('401')) {
       return UiStrings.t('farmer_session_expired_refresh');
     }
-    if (normalized.contains('disease-risk-screen failed')) {
+    if (normalized.contains('disease-risk-screen failed') ||
+        normalized.contains('disease risk scan failed')) {
       return UiStrings.t('disease_screening_failed_retry');
     }
     return raw.isEmpty ? UiStrings.t('alert_refresh_failed_retry') : raw;
@@ -3478,6 +3490,20 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         _farmAlertAdviceByFarmIndex[index] != null;
   }
 
+  bool _hasDiseaseScanStateForFarm(int index) {
+    if (index < 0 || index >= _farms.length) return false;
+    final screen = _displayDiseaseScreenForFarm(index);
+    if (screen != null &&
+        (screen.scanDate.trim().isNotEmpty ||
+            screen.imagesAnalyzed > 0 ||
+            screen.riskCellsCount > 0 ||
+            screen.message?.trim().isNotEmpty == true)) {
+      return true;
+    }
+    return (_displayRiskCellsForFarm(index).isNotEmpty ||
+        _displayScoutZonesForFarm(index).isNotEmpty);
+  }
+
   Map<String, dynamic>? _farmGeometryJson(_FarmerFarm farm) {
     final ring = farm.polygon;
     if (ring == null || ring.length < 3) return null;
@@ -3487,14 +3513,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     };
   }
 
-  Future<void> _runDiseaseScreenForFarm(
+  Future<bool> _runDiseaseScreenForFarm(
     int index, {
     bool showFailureSnack = true,
     bool showInlineError = true,
     bool refreshSummaryAfter = true,
   }) async {
-    if (index < 0 || index >= _farms.length) return;
-    if (_farmAlertLoading.contains(index)) return;
+    if (index < 0 || index >= _farms.length) return false;
+    if (_farmAlertLoading.contains(index)) return false;
 
     _initializeFarmState(index);
     _refreshFarmStage(index);
@@ -3610,10 +3636,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         advisorError = e;
       }
 
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _farmSummaryByFarmIndex.remove(index);
         _satelliteOverviewByFarmIndex.remove(index);
+        _diseaseScreenByFarmIndex[index] = diseaseScreen;
+        _diseaseScoutZonesByFarmIndex[index] = zones;
+        _diseaseRiskCellsByFarmIndex[index] = cells;
+        _diseaseRemoteLoadedAt[index] = DateTime.now();
         _currentDiseaseScreenByFarmIndex[index] = diseaseScreen;
         _currentScoutZonesByFarmIndex[index] = zones;
         _currentRiskCellsByFarmIndex[index] = cells;
@@ -3712,13 +3742,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           ),
         );
       }
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       if (_looksLikeNetworkRefreshError(e) && _hasDiseaseRefreshCache(index)) {
         if (showInlineError) {
           setState(() => _farmAlertErrorByFarmIndex.remove(index));
         }
-        return;
+        return true;
       }
       final message = _alertRefreshMessage(e);
       if (showInlineError) {
@@ -3733,6 +3764,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           snackPosition: SnackPosition.BOTTOM,
         );
       }
+      return false;
     } finally {
       if (mounted) {
         setState(() => _farmAlertLoading.remove(index));
@@ -4784,11 +4816,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         _loadLiveWeatherForFarm(activeIndex, forceRefresh: true),
         _loadCropLifecycleAdviceForFarm(activeIndex, forceRefresh: true),
       ]);
-      await _runDiseaseScreenForFarm(
+      final scanReady = await _runDiseaseScreenForFarm(
         activeIndex,
         showFailureSnack: false,
         refreshSummaryAfter: false,
       );
+      if (!scanReady && !_hasDiseaseRefreshCache(activeIndex)) {
+        throw SatelliteApiException('Disease risk scan failed');
+      }
       if (!mounted || _farms.isEmpty) return;
       await _ensureDiseaseRemoteForFarm(
         activeIndex,
