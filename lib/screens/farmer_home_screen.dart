@@ -1268,6 +1268,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         .toList(growable: false);
   }
 
+  bool _remoteFarmHasMarkedBoundary(Farm farm) {
+    return _ringFromGeometry(farm.geometry).length >= 3;
+  }
+
+  bool _farmerFarmHasMarkedBoundary(_FarmerFarm farm) {
+    final ring = farm.polygon;
+    if (ring == null) return false;
+    return ring.where((point) => point.length >= 2).length >= 3;
+  }
+
   _FarmerProfile _profileFromVerified(VerifiedFarmerRecord record) {
     return _FarmerProfile(
       name: record.farmerName,
@@ -3913,44 +3923,64 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     required Farm savedFarm,
     required FarmSetupChatResult setupResult,
   }) async {
-    final activeIndex = _activateSavedFarmImmediately(
-      savedFarm,
-      setupResult,
-      warmMonitoring: false,
-    );
-    if (activeIndex == null) return null;
-
     final farmId = savedFarm.id.trim();
-    if (farmId.isEmpty) return activeIndex;
+    if (farmId.isEmpty || !Get.isRegistered<FarmController>()) return null;
 
-    late final int loadedIndex;
+    Farm? confirmedFarm;
     try {
-      loadedIndex = await _refreshFarmsFromCloudAndSelect(
-        farmId: farmId,
-        fallbackIndex: activeIndex,
-        refreshSnapshot: false,
-        timeout: const Duration(seconds: 4),
+      confirmedFarm = await Get.find<FarmController>().syncSavedFarmFromRemote(
+        farmId,
+        timeout: const Duration(seconds: 6),
         retryHttpErrors: true,
+        requireRemoteConfirmation: true,
       );
     } catch (error) {
       Get.log('Saved farm reload before opening failed: $error');
       return null;
     }
-    if (!mounted || _farms.isEmpty) return loadedIndex;
-
-    final selectedIndex = _indexForRemoteFarmId(farmId) ?? loadedIndex;
-    if (selectedIndex < 0 || selectedIndex >= _farms.length) {
-      return loadedIndex;
+    if (!mounted || confirmedFarm == null) return null;
+    if (confirmedFarm.id.trim() != farmId ||
+        !_remoteFarmHasMarkedBoundary(confirmedFarm)) {
+      Get.log('Saved farm remote confirmation missing boundary: $farmId');
+      return null;
     }
-    _satelliteFarmIdByFarmIndex[selectedIndex] = farmId;
+
+    _initializeFarmerStateFromSession(shouldSetState: false);
+    var selectedIndex = _indexForRemoteFarmId(farmId);
+    if (selectedIndex == null) {
+      selectedIndex = _activateSavedFarmImmediately(
+        confirmedFarm,
+        setupResult,
+        warmMonitoring: false,
+      );
+    } else if (selectedIndex >= 0 && selectedIndex < _farms.length) {
+      _farms[selectedIndex] = _farmerFarmWithSetupMetadata(
+        _farms[selectedIndex],
+        setupResult,
+      );
+    }
+    if (!mounted || selectedIndex == null) return null;
+    if (selectedIndex < 0 || selectedIndex >= _farms.length) return null;
+    final confirmedIndex = selectedIndex;
+    if (_farms[confirmedIndex].remoteFarmId.trim() != farmId ||
+        !_farmerFarmHasMarkedBoundary(_farms[confirmedIndex])) {
+      Get.log('Saved farm local selection missing boundary: $farmId');
+      return null;
+    }
+
+    _satelliteFarmIdByFarmIndex[confirmedIndex] = farmId;
+    _upsertSatelliteFarmCatalog(confirmedFarm);
     setState(() {
-      _selectedFarm = selectedIndex;
+      _selectedFarm = confirmedIndex;
+      _clearMonitoringStateForFarmIndex(confirmedIndex);
       _index = _farmTabIndex;
-      _initializeFarmState(selectedIndex);
-      _applyRemoteFarmStatusFields(selectedIndex);
+      _initializeFarmState(confirmedIndex);
+      _farmSowingDate[confirmedIndex] = setupResult.sowingDate;
+      _refreshFarmStage(confirmedIndex);
+      _applyRemoteFarmStatusFields(confirmedIndex);
     });
     _syncSelectedRemoteFarmFromIndex();
-    return selectedIndex;
+    return confirmedIndex;
   }
 
   Future<bool> _syncNewFarmServicesBeforeOpen({
@@ -3959,9 +3989,26 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   }) async {
     if (!mounted || _farms.isEmpty) return false;
     final normalizedFarmId = farmId.trim();
+    if (normalizedFarmId.isEmpty) return false;
     final activeIndex = _indexForRemoteFarmId(normalizedFarmId) ?? index;
     if (activeIndex < 0 || activeIndex >= _farms.length) return false;
-    _satelliteFarmIdByFarmIndex[activeIndex] = normalizedFarmId;
+    final activeFarm = _farms[activeIndex];
+    if (activeFarm.remoteFarmId.trim() != normalizedFarmId ||
+        !_farmerFarmHasMarkedBoundary(activeFarm)) {
+      Get.log('New farm service sync blocked until farm boundary is synced.');
+      return false;
+    }
+    setState(() {
+      _selectedFarm = activeIndex;
+      _clearMonitoringStateForFarmIndex(activeIndex);
+      _satelliteFarmIdByFarmIndex[activeIndex] = normalizedFarmId;
+      _initializeFarmState(activeIndex);
+      _applyRemoteFarmStatusFields(activeIndex);
+      _initialFarmServiceReadyKey = null;
+      _initialFarmServiceSyncError = false;
+      _index = _farmTabIndex;
+    });
+    _syncSelectedRemoteFarmFromIndex();
     final key = _initialFarmServiceSyncKey(activeIndex);
     if (key == null) return false;
     final ready = await _syncInitialFarmServicesForFarm(activeIndex, key);

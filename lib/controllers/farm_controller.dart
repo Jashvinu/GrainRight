@@ -308,6 +308,7 @@ class FarmController extends GetxController {
     String farmId, {
     Duration timeout = const Duration(seconds: 4),
     bool retryHttpErrors = true,
+    bool requireRemoteConfirmation = false,
   }) async {
     final preferredId = farmId.trim();
     if (preferredId.isEmpty) return null;
@@ -333,12 +334,13 @@ class FarmController extends GetxController {
             return farm;
           }
         }
-        if (!retryHttpErrors) return null;
+        if (requireRemoteConfirmation || !retryHttpErrors) return null;
       } catch (error) {
         Get.log('Fast saved farm sync failed: $error');
-        if (!retryHttpErrors) return null;
+        if (requireRemoteConfirmation || !retryHttpErrors) return null;
       }
     }
+    if (requireRemoteConfirmation) return null;
     await loadFarms(forceRefresh: true, preferredFarmId: preferredId);
     for (final farm in farms) {
       if (farm.id == preferredId) {

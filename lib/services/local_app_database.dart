@@ -571,6 +571,12 @@ class LocalAppDatabase extends GeneratedDatabase {
         variables: [Variable.withString(digits)],
       );
       for (final farm in farms) {
+        final currentStatusUpdatedAt =
+            farm.currentStatusUpdatedAt ??
+            ((farm.currentStatus?.trim().isNotEmpty == true ||
+                    farm.currentStatusStage?.trim().isNotEmpty == true)
+                ? farm.updatedAt
+                : null);
         await customUpdate(
           '''
           INSERT INTO local_farms_cache (
@@ -629,7 +635,7 @@ class LocalAppDatabase extends GeneratedDatabase {
             Variable(farm.sowingDate),
             Variable(farm.currentStatus),
             Variable(farm.currentStatusStage),
-            Variable(farm.currentStatusUpdatedAt),
+            Variable(currentStatusUpdatedAt),
             Variable.withString(farm.createdAt),
             Variable.withString(farm.updatedAt),
             Variable.withInt(farm.selected ? 1 : 0),
