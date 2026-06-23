@@ -23,10 +23,7 @@ class FarmerVerificationException implements Exception {
   final String message;
   final String code;
 
-  const FarmerVerificationException(
-    this.message, {
-    this.code = '',
-  });
+  const FarmerVerificationException(this.message, {this.code = ''});
 
   @override
   String toString() => code.isEmpty ? message : '$code: $message';
@@ -47,10 +44,8 @@ class FarmerProfileAlreadyExistsException extends FarmerVerificationException {
 }
 
 class FarmerServiceException extends FarmerVerificationException {
-  const FarmerServiceException(
-    String message,
-    String code,
-  ) : super(message, code: code);
+  const FarmerServiceException(String message, String code)
+    : super(message, code: code);
 
   @override
   String toString() => '$code: $message';
@@ -180,7 +175,8 @@ class MainAuthController extends GetxController {
     try {
       await _clearLocalGuest();
       await _auth.signInWithPassword(email: email, password: password);
-      final record = await _loadRemoteFarmerProfile() ??
+      final record =
+          await _loadRemoteFarmerProfile() ??
           await _createFarmerProfileFromCurrentUser(email);
       verifiedFarmer.value = record;
       await _rememberLocalFarmerProfile(record: record);
@@ -363,11 +359,17 @@ class MainAuthController extends GetxController {
       if (_networkStatusService.looksOffline(e)) {
         _setFarmerLoginSyncStatusCode('network_issue');
         errorMessage.value = 'Network issue. Check internet and try again.';
+        farmerLoginState.value = null;
+      } else if (_looksLikeFarmerSignupRequired(e)) {
+        _setFarmerLoginSyncStatusCode('farmer_not_found');
+        errorMessage.value =
+            'Create a new farmer account. Tap Sign up to continue.';
+        farmerLoginState.value = FarmerLoginState.needsSignup;
       } else {
         _setFarmerLoginSyncStatusCode('server_sync_failed');
         errorMessage.value = 'Server sync failed. Try again in a moment.';
+        farmerLoginState.value = null;
       }
-      farmerLoginState.value = null;
       _setFarmerLoginSyncStatus('farmer_session_sync_failed');
       _trackFarmerLoginEvent('farm_sync_failed', {
         'phone': digits,
@@ -469,10 +471,7 @@ class MainAuthController extends GetxController {
       });
       await _afterSignIn(
         nextRoute,
-        arguments: {
-          'showFirstFarmGuide': true,
-          'newFarmerPhone': digits,
-        },
+        arguments: {'showFirstFarmGuide': true, 'newFarmerPhone': digits},
         syncFarmerBeforeRoute: false,
       );
     } on AuthException catch (e) {
@@ -693,10 +692,7 @@ class MainAuthController extends GetxController {
     }
   }
 
-  void _setFarmerLoginSyncStatus(
-    String key, {
-    String? code,
-  }) {
+  void _setFarmerLoginSyncStatus(String key, {String? code}) {
     farmerLoginSyncStatusKey.value = key;
     if (code != null) {
       final trimmed = code.trim();
@@ -729,14 +725,14 @@ class MainAuthController extends GetxController {
       lastFarmerLoginPhone.value = _normalizePhone('${data['phone'] ?? ''}');
       lastFarmerLoginName.value = '${data['farmerName'] ?? ''}'.trim();
       lastFarmerLoginId.value = '${data['farmerId'] ?? ''}'.trim();
-      lastFarmerLoginLocation.value =
-          '${data['defaultLocation'] ?? ''}'.trim();
+      lastFarmerLoginLocation.value = '${data['defaultLocation'] ?? ''}'.trim();
       final farmCount = data['farmCount'];
       lastFarmerLoginFarmCount.value = farmCount is num
           ? farmCount.toInt()
           : int.tryParse('$farmCount');
-      lastFarmerLoginSyncAt.value =
-          DateTime.tryParse('${data['syncedAt'] ?? ''}');
+      lastFarmerLoginSyncAt.value = DateTime.tryParse(
+        '${data['syncedAt'] ?? ''}',
+      );
     } catch (_) {
       // Ignore corrupt local login summary. It will be replaced on next login.
     }
@@ -844,10 +840,7 @@ class MainAuthController extends GetxController {
     return true;
   }
 
-  void _trackFarmerLoginEvent(
-    String event,
-    Map<String, Object?> details,
-  ) {
+  void _trackFarmerLoginEvent(String event, Map<String, Object?> details) {
     final entry = <String, dynamic>{
       'event': event,
       'at': DateTime.now().toUtc().toIso8601String(),
@@ -893,10 +886,7 @@ class MainAuthController extends GetxController {
     }
 
     _setFarmerLoginSyncStatus('linking_farmer_profile');
-    await _linkRemoteFarmerPhone(
-      phone: phone,
-      record: verifiedRecord,
-    );
+    await _linkRemoteFarmerPhone(phone: phone, record: verifiedRecord);
     farmerLoginState.value = FarmerLoginState.linked;
     _setFarmerLoginSyncStatusCode('farmer_linked');
 
@@ -935,17 +925,10 @@ class MainAuthController extends GetxController {
       if (data['success'] == false) {
         final message = '${data['error'] ?? 'Could not link farmer profile.'}';
         final linkCode = code ?? 'farmer_link_failed';
-        if (_isHardLinkCode(linkCode) ||
-            _isProfileBindingErrorCode(linkCode)) {
-          throw FarmerVerificationException(
-            message,
-            code: linkCode,
-          );
+        if (_isHardLinkCode(linkCode) || _isProfileBindingErrorCode(linkCode)) {
+          throw FarmerVerificationException(message, code: linkCode);
         }
-        throw FarmerVerificationException(
-          message,
-          code: linkCode,
-        );
+        throw FarmerVerificationException(message, code: linkCode);
       }
       return;
     } catch (e) {
@@ -972,10 +955,7 @@ class MainAuthController extends GetxController {
     }
 
     try {
-      await _linkRemoteFarmerPhoneDirect(
-        phone: phone,
-        record: record,
-      );
+      await _linkRemoteFarmerPhoneDirect(phone: phone, record: record);
     } catch (directError) {
       final edgeMessage = _remoteFunctionErrorMessage(edgeError);
       final directMessage = _remoteFunctionErrorMessage(directError);
@@ -1004,20 +984,17 @@ class MainAuthController extends GetxController {
       throw const FarmerVerificationException('No Supabase farmer session.');
     }
 
-    await _client.from('farmer_phone_profiles').upsert(
-      {
-        'user_id': user.id,
-        'phone': phone,
-        'farmer_id': record.farmerId,
-        'farmer_name': record.farmerName,
-        'default_location': record.defaultLocation,
-        'auth_method': 'anonymous_link',
-        'status': 'active',
-        'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
-        'source': 'phone_login',
-      },
-      onConflict: 'user_id',
-    );
+    await _client.from('farmer_phone_profiles').upsert({
+      'user_id': user.id,
+      'phone': phone,
+      'farmer_id': record.farmerId,
+      'farmer_name': record.farmerName,
+      'default_location': record.defaultLocation,
+      'auth_method': 'anonymous_link',
+      'status': 'active',
+      'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
+      'source': 'phone_login',
+    }, onConflict: 'user_id');
   }
 
   String _remoteFunctionErrorMessage(Object? error) {
@@ -1061,10 +1038,7 @@ class MainAuthController extends GetxController {
     final mappedCode = messageCode is String && messageCode.isNotEmpty
         ? messageCode
         : null;
-    return (
-      message: _remoteFunctionErrorMessage(error),
-      code: mappedCode,
-    );
+    return (message: _remoteFunctionErrorMessage(error), code: mappedCode);
   }
 
   Map<String, dynamic> _responseMapFromError(Object? error) {
@@ -1096,6 +1070,9 @@ class MainAuthController extends GetxController {
   }
 
   String _farmerLoginErrorMessage(FarmerVerificationException e) {
+    if (_looksLikeFarmerSignupRequired(e)) {
+      return 'Create a new farmer account. Tap Sign up to continue.';
+    }
     switch (e.code) {
       case 'farmer_not_found':
         return 'Create a new farmer account. Tap Sign up to continue.';
@@ -1117,6 +1094,30 @@ class MainAuthController extends GetxController {
       return e.message;
     }
     return 'Unable to complete farmer verification. Try again.';
+  }
+
+  bool _looksLikeFarmerSignupRequired(Object? value) {
+    if (value == null) return false;
+    if (value is FarmerVerificationException) {
+      return _looksLikeFarmerSignupRequired(value.code) ||
+          _looksLikeFarmerSignupRequired(value.message);
+    }
+    if (value is Map) {
+      return _looksLikeFarmerSignupRequired(value['code']) ||
+          _looksLikeFarmerSignupRequired(value['error']) ||
+          _looksLikeFarmerSignupRequired(value['message']) ||
+          _looksLikeFarmerSignupRequired(value['details']);
+    }
+    final normalized = value.toString().trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    return normalized.contains('farmer_not_found') ||
+        normalized.contains('no farmer profile found') ||
+        normalized.contains('no approved farmer profile') ||
+        normalized.contains('create a new farmer account') ||
+        normalized.contains('tap sign up') ||
+        normalized.contains('redirecting to sign up') ||
+        normalized.contains('not verified') ||
+        normalized.contains('not approved');
   }
 
   Map<String, dynamic> _responseMapFromThrowable(Object throwable) {
@@ -1176,8 +1177,12 @@ class MainAuthController extends GetxController {
     final session = _auth.currentSession;
     final user = _auth.currentUser;
     if (session == null || user == null) return;
-    final farmerPhone = verifiedFarmer.value?.phone.replaceAll(RegExp(r'\D'), '');
-    final email = user.email ??
+    final farmerPhone = verifiedFarmer.value?.phone.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+    final email =
+        user.email ??
         (farmerPhone == null || farmerPhone.isEmpty
             ? 'farmer-${user.id}@anonymous.local'
             : 'farmer-$farmerPhone@anonymous.local');
@@ -1230,14 +1235,14 @@ class MainAuthController extends GetxController {
           code: 'farmer_record_missing',
         );
       }
-      return VerifiedFarmerRecord.fromJson(
-        Map<String, dynamic>.from(farmer),
-      );
+      return VerifiedFarmerRecord.fromJson(Map<String, dynamic>.from(farmer));
     } on FarmerVerificationException {
       rethrow;
     } catch (e) {
       final parsed = _responseMapFromThrowable(e);
-      final parsedCode = parsed['code'] is String ? parsed['code'] as String : '';
+      final parsedCode = parsed['code'] is String
+          ? parsed['code'] as String
+          : '';
       if (_networkStatusService.looksOffline(e)) {
         throw const FarmerVerificationException(
           'Network issue. Check internet and try again.',
@@ -1269,7 +1274,8 @@ class MainAuthController extends GetxController {
         _setFarmerLoginSyncStatusCode(code);
       }
       if (data['success'] == false) {
-        final message = '${data['error'] ?? 'Could not verify farmer profile.'}';
+        final message =
+            '${data['error'] ?? 'Could not verify farmer profile.'}';
         if (code == 'farmer_not_found') {
           throw FarmerProfileNotFoundException(
             message,
@@ -1301,21 +1307,23 @@ class MainAuthController extends GetxController {
         );
       }
       _setFarmerLoginSyncStatusCode(_readResponseCode(data) ?? '');
-      return VerifiedFarmerRecord.fromJson(
-        Map<String, dynamic>.from(farmer),
-      );
+      return VerifiedFarmerRecord.fromJson(Map<String, dynamic>.from(farmer));
     } on FarmerVerificationException {
       rethrow;
     } catch (e) {
       final parsed = _responseMapFromThrowable(e);
-      final parsedCode = parsed['code'] is String ? parsed['code'] as String : '';
+      final parsedCode = parsed['code'] is String
+          ? parsed['code'] as String
+          : '';
       if (_networkStatusService.looksOffline(e)) {
         throw const FarmerVerificationException(
           'Network issue. Check internet and try again.',
           code: 'network_issue',
         );
       }
-      if (parsedCode == 'farmer_not_found') {
+      if (_looksLikeFarmerSignupRequired(parsed) ||
+          _looksLikeFarmerSignupRequired(parsedCode) ||
+          _looksLikeFarmerSignupRequired(e)) {
         throw const FarmerProfileNotFoundException(
           'Create a new farmer account. Tap Sign up to continue.',
           code: 'farmer_not_found',
@@ -1406,17 +1414,14 @@ class MainAuthController extends GetxController {
     final defaultLocation =
         '${metadata['default_location'] ?? 'Remote farm profile'}';
 
-    await _client.from('farmer_phone_profiles').upsert(
-      {
-        'user_id': user.id,
-        'phone': phone.isEmpty ? user.id : phone,
-        'farmer_id': farmerId,
-        'farmer_name': farmerName,
-        'default_location': defaultLocation,
-        'auth_method': 'email_password',
-      },
-      onConflict: 'user_id',
-    );
+    await _client.from('farmer_phone_profiles').upsert({
+      'user_id': user.id,
+      'phone': phone.isEmpty ? user.id : phone,
+      'farmer_id': farmerId,
+      'farmer_name': farmerName,
+      'default_location': defaultLocation,
+      'auth_method': 'email_password',
+    }, onConflict: 'user_id');
 
     return VerifiedFarmerRecord(
       phone: phone,

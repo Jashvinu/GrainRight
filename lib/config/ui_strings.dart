@@ -87,6 +87,10 @@ class UiStrings {
     }
     if (normalized.contains('no approved farmer profile') ||
         normalized.contains('no farmer profile found') ||
+        normalized.contains('create a new farmer account') ||
+        normalized.contains('not verified') ||
+        normalized.contains('not approved') ||
+        normalized.contains('create account') ||
         normalized.contains('farmer_not_found')) {
       return t('farmer_not_found');
     }
@@ -750,11 +754,9 @@ class UiStrings {
       'mr': 'शेत सिंक आवश्यक आहे',
     },
     'first_farm_remote_required': {
-      'en':
-          'The first farm must be saved to the remote database before continuing.',
-      'hi': 'आगे बढ़ने से पहले पहला खेत रिमोट डेटाबेस में सहेजना जरूरी है।',
-      'mr':
-          'पुढे जाण्यापूर्वी पहिले शेत रिमोट डेटाबेसमध्ये जतन होणे आवश्यक आहे.',
+      'en': 'This farm must be saved to the remote database before continuing.',
+      'hi': 'आगे बढ़ने से पहले यह खेत रिमोट डेटाबेस में सहेजना जरूरी है।',
+      'mr': 'पुढे जाण्यापूर्वी हे शेत रिमोट डेटाबेसमध्ये जतन होणे आवश्यक आहे.',
     },
     'syncing_farm_data': {
       'en': 'Syncing farm data',

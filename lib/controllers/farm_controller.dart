@@ -822,6 +822,7 @@ class FarmController extends GetxController {
     required List<LatLng> points,
     Map<String, dynamic> metadata = const {},
     bool showSnackbars = true,
+    bool waitForRemoteConfirmation = false,
   }) async {
     try {
       await _ensureSatelliteSessionFromMainAuth();
@@ -897,9 +898,25 @@ class FarmController extends GetxController {
           farmerPhone: farmerPhone,
           jwt: jwt,
           userId: userId,
-          delays: const [Duration.zero],
-          timeout: const Duration(seconds: 1),
+          delays: waitForRemoteConfirmation
+              ? const [
+                  Duration.zero,
+                  Duration(milliseconds: 350),
+                  Duration(milliseconds: 900),
+                  Duration(milliseconds: 1800),
+                  Duration(milliseconds: 3200),
+                ]
+              : const [Duration.zero],
+          timeout: waitForRemoteConfirmation
+              ? const Duration(seconds: 4)
+              : const Duration(seconds: 1),
         );
+        if (waitForRemoteConfirmation && !confirmedFast) {
+          throw SatelliteApiException(
+            'Saved farm did not appear in the synced farm list yet.',
+            code: 'farm_sync_pending',
+          );
+        }
         if (!confirmedFast) {
           unawaited(
             _confirmSavedFarmVisibleForVerifiedFarmer(

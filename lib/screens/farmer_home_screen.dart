@@ -1866,13 +1866,13 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initialFarmServiceSyncScheduled = false;
       if (!mounted) return;
-      unawaited(_syncInitialFarmServicesForFarm(index, key));
+      unawaited(_syncInitialFarmServicesForFarm(index, key).then((_) {}));
     });
   }
 
-  Future<void> _syncInitialFarmServicesForFarm(int index, String key) async {
-    if (index < 0 || index >= _farms.length) return;
-    if (_initialFarmServiceReadyKey == key) return;
+  Future<bool> _syncInitialFarmServicesForFarm(int index, String key) async {
+    if (index < 0 || index >= _farms.length) return false;
+    if (_initialFarmServiceReadyKey == key) return true;
     setState(() {
       _initialFarmServiceSyncing = true;
       _initialFarmServiceSyncError = false;
@@ -1887,16 +1887,18 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         index,
         source: 'initial_farmer_home_sync',
       );
-      if (!mounted || _initialFarmServiceActiveKey != key) return;
+      if (!mounted || _initialFarmServiceActiveKey != key) return false;
       setState(() {
         _initialFarmServiceReadyKey = key;
         _initialFarmServiceSyncError = false;
       });
+      return true;
     } catch (_) {
-      if (!mounted || _initialFarmServiceActiveKey != key) return;
+      if (!mounted || _initialFarmServiceActiveKey != key) return false;
       setState(() {
         _initialFarmServiceSyncError = true;
       });
+      return false;
     } finally {
       if (mounted && _initialFarmServiceActiveKey == key) {
         setState(() {
@@ -3755,63 +3757,56 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     if (setupResult == null) return;
 
     final polygonPoints = _polygonPointsFromRing(setupResult.polygon);
-    if (silentAutoSync) {
-      _showFirstFarmLoadOverlay(
-        title: UiStrings.t('first_farm_loading_title'),
-        message: UiStrings.t('first_farm_saving_remote'),
-      );
-    }
+    _showFirstFarmLoadOverlay(
+      title: UiStrings.t('first_farm_loading_title'),
+      message: UiStrings.t('first_farm_saving_remote'),
+    );
     final savedFarm = await _saveFarmToRemote(
       setupResult,
       polygonPoints,
-      showSnackbars: !silentAutoSync,
+      showSnackbars: false,
+      waitForRemoteConfirmation: true,
     );
     if (savedFarm == null) {
-      if (silentAutoSync) {
-        await _showFirstFarmLoadFailure();
-      } else {
-        Get.snackbar(
-          UiStrings.t('farm_sync_required'),
-          UiStrings.t('first_farm_remote_required'),
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
+      await _showFirstFarmLoadFailure();
       return;
     }
 
     if (!mounted) return;
-    if (silentAutoSync) {
-      _showFirstFarmLoadOverlay(
-        title: UiStrings.t('first_farm_loading_title'),
-        message: UiStrings.t('first_farm_loading_remote'),
-      );
-      final quietFarmId = savedFarm.id.trim();
-      if (quietFarmId.isNotEmpty) {
-        _quietInitialAlertFarmIds.add(quietFarmId);
-      }
+    _showFirstFarmLoadOverlay(
+      title: UiStrings.t('first_farm_loading_title'),
+      message: UiStrings.t('first_farm_loading_remote'),
+    );
+    final quietFarmId = savedFarm.id.trim();
+    if (quietFarmId.isNotEmpty) {
+      _quietInitialAlertFarmIds.add(quietFarmId);
     }
-    final activeIndex = silentAutoSync
-        ? await _loadSavedFirstFarmIntoApp(
-            savedFarm: savedFarm,
-            setupResult: setupResult,
-          )
-        : _activateSavedFarmImmediately(savedFarm, setupResult);
+    final activeIndex = await _loadSavedFirstFarmIntoApp(
+      savedFarm: savedFarm,
+      setupResult: setupResult,
+    );
     if (activeIndex == null) {
-      if (silentAutoSync) {
-        await _showFirstFarmLoadFailure();
-      } else {
-        Get.snackbar(
-          UiStrings.t('farm_sync_required'),
-          UiStrings.t('first_farm_remote_required'),
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
+      _quietInitialAlertFarmIds.remove(quietFarmId);
+      await _showFirstFarmLoadFailure();
       return;
     }
 
-    if (silentAutoSync) {
-      _hideFirstFarmLoadOverlay();
+    _showFirstFarmLoadOverlay(
+      title: UiStrings.t('initial_farm_sync_title'),
+      message: UiStrings.t('initial_farm_sync_message'),
+    );
+    final servicesReady = await _syncNewFarmServicesBeforeOpen(
+      index: activeIndex,
+      farmId: savedFarm.id,
+    );
+    if (!servicesReady) {
+      _quietInitialAlertFarmIds.remove(quietFarmId);
+      await _showFirstFarmLoadFailure(
+        UiStrings.t('farm_sync_incomplete_retry'),
+      );
+      return;
     }
+    _hideFirstFarmLoadOverlay();
     await _markFirstFarmGuideSeen();
     _firstFarmTutorialShown = true;
     _firstFarmTutorialOpen = false;
@@ -3822,19 +3817,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         mirrorLocalNotification: !silentAutoSync,
       ),
     );
-    if (silentAutoSync) {
-      _scheduleNewFarmMonitoringWarmup(
-        index: activeIndex,
-        farmId: savedFarm.id,
-      );
-    } else {
-      unawaited(
-        _refreshSavedFarmFromCloudInBackground(
-          farmId: savedFarm.id,
-          fallbackIndex: activeIndex,
-        ),
-      );
-    }
   }
 
   int? _activateSavedFarmImmediately(
@@ -3909,17 +3891,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     final farmId = savedFarm.id.trim();
     if (farmId.isEmpty) return activeIndex;
 
-    final remoteRefresh = _refreshFarmsFromCloudAndSelect(
-      farmId: farmId,
-      fallbackIndex: activeIndex,
-      refreshSnapshot: false,
-      timeout: const Duration(seconds: 3),
-      retryHttpErrors: false,
-    ).catchError((Object _) => activeIndex);
-    final loadedIndex = await Future.any<int>([
-      remoteRefresh,
-      Future<int>.delayed(const Duration(seconds: 3), () => activeIndex),
-    ]);
+    late final int loadedIndex;
+    try {
+      loadedIndex = await _refreshFarmsFromCloudAndSelect(
+        farmId: farmId,
+        fallbackIndex: activeIndex,
+        refreshSnapshot: false,
+        timeout: const Duration(seconds: 4),
+        retryHttpErrors: true,
+      );
+    } catch (error) {
+      Get.log('Saved farm reload before opening failed: $error');
+      return null;
+    }
     if (!mounted || _farms.isEmpty) return loadedIndex;
 
     final selectedIndex = _indexForRemoteFarmId(farmId) ?? loadedIndex;
@@ -3937,28 +3921,22 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     return selectedIndex;
   }
 
-  void _scheduleNewFarmMonitoringWarmup({
+  Future<bool> _syncNewFarmServicesBeforeOpen({
     required int index,
     required String farmId,
-  }) {
+  }) async {
+    if (!mounted || _farms.isEmpty) return false;
     final normalizedFarmId = farmId.trim();
-    if (normalizedFarmId.isEmpty) return;
-    unawaited(
-      Future<void>.delayed(const Duration(seconds: 2), () async {
-        try {
-          if (!mounted || _farms.isEmpty) return;
-          final activeIndex = _indexForRemoteFarmId(normalizedFarmId) ?? index;
-          if (activeIndex < 0 || activeIndex >= _farms.length) return;
-          await _refreshSavedFarmFromCloudInBackground(
-            farmId: normalizedFarmId,
-            fallbackIndex: activeIndex,
-            showAlertErrors: false,
-          );
-        } finally {
-          _quietInitialAlertFarmIds.remove(normalizedFarmId);
-        }
-      }),
-    );
+    final activeIndex = _indexForRemoteFarmId(normalizedFarmId) ?? index;
+    if (activeIndex < 0 || activeIndex >= _farms.length) return false;
+    _satelliteFarmIdByFarmIndex[activeIndex] = normalizedFarmId;
+    final key = _initialFarmServiceSyncKey(activeIndex);
+    if (key == null) return false;
+    final ready = await _syncInitialFarmServicesForFarm(activeIndex, key);
+    if (ready) {
+      _quietInitialAlertFarmIds.remove(normalizedFarmId);
+    }
+    return ready;
   }
 
   void _upsertSatelliteFarmCatalog(Farm savedFarm) {
@@ -3973,44 +3951,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     _satelliteFarmCatalogLoaded = true;
   }
 
-  Future<void> _refreshSavedFarmFromCloudInBackground({
-    required String farmId,
-    required int fallbackIndex,
-    bool showAlertErrors = true,
-  }) async {
-    try {
-      final refreshedIndex = await _refreshFarmsFromCloudAndSelect(
-        farmId: farmId,
-        fallbackIndex: fallbackIndex,
-        refreshSnapshot: false,
-      );
-      if (!mounted || _farms.isEmpty) return;
-      final activeIndex = _indexForRemoteFarmId(farmId) ?? refreshedIndex;
-      if (activeIndex < 0 || activeIndex >= _farms.length) return;
-      _satelliteFarmIdByFarmIndex[activeIndex] = farmId;
-      _syncSelectedRemoteFarmFromIndex();
-      await _warmNewFarmMonitoring(
-        index: activeIndex,
-        farmId: farmId,
-        showAlertErrors: showAlertErrors,
-      );
-    } catch (_) {
-      if (!mounted || _farms.isEmpty) return;
-      final activeIndex = _indexForRemoteFarmId(farmId);
-      if (activeIndex == null) return;
-      _satelliteFarmIdByFarmIndex[activeIndex] = farmId;
-      await _warmNewFarmMonitoring(
-        index: activeIndex,
-        farmId: farmId,
-        showAlertErrors: showAlertErrors,
-      );
-    }
-  }
-
   Future<Farm?> _saveFarmToRemote(
     FarmSetupChatResult setupResult,
     List<LatLng> polygonPoints, {
     bool showSnackbars = true,
+    bool waitForRemoteConfirmation = false,
   }) async {
     if (!Get.isRegistered<FarmController>()) return null;
     if (polygonPoints.length < 3) return null;
@@ -4019,6 +3964,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       name: setupResult.farmName,
       points: polygonPoints,
       showSnackbars: showSnackbars,
+      waitForRemoteConfirmation: waitForRemoteConfirmation,
       metadata: {
         'crop': setupResult.crop,
         'variety': setupResult.variety,
@@ -4856,10 +4802,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       );
       await _loadFarmTimelineForFarm(activeIndex, forceRefresh: true);
       unawaited(
-        _saveFarmDataSnapshotForFarm(
-          activeIndex,
-          source: 'farm_page_refresh',
-        ),
+        _saveFarmDataSnapshotForFarm(activeIndex, source: 'farm_page_refresh'),
       );
     } catch (e) {
       if (!mounted) return;

@@ -96,6 +96,9 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
         normalized.contains('no approved farmer profile') ||
         normalized.contains('create a new farmer account') ||
         normalized.contains('redirecting to sign up') ||
+        normalized.contains('not verified') ||
+        normalized.contains('not approved') ||
+        normalized.contains('create account') ||
         normalized.contains('farmer_not_found');
   }
 
