@@ -3,11 +3,13 @@ import 'package:get/get.dart';
 import '../config/icon_map.dart';
 import '../config/theme.dart';
 import '../config/translations.dart';
+import '../config/ui_strings.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/survey_launch.dart';
 import '../services/location_service.dart';
 import '../services/secure_app_storage.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/dynamic_step.dart';
 
 class SurveyFormScreen extends StatefulWidget {
@@ -528,26 +530,12 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
                   top: false,
                   child: Row(
                     children: [
-                      if (!isFirst)
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => _goToStep(step - 1, totalSteps),
-                            icon: const Icon(
-                              Icons.arrow_back_rounded,
-                              size: 18,
-                            ),
-                            label: Text(_tr('Back')),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.green,
-                              side: const BorderSide(color: AppTheme.green),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                            ),
-                          ),
+                      if (!isFirst) ...[
+                        AppBackButton(
+                          onPressed: () => _goToStep(step - 1, totalSteps),
                         ),
-                      if (!isFirst) const SizedBox(width: 12),
+                        const SizedBox(width: 12),
+                      ],
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: c.isSubmitting.value
@@ -640,7 +628,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: IconButton(
-        tooltip: 'Use chat form',
+        tooltip: UiStrings.t('use_chat_form'),
         onPressed: _switchToChat,
         icon: const Icon(Icons.chat_bubble_outline_rounded),
       ),

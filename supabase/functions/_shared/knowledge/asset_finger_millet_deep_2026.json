@@ -1,0 +1,218 @@
+{
+  "doc_source": "asset_finger_millet_details_lifecycle_doc_2026",
+  "crop": "finger_millet",
+  "source_title": "Finger Millet Details Lifecycle Doc, Maharashtra Edition 2026",
+  "source_asset": "assets/Crop type and variety based doc/Finger_Millet_Details_Lifecycle_Doc.docx",
+  "records": [
+    {
+      "chunk_type": "variety",
+      "content": "Finger millet variety choice for Maharashtra: GPU-28 is 100-110 days, blast resistant, drought tolerant, and best for Dhule, Nashik, Nandurbar and Beed. GPU-67 is 110-120 days, rust and blast resistant, strong for Chhatrapati Sambhajinagar and Nashik. KMR-204 is 95-105 days with moderate disease resistance for low-rainfall Akola and Beed. Indaf-5 is early but blast sensitive and should be avoided in blast-prone fields. VL Mandua 149 is 100-115 days with good resistance for Nandurbar, hilly, organic and cooler micro-climates.",
+      "metadata": {
+        "source_section": "4.1 Variety Performance Matrix",
+        "varieties": ["GPU-28", "GPU-67", "KMR-204", "Indaf-5", "VL Mandua 149"],
+        "districts": ["Dhule", "Nashik", "Nandurbar", "Beed", "Akola", "Chhatrapati Sambhajinagar"]
+      }
+    },
+    {
+      "chunk_type": "variety",
+      "content": "For commercial and traceable finger millet production, use certified seed of GPU-28, GPU-67 or VL Mandua 149 where the district and market fit. Maintain seed replacement at 25-30 percent every season. Record seed packet, bill, lot number, variety and seed source because mixed seed lots reduce grade consistency and buyer confidence.",
+      "metadata": {
+        "source_section": "3. Types of Seeds and Seed Selection",
+        "traceability_fields": ["seed_packet_photo", "bill", "lot_number", "variety", "seed_source"]
+      }
+    },
+    {
+      "chunk_type": "soil",
+      "content": "Finger millet performs best in sandy loam, red soil and well-drained medium black soil. Ideal pH is about 6.5-6.8, with tolerance from 5.5 to 8.5. Avoid heavy clay and compacted fields; deep ploughing, 2-3 harrowings, FYM or compost, drainage channels and levelling are important before sowing.",
+      "metadata": {
+        "source_section": "5. Soil Requirements and Land Preparation"
+      }
+    },
+    {
+      "chunk_type": "climate",
+      "content": "Finger millet grows best around 27-32 C daytime and about 22 C night temperature. Annual rainfall of 500-1000 mm supports rainfed farming, with minimum crop water need around 350-400 mm. High humidity during grain filling increases blast and rust risk; temperatures above 32 C during booting or flowering can damage yield.",
+      "metadata": {
+        "source_section": "6.1 Ideal Climate"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "germination-seedling",
+      "content": "Finger millet irrigation at 0-7 DAS should keep the seed zone moist with light irrigation if there is no rain. Avoid waterlogging. From 7-30 DAS, allow slight drying between irrigations to encourage roots, and irrigate about every 5-7 days where irrigation is available.",
+      "metadata": {
+        "das_start": 0,
+        "das_end": 30,
+        "source_section": "6.2 Irrigation Management"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "tillering-flowering",
+      "content": "Finger millet tillering at 30-45 DAS and flowering or booting at 50-70 DAS need reliable moisture. The document marks flowering and booting as the most critical stage: moisture stress can cause heavy yield loss. Avoid overhead irrigation during flowering where blast pressure is high.",
+      "metadata": {
+        "das_start": 30,
+        "das_end": 70,
+        "source_section": "6.2 Irrigation Management"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "grain-filling-maturity",
+      "content": "Finger millet grain filling at 70-90 DAS needs moderate irrigation to prevent grain shrivelling, then irrigation should be reduced as the dough stage ends. Stop irrigation 10-15 days before harvest so the field dries and harvest stays clean.",
+      "metadata": {
+        "das_start": 70,
+        "das_end": 110,
+        "source_section": "6.2 Irrigation Management"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "pre-sowing-sowing",
+      "content": "Finger millet pre-sowing work from about 14 days before sowing to sowing day: soil test, deep ploughing, harrowing, FYM incorporation, drainage, levelling, seed procurement, seed treatment and line sowing at 22-30 cm rows with 2-3 cm depth and 8-10 kg seed per hectare.",
+      "metadata": {
+        "das_start": -14,
+        "das_end": 0,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "germination-seedling",
+      "content": "Finger millet germination and seedling stage at 5-21 DAS: confirm more than 80 percent germination by day 7, re-sow gaps, control damping off, do first weeding or hand hoeing, thin to proper spacing, maintain 7.5-10 cm plant spacing, and check for seedling blight.",
+      "metadata": {
+        "das_start": 5,
+        "das_end": 21,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "vegetative-tillering",
+      "content": "Finger millet vegetative and tillering stage at 21-50 DAS: apply basal fertilizer, do second and third weedings as needed, top dress remaining nitrogen, earth up to prevent lodging, maintain irrigation every 5-7 days where possible, monitor leaf colour, blast symptoms, pest activity and rust symptoms on lower leaves.",
+      "metadata": {
+        "das_start": 21,
+        "das_end": 50,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "booting-flowering",
+      "content": "Finger millet booting and flowering at 50-70 DAS is a critical yield stage. Ensure moisture, avoid stress, check ear head emergence and panicle development, and scout for blast. Moisture stress here can cause 30-40 percent yield loss.",
+      "metadata": {
+        "das_start": 50,
+        "das_end": 70,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-storage",
+      "content": "Finger millet grain filling, harvest and storage at 70 DAS onward: watch downy mildew, rust, lodging and grain colour; reduce irrigation near dough stage; harvest around 90-120 DAS when the crop turns brown and grain is hard; dry to below 12 percent moisture before storage in jute bags or metal containers.",
+      "metadata": {
+        "das_start": 70,
+        "das_end": 120,
+        "source_section": "9 and 14 Complete Crop Cycle and Storage"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "blast",
+      "growth_stage": "vegetative-flowering",
+      "content": "Finger millet blast appears from vegetative to flowering stages with grey-centred spindle-shaped leaf spots, purple-grey margins, chlorosis and premature drying. Neck or finger infection can damage grain filling. Risk rises with high humidity, dense canopy, excess nitrogen and overhead irrigation during flowering.",
+      "metadata": {
+        "severity": "high",
+        "source_section": "10.1 Stage-wise Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "rust",
+      "growth_stage": "tillering-grain-filling",
+      "content": "Finger millet rust is watched from tillering to grain filling. Look for brown or orange powdery spots on both leaf surfaces that later turn darker. Heavy rust reduces green leaf area during grain filling and can lower grade and yield.",
+      "metadata": {
+        "severity": "medium",
+        "source_section": "10.1 Stage-wise Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "downy_mildew",
+      "growth_stage": "grain-filling",
+      "content": "Finger millet downy mildew or green ear is most visible around grain filling. Symptoms include chlorotic yellow leaves, white downy growth on the lower leaf surface, stunted plants and malformed leafy green panicles that fail to set normal grain.",
+      "metadata": {
+        "severity": "medium-high",
+        "source_section": "10.1 Stage-wise Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "seedling_blight_foot_rot",
+      "growth_stage": "germination-seedling",
+      "content": "Finger millet seedling blight or foot rot occurs from germination to seedling stage. Symptoms include failed germination, seedling collapse at the soil line and brown to black foot rot. Risk is high when untreated seed is used or the field remains waterlogged.",
+      "metadata": {
+        "severity": "high",
+        "source_section": "10.1 Stage-wise Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "idm",
+      "content": "Finger millet integrated disease management: choose blast resistant varieties such as GPU-28, GPU-48, L-5, VL-149 or VL Mandua 149; treat seed; rotate with legumes; avoid continuous finger millet; avoid excess nitrogen; scout from 20 DAS; use Trichoderma viride and Pseudomonas fluorescens in FYM at weeding stage; control weeds; avoid overhead irrigation during flowering; destroy crop debris and deep plough after harvest.",
+      "metadata": {
+        "source_section": "10.2 Integrated Disease Management"
+      }
+    },
+    {
+      "chunk_type": "nutrition",
+      "content": "Finger millet fertilizer reference from the asset: rainfed short and medium varieties use about 40:20:20 kg NPK per hectare, irrigated short and medium varieties about 60:30:30 kg NPK per hectare, GPU-28 about 50:25:25 kg NPK per hectare, and GPU-67 about 60:30:30 kg NPK per hectare. Use soil test before exact application.",
+      "metadata": {
+        "source_section": "11.1 NPK Recommendations"
+      }
+    },
+    {
+      "chunk_type": "grading",
+      "content": "Finger millet Grade A or export quality needs clean, uniform, glossy reddish-brown grain, low broken grain, no mould smell, and grain moisture around 12-13 percent or lower. Grade A practices include resistant certified seed, balanced NPK, critical irrigation at flowering and grain filling, harvest when panicles turn brown and grains are hard, drying below 12 percent and clean storage.",
+      "metadata": {
+        "source_section": "12. Grain Grading System"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Dhule",
+      "content": "Finger millet in Dhule: semi-arid climate, 500-800 mm rainfall, sandy loam, red and yellowish-brown soils. GPU-28 is primary, with GPU-67 and KMR-204 also suitable. Key challenge is erratic rainfall and heat stress during grain filling; use drought tolerant seed and critical irrigations where possible.",
+      "metadata": {
+        "source_section": "13.1 Dhule District"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Nandurbar",
+      "content": "Finger millet in Nandurbar: tribal belt, higher rainfall, black and red soils and organic production potential. VL Mandua 149 is primary with GPU-28 also suitable. The asset notes premium organic potential and strong tribal cooperative opportunity.",
+      "metadata": {
+        "source_section": "13.2 Nandurbar District"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Akola-Beed-Chhatrapati Sambhajinagar-Nashik-Ahilyanagar",
+      "content": "Finger millet district fit: Akola suits KMR-204 and Indaf-5 where heat and erratic rain require early maturity, but blast risk must be watched. Beed suits GPU-28 and KMR-204 with moisture conservation. Chhatrapati Sambhajinagar suits GPU-67 and GPU-28. Nashik and Ahilyanagar can produce Grade A with GPU-28, GPU-67 or KMR-204 where market infrastructure and water support exist.",
+      "metadata": {
+        "source_section": "13.3 to 13.6 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "post_harvest",
+      "content": "Finger millet harvest and storage: harvest when 80-90 percent panicles turn brown and grain is hard, dry bundles in the field 3-4 days if weather allows, thresh cleanly, dry grain below 12 percent moisture, store in clean dry ventilated rooms, prefer jute bags or metal bins, avoid polythene, and inspect stored grain monthly.",
+      "metadata": {
+        "source_section": "14. Harvesting, Threshing and Storage"
+      }
+    },
+    {
+      "chunk_type": "traceability",
+      "content": "Finger millet traceability should capture farm ID and geo-location, crop and seed variety, organic practices or certification, disease occurrence and intervention records, NPK and input applications, harvest date, quantity, grading details and storage lot identity. Photo evidence should be used for disease tracking and intervention records.",
+      "metadata": {
+        "source_section": "16. Digital Traceability Platform"
+      }
+    }
+  ]
+}

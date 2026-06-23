@@ -145,7 +145,6 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".debug"
             manifestPlaceholders["appLabel"] = "Kalsubai Farms"
         }
         release {

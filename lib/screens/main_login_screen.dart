@@ -206,6 +206,8 @@ class _BrandHeader extends StatelessWidget {
                 BrandAssets.logo,
                 width: 292,
                 height: 164,
+                cacheWidth:
+                    (292 * MediaQuery.devicePixelRatioOf(context)).round(),
                 fit: BoxFit.contain,
               ),
             ),

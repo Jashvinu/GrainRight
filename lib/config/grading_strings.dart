@@ -1,5 +1,7 @@
 import 'package:get/get.dart';
 
+import 'locale_text.dart';
+
 /// Self-contained, locale-aware strings for the AI grain-grading flow.
 ///
 /// The legacy `AppTranslations.translate()` resolves Marathi-only (Hindi always
@@ -18,7 +20,7 @@ class GradingStrings {
   static String t(String key) {
     final row = _data[key];
     if (row == null) return key;
-    return row[_lang()] ?? row['en'] ?? key;
+    return LocaleText.digits(row[_lang()] ?? row['en'] ?? key);
   }
 
   static const Map<String, Map<String, String>> _data = {
@@ -90,8 +92,8 @@ class GradingStrings {
     'looks_wrong': {'en': 'Looks wrong?', 'hi': 'ग़लत लगता है?', 'mr': 'चुकीचे वाटते?'},
     'generate_qr': {
       'en': 'Make Harvest QR',
-      'hi': 'हार्वेस्ट QR बनाएँ',
-      'mr': 'हार्वेस्ट QR बनवा',
+      'hi': 'कापणी क्यूआर बनाएँ',
+      'mr': 'कापणी क्यूआर बनवा',
     },
     'grade_again': {'en': 'Grade again', 'hi': 'फिर ग्रेड करें', 'mr': 'पुन्हा ग्रेड करा'},
 
@@ -121,5 +123,94 @@ class GradingStrings {
     'feedback_title': {'en': 'What is the right grade?', 'hi': 'सही ग्रेड क्या है?', 'mr': 'योग्य ग्रेड कोणता?'},
     'feedback_thanks': {'en': 'Thanks — saved', 'hi': 'धन्यवाद — सहेजा गया', 'mr': 'धन्यवाद — जतन केले'},
     'submit': {'en': 'Send', 'hi': 'भेजें', 'mr': 'पाठवा'},
+    'fpc_title': {
+      'en': 'FPC Grain Grading',
+      'hi': 'किसान उत्पादक कंपनी अनाज ग्रेडिंग',
+      'mr': 'शेतकरी उत्पादक कंपनी धान्य ग्रेडिंग',
+    },
+    'farmer': {'en': 'Farmer', 'hi': 'किसान', 'mr': 'शेतकरी'},
+    'farm_name': {'en': 'Farm name', 'hi': 'खेत का नाम', 'mr': 'शेताचे नाव'},
+    'location': {'en': 'Location', 'hi': 'स्थान', 'mr': 'ठिकाण'},
+    'batch_id': {
+      'en': 'Batch ID',
+      'hi': 'बैच पहचान क्रमांक',
+      'mr': 'बॅच ओळख क्रमांक',
+    },
+    'fpo_approval_required': {
+      'en': 'FPO approval is required before QR generation.',
+      'hi': 'क्यूआर बनाने से पहले किसान उत्पादक संस्था की मंज़ूरी जरूरी है।',
+      'mr': 'क्यूआर तयार करण्यापूर्वी शेतकरी उत्पादक संस्थेची मंजुरी आवश्यक आहे.',
+    },
+    'complete_qr_details_first': {
+      'en': 'Complete farmer, farm, batch, bag, and grading details first.',
+      'hi': 'पहले किसान, खेत, बैच, बोरी और ग्रेडिंग विवरण पूरा करें।',
+      'mr': 'प्रथम शेतकरी, शेत, बॅच, पोते आणि ग्रेडिंग तपशील पूर्ण करा.',
+    },
+    'fpc_customer_lot': {
+      'en': 'FPC customer lot',
+      'hi': 'किसान उत्पादक कंपनी ग्राहक लॉट',
+      'mr': 'शेतकरी उत्पादक कंपनी ग्राहक लॉट',
+    },
+    'farmer_farm_lot': {
+      'en': 'Farmer farm lot',
+      'hi': 'किसान खेत लॉट',
+      'mr': 'शेतकरी शेत लॉट',
+    },
+    'generate_public_trace_qr': {
+      'en': 'Generate public trace QR',
+      'hi': 'सार्वजनिक ट्रेस क्यूआर बनाएं',
+      'mr': 'सार्वजनिक ट्रेस क्यूआर तयार करा',
+    },
+    'ai_grading': {
+      'en': 'AI grading',
+      'hi': 'एआई ग्रेडिंग',
+      'mr': 'एआय ग्रेडिंग',
+    },
+    'generated_automatically': {
+      'en': 'Generated automatically',
+      'hi': 'अपने आप बना',
+      'mr': 'आपोआप तयार',
+    },
+    'bag_kg': {'en': 'Bag kg', 'hi': 'बोरी kg', 'mr': 'पोते kg'},
+    'bags': {'en': 'Bags', 'hi': 'बोरी', 'mr': 'पोती'},
+    'finger_millet_ragi': {
+      'en': 'Finger Millet (Ragi)',
+      'hi': 'रागी',
+      'mr': 'नाचणी',
+    },
+    'local': {'en': 'Local', 'hi': 'स्थानीय', 'mr': 'स्थानिक'},
+    'farmer_name_unavailable': {
+      'en': 'Farmer name unavailable',
+      'hi': 'किसान का नाम उपलब्ध नहीं',
+      'mr': 'शेतकऱ्याचे नाव उपलब्ध नाही',
+    },
+    'no_farm_selected': {
+      'en': 'No farm selected',
+      'hi': 'कोई खेत चुना नहीं',
+      'mr': 'शेत निवडले नाही',
+    },
+    'location_unavailable': {
+      'en': 'Location unavailable',
+      'hi': 'स्थान उपलब्ध नहीं',
+      'mr': 'ठिकाण उपलब्ध नाही',
+    },
+    'cloud_score': {'en': 'Cloud score', 'hi': 'क्लाउड स्कोर', 'mr': 'क्लाउड स्कोअर'},
+    'score_grade': {'en': 'Score grade', 'hi': 'स्कोर ग्रेड', 'mr': 'स्कोअर ग्रेड'},
+    'model_suggested': {
+      'en': 'Model suggested',
+      'hi': 'मॉडल सुझाव',
+      'mr': 'मॉडेल सूचना',
+    },
+    'grain_score': {'en': 'Grain score', 'hi': 'अनाज स्कोर', 'mr': 'धान्य स्कोअर'},
+    'moisture_score': {'en': 'Moisture score', 'hi': 'नमी स्कोर', 'mr': 'ओलावा स्कोअर'},
+    'broken_grain': {'en': 'Broken grain', 'hi': 'टूटा अनाज', 'mr': 'तुटलेले धान्य'},
+    'foreign_matter': {'en': 'Foreign matter', 'hi': 'बाहरी पदार्थ', 'mr': 'परकीय घटक'},
+    'damaged_grain': {'en': 'Damaged grain', 'hi': 'क्षतिग्रस्त अनाज', 'mr': 'नुकसान झालेले धान्य'},
+    'uniformity': {'en': 'Uniformity', 'hi': 'एकरूपता', 'mr': 'एकसारखेपणा'},
+    'cloud_model_analysis': {
+      'en': 'Cloud Model Analysis',
+      'hi': 'क्लाउड मॉडल विश्लेषण',
+      'mr': 'क्लाउड मॉडेल विश्लेषण',
+    },
   };
 }

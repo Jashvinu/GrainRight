@@ -9,7 +9,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../config/brand_assets.dart';
 import '../config/runtime_config.dart';
 import '../config/theme.dart';
+import '../config/locale_text.dart';
+import '../config/ui_strings.dart';
 import '../utils/harvest_sticker_downloader.dart';
+import '../widgets/app_back_button.dart';
 
 class HarvestQrScreen extends StatefulWidget {
   const HarvestQrScreen({super.key});
@@ -91,18 +94,18 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
       return value.isEmpty || value == '--' || value.toLowerCase() == 'unknown';
     }
 
-    if (empty('analysisId')) missing.add('Complete grain grading');
-    if (empty('farmerId')) missing.add('Complete farmer profile');
-    if (empty('farmId')) missing.add('Select a saved farm');
-    if (empty('batchId')) missing.add('Add batch ID');
+    if (empty('analysisId')) missing.add(UiStrings.t('complete_grading'));
+    if (empty('farmerId')) missing.add(UiStrings.t('complete_farmer_profile'));
+    if (empty('farmId')) missing.add(UiStrings.t('select_saved_farm'));
+    if (empty('batchId')) missing.add(UiStrings.t('add_batch_id'));
     if (empty('bagSizeKg') || empty('bagCount') || empty('totalKg')) {
-      missing.add('Add bag details');
+      missing.add(UiStrings.t('add_bag_details'));
     }
-    if (empty('moisture')) missing.add('Confirm moisture');
-    if (empty('grade')) missing.add('Complete grade result');
+    if (empty('moisture')) missing.add(UiStrings.t('confirm_moisture'));
+    if (empty('grade')) missing.add(UiStrings.t('complete_grade_result'));
     final review = (a['reviewStatus'] ?? '').trim();
     if (review == 'pending' || review == 'missing') {
-      missing.add('Wait for FPO review approval');
+      missing.add(UiStrings.t('wait_for_fpo_review_approval'));
     }
     return missing;
   }
@@ -157,7 +160,7 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
   Future<void> _downloadSticker() async {
     if (!_canGenerate) {
       Get.snackbar(
-        'QR locked',
+        UiStrings.t('qr_locked'),
         _missingReasons.join(', '),
         snackPosition: SnackPosition.BOTTOM,
       );
@@ -182,15 +185,15 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
       );
       if (!mounted) return;
       Get.snackbar(
-        'Harvest sticker ready',
-        'Saved $savedTo',
+        UiStrings.t('harvest_sticker_ready'),
+        UiStrings.f('saved_to', {'path': savedTo}),
         snackPosition: SnackPosition.BOTTOM,
       );
     } catch (_) {
       if (!mounted) return;
       Get.snackbar(
-        'Download failed',
-        'Could not export the sticker image.',
+        UiStrings.t('download_failed'),
+        UiStrings.t('could_not_export_sticker'),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -204,7 +207,12 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
     final missingReasons = _missingReasons;
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppBar(title: const Text('Harvest QR')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('harvest_qr')),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         children: [
@@ -227,17 +235,17 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Sticker Use',
-                  style: TextStyle(
+                Text(
+                  UiStrings.t('sticker_use'),
+                  style: const TextStyle(
                     color: Colors.black,
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Download this card and print it as a bag sticker. The QR opens a public harvest trace card with batch, farm, grade and bag details.',
+                Text(
+                  UiStrings.t('harvest_sticker_desc'),
                   style: TextStyle(color: AppTheme.textMuted, height: 1.45),
                 ),
                 const SizedBox(height: 16),
@@ -254,7 +262,9 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
                         )
                       : const Icon(Icons.download_rounded),
                   label: Text(
-                    _isDownloading ? 'Preparing' : 'Download sticker',
+                    _isDownloading
+                        ? UiStrings.t('preparing')
+                        : UiStrings.t('download_sticker'),
                   ),
                 ),
               ],
@@ -289,9 +299,9 @@ class _QrLockCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'QR locked',
-                  style: TextStyle(
+                Text(
+                  UiStrings.t('qr_locked'),
+                  style: const TextStyle(
                     color: AppTheme.earth,
                     fontWeight: FontWeight.w900,
                   ),
@@ -341,13 +351,18 @@ class _HarvestStickerCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Image.asset(BrandAssets.logo, width: 48, height: 48),
+              Image.asset(
+                BrandAssets.logo,
+                width: 48,
+                height: 48,
+                cacheWidth: 144,
+              ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Kalsubai Farms',
                       style: TextStyle(
                         color: AppTheme.greenDark,
@@ -355,10 +370,10 @@ class _HarvestStickerCard extends StatelessWidget {
                         fontWeight: FontWeight.w900,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Harvest Trace Sticker',
-                      style: TextStyle(
+                      UiStrings.t('harvest_trace_sticker'),
+                      style: const TextStyle(
                         color: AppTheme.textMuted,
                         fontWeight: FontWeight.w700,
                       ),
@@ -405,23 +420,24 @@ class _HarvestStickerCard extends StatelessWidget {
           const SizedBox(height: 14),
           _StickerDetailGrid(
             details: [
-              _StickerDetail(label: 'Batch', value: args['batchId']!),
-              _StickerDetail(label: 'Analysis ID', value: args['analysisId']!),
-              _StickerDetail(label: 'Crop', value: args['crop']!),
-              _StickerDetail(label: 'Product', value: args['product']!),
-              _StickerDetail(label: 'Variety', value: args['variety']!),
-              _StickerDetail(label: 'Farm', value: args['farmName']!),
-              _StickerDetail(label: 'Farm ID', value: args['farmId']!),
-              _StickerDetail(label: 'Village', value: args['village']!),
-              _StickerDetail(label: 'Farmer', value: args['farmerName']!),
-              _StickerDetail(label: 'Farmer ID', value: args['farmerId']!),
+              _StickerDetail(label: UiStrings.t('batch'), value: args['batchId']!),
+              _StickerDetail(label: UiStrings.t('analysis_id'), value: args['analysisId']!),
+              _StickerDetail(label: UiStrings.t('crop'), value: _localizedHarvestValue(args['crop'])),
+              _StickerDetail(label: UiStrings.t('product'), value: _localizedHarvestValue(args['product'])),
+              _StickerDetail(label: UiStrings.t('variety'), value: _localizedHarvestValue(args['variety'])),
+              _StickerDetail(label: UiStrings.t('farm'), value: _localizedHarvestValue(args['farmName'])),
+              _StickerDetail(label: UiStrings.t('farm_id'), value: args['farmId']!),
+              _StickerDetail(label: UiStrings.t('village'), value: _localizedHarvestValue(args['village'])),
+              _StickerDetail(label: UiStrings.t('farmer'), value: _localizedHarvestValue(args['farmerName'])),
+              _StickerDetail(label: UiStrings.t('farmer_id'), value: args['farmerId']!),
               _StickerDetail(
-                label: 'Moisture',
+                label: UiStrings.t('moisture'),
                 value: _withPercent(args['moisture']!),
               ),
               _StickerDetail(
-                label: 'Location',
-                value: '${args['farmLatitude']}, ${args['farmLongitude']}',
+                label: UiStrings.t('location'),
+                value:
+                    '${LocaleText.digits(args['farmLatitude']!)} , ${LocaleText.digits(args['farmLongitude']!)}',
               ),
             ],
           ),
@@ -429,11 +445,16 @@ class _HarvestStickerCard extends StatelessWidget {
           Row(
             children: [
               _StickerMetric(
-                label: 'Bag Size',
-                value: '${args['bagSizeKg']} kg',
+                label: UiStrings.t('bag_size'),
+                value:
+                    '${LocaleText.digits(args['bagSizeKg']!)} ${UiStrings.t('kg_unit')}',
               ),
-              _StickerMetric(label: 'Bags', value: args['bagCount']!),
-              _StickerMetric(label: 'Total', value: '${args['totalKg']} kg'),
+              _StickerMetric(label: UiStrings.t('bags_label'), value: LocaleText.digits(args['bagCount']!)),
+              _StickerMetric(
+                label: UiStrings.t('total'),
+                value:
+                    '${LocaleText.digits(args['totalKg']!)} ${UiStrings.t('kg_unit')}',
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -444,7 +465,7 @@ class _HarvestStickerCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
-              'AI Grade ${args['grade']} • Score ${args['score']}/100 • ${args['standards']} • ${args['grader']}',
+              '${UiStrings.t('grade')} ${_localizedHarvestValue(args['grade'])} • ${UiStrings.t('score')} ${LocaleText.digits(args['score']!)}/100 • ${_localizedHarvestValue(args['standards'])} • ${_localizedHarvestValue(args['grader'])}',
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: AppTheme.greenDark,
@@ -492,10 +513,10 @@ class _StickerQrBox extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Scan harvest QR',
+          Text(
+            UiStrings.t('scan_harvest_qr'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppTheme.greenDark,
               fontSize: 12,
               fontWeight: FontWeight.w900,
@@ -525,9 +546,9 @@ class _HarvestSummaryPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Grade',
-            style: TextStyle(
+          Text(
+            UiStrings.t('grade'),
+            style: const TextStyle(
               color: AppTheme.greenDark,
               fontSize: 12,
               fontWeight: FontWeight.w900,
@@ -538,7 +559,7 @@ class _HarvestSummaryPanel extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              args['grade']!,
+              _localizedHarvestValue(args['grade']),
               style: const TextStyle(
                 color: AppTheme.greenDark,
                 fontSize: 54,
@@ -548,15 +569,15 @@ class _HarvestSummaryPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _StickerSummaryLine(
-            label: 'Location',
+            label: UiStrings.t('location'),
             value: _harvestLocation(args),
           ),
           _StickerSummaryLine(
-            label: 'Harvest Yield',
+            label: UiStrings.t('harvest_yield'),
             value: _yieldLabel(args),
           ),
           _StickerSummaryLine(
-            label: 'Rating',
+            label: UiStrings.t('rating'),
             value: _ratingLabel(args),
           ),
         ],
@@ -606,26 +627,48 @@ class _StickerSummaryLine extends StatelessWidget {
 
 String _harvestLocation(Map<String, String> args) {
   final village = (args['village'] ?? '').trim();
-  if (village.isNotEmpty && village != '--') return village;
+  if (village.isNotEmpty && village != '--') return _localizedHarvestValue(village);
   final lat = (args['farmLatitude'] ?? '').trim();
   final lng = (args['farmLongitude'] ?? '').trim();
   if (lat.isEmpty || lng.isEmpty || lat == '--' || lng == '--') return '--';
-  return '$lat, $lng';
+  return '${LocaleText.digits(lat)}, ${LocaleText.digits(lng)}';
 }
 
 String _yieldLabel(Map<String, String> args) {
   final total = (args['totalKg'] ?? '').trim();
   final bags = (args['bagCount'] ?? '').trim();
   if (total.isEmpty || total == '--') return '--';
-  final totalLabel = total.toLowerCase().contains('kg') ? total : '$total kg';
+  final totalLabel =
+      total.toLowerCase().contains('kg')
+          ? LocaleText.digits(total)
+          : '${LocaleText.digits(total)} ${UiStrings.t('kg_unit')}';
   if (bags.isEmpty || bags == '--') return totalLabel;
-  return '$totalLabel / $bags bags';
+  return '$totalLabel / ${LocaleText.digits(bags)} ${UiStrings.t('bags_label')}';
 }
 
 String _ratingLabel(Map<String, String> args) {
   final score = (args['score'] ?? '').trim();
   if (score.isEmpty || score == '--') return '--';
-  return score.contains('/') ? score : '$score/100';
+  return score.contains('/') ? LocaleText.digits(score) : '${LocaleText.digits(score)}/100';
+}
+
+String _localizedHarvestValue(String? value) {
+  final text = (value ?? '').trim();
+  if (text.isEmpty) return '--';
+  final normalized = text.toLowerCase();
+  return switch (normalized) {
+    'finger millet' => UiStrings.option(text),
+    'foxtail millet' => UiStrings.option(text),
+    'little millet' => UiStrings.option(text),
+    'kodo millet' => UiStrings.option(text),
+    'pearl millet' => UiStrings.option(text),
+    'millet' => UiStrings.t('millet'),
+    'pending' => UiStrings.t('review_pending'),
+    'microservice' => UiStrings.t('microservice'),
+    'farmer' => UiStrings.t('farmer'),
+    'unknown' => '--',
+    _ => LocaleText.digits(text),
+  };
 }
 
 class _StickerDetail {
@@ -757,5 +800,7 @@ class _StickerMetric extends StatelessWidget {
 String _withPercent(String value) {
   final trimmed = value.trim();
   if (trimmed.isEmpty || trimmed == '--') return trimmed.isEmpty ? '--' : trimmed;
-  return trimmed.endsWith('%') ? trimmed : '$trimmed%';
+  return trimmed.endsWith('%')
+      ? LocaleText.digits(trimmed)
+      : '${LocaleText.digits(trimmed)}%';
 }

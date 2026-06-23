@@ -73,12 +73,12 @@ Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
           completer.complete(null);
           return;
         }
-        completer.complete(
-          HarvestMachineCaptureResult(
-            bytes: bytes,
-            name: file.name.isNotEmpty ? file.name : 'machine-image.jpg',
-          ),
-        );
+            completer.complete(
+              HarvestMachineCaptureResult(
+                bytes: bytes,
+                name: file.name.isNotEmpty ? file.name : 'moisture-meter.jpg',
+              ),
+            );
       }
     });
 

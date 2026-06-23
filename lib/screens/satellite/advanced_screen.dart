@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../config/satellite_config.dart';
 import '../../config/theme.dart';
+import '../../config/ui_strings.dart';
 import '../../controllers/farm_controller.dart';
 import '../../controllers/satellite_controller.dart';
 import '../../models/satellite/advanced_monitoring_model.dart';
@@ -21,8 +22,8 @@ class AdvancedScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Algorithm Selection',
-              style: TextStyle(
+          Text(UiStrings.t('algorithm_selection'),
+              style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textDark)),
@@ -36,8 +37,8 @@ class AdvancedScreen extends StatelessWidget {
           const SizedBox(height: 18),
 
           // Date range
-          const Text('Date Range',
-              style: TextStyle(
+          Text(UiStrings.t('date_range'),
+              style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textDark)),
@@ -48,7 +49,7 @@ class AdvancedScreen extends StatelessWidget {
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.calendar_today_outlined, size: 16),
                       label: Text(satCtrl.advancedStartDate.value.isEmpty
-                          ? 'Start Date'
+                          ? UiStrings.t('start_date')
                           : satCtrl.advancedStartDate.value),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.green,
@@ -77,7 +78,7 @@ class AdvancedScreen extends StatelessWidget {
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.calendar_today_outlined, size: 16),
                       label: Text(satCtrl.advancedEndDate.value.isEmpty
-                          ? 'End Date'
+                          ? UiStrings.t('end_date')
                           : satCtrl.advancedEndDate.value),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.green,
@@ -116,14 +117,16 @@ class AdvancedScreen extends StatelessWidget {
                               strokeWidth: 2, color: Colors.white))
                       : const Icon(Icons.play_arrow_rounded),
                   label: Text(satCtrl.advancedIsLoading.value
-                      ? 'Analysing…'
-                      : 'Run Analysis'),
+                      ? UiStrings.t('analysing')
+                      : UiStrings.t('run_analysis')),
                   onPressed: satCtrl.advancedIsLoading.value
                       ? null
                       : () {
                           final farm = farmCtrl.selectedFarm.value;
                           if (farm == null) {
-                            Get.snackbar('No farm', 'Select a farm first',
+                            Get.snackbar(
+                                UiStrings.t('no_farm'),
+                                UiStrings.t('select_farm_first'),
                                 snackPosition: SnackPosition.BOTTOM);
                             return;
                           }
@@ -157,8 +160,8 @@ class AdvancedScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 20),
-                const Text('Results',
-                    style: TextStyle(
+                Text(UiStrings.t('results'),
+                    style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: AppTheme.textDark)),

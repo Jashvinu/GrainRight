@@ -2,8 +2,11 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../utils/harvest_machine_capture.dart';
+import '../widgets/app_back_button.dart';
 
 class FarmStatusUpdateResult {
   final String message;
@@ -31,6 +34,7 @@ class FarmerStatusChatScreen extends StatefulWidget {
   final String stage;
   final int daysAfterSowing;
   final String stageQuestion;
+  final String? lifecycleContext;
   final String? priorStatus;
   final bool requiresPhoto;
 
@@ -43,6 +47,7 @@ class FarmerStatusChatScreen extends StatefulWidget {
     required this.stage,
     required this.daysAfterSowing,
     required this.stageQuestion,
+    this.lifecycleContext,
     this.priorStatus,
     required this.requiresPhoto,
   });
@@ -58,42 +63,42 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   String _draft = '';
   Uint8List? _photoBytes;
   String? _photoName;
-  static const Map<String, List<String>> _stageQuickReplies = {
+  static const Map<String, List<String>> _stageQuickReplyKeys = {
     'Sowing': [
-      'Germination is healthy',
-      'Some moisture stress',
-      'Need irrigation today',
-      'Need re-inspection support',
+      'status_reply_germination_healthy',
+      'status_reply_moisture_stress',
+      'status_reply_need_irrigation_today',
+      'status_reply_need_reinspection',
     ],
     'Establishment': [
-      'Patchy stands in corner',
-      'Good germination overall',
-      'Need replanting help',
-      'Irrigation done',
+      'status_reply_patchy_stands',
+      'status_reply_good_germination',
+      'status_reply_need_replanting',
+      'status_reply_irrigation_done',
     ],
     'Vegetative': [
-      'Growth is normal',
-      'Some weeds observed',
-      'Leaf colour looks pale',
-      'Watering done',
+      'status_reply_growth_normal',
+      'status_reply_weeds_observed',
+      'status_reply_leaf_pale',
+      'status_reply_watering_done',
     ],
     'Flowering': [
-      'Flowering is good',
-      'Pollen drop seen',
-      'Need moisture top-up',
-      'Any insect attack appears',
+      'status_reply_flowering_good',
+      'status_reply_pollen_drop_seen',
+      'status_reply_need_moisture_topup',
+      'status_reply_insect_attack',
     ],
     'Grain filling': [
-      'Grains are filling well',
-      'Some flower drop seen',
-      'Looks low moisture',
-      'Need support and re-check',
+      'status_reply_grains_filling',
+      'status_reply_flower_drop_seen',
+      'status_reply_low_moisture',
+      'status_reply_need_support_recheck',
     ],
     'Maturity': [
-      'Panicles are fully developed',
-      'Grain drying is normal',
-      'Need harvesting support',
-      'Check moisture content',
+      'status_reply_panicles_developed',
+      'status_reply_grain_drying_normal',
+      'status_reply_need_harvesting_support',
+      'status_reply_check_moisture',
     ],
   };
 
@@ -104,33 +109,43 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
       ..add(
         _StatusMessage(
           isUser: false,
-          text:
-              'Farm context: ${widget.farmName} • ${widget.crop} • ${widget.variety}\n'
-              'Location: ${widget.location}\n'
-              'Stage: Day ${widget.daysAfterSowing} • ${widget.stage}',
+          text: _farmContextText,
         ),
       )
       ..add(
         _StatusMessage(
           isUser: false,
-          text: widget.stageQuestion,
+          text: _stageQuestionText,
         ),
       );
 
+    if (widget.lifecycleContext != null &&
+        widget.lifecycleContext!.trim().isNotEmpty) {
+      _messages.add(
+        _StatusMessage(
+          isUser: false,
+          text: widget.lifecycleContext!.trim(),
+        ),
+      );
+    }
+
     if (widget.priorStatus != null && widget.priorStatus!.trim().isNotEmpty) {
-      _messages
-        ..add(
-          _StatusMessage(
-            isUser: false,
-            text: 'Previous status note: ${widget.priorStatus}',
-          ),
-        );
+      _messages.add(
+        _StatusMessage(
+          isUser: false,
+          text: UiStrings.f('current_status_value', {
+            'value': widget.priorStatus,
+          }),
+        ),
+      );
     }
     if (widget.requiresPhoto) {
       _messages.add(
-        const _StatusMessage(
+        _StatusMessage(
           isUser: false,
-          text: 'Photo is required for this stage. Add one before Submit status.',
+          text: UiStrings.f('stage_needs_field_photo', {
+            'stage': widget.stage,
+          }),
         ),
       );
     }
@@ -165,14 +180,17 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty) {
-      _showToast('Write your update before sending.');
+      _showToast(UiStrings.t('write_farm_update_before_sending'));
       return;
     }
     _inputController.clear();
     _appendMessage(isUser: true, text: text);
     _appendMessage(
       isUser: false,
-      text: 'Saved. You can send another note or tap “Submit status”.',
+      text: UiStrings.f('status_note_saved_for_crop', {
+        'crop': widget.crop,
+        'variety': widget.variety,
+      }),
     );
   }
 
@@ -200,11 +218,11 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
 
   Future<void> _submitStatus() async {
     if (_draft.trim().isEmpty) {
-      _showToast('Add a status note before submitting.');
+      _showToast(UiStrings.t('add_crop_status_before_submit'));
       return;
     }
     if (widget.requiresPhoto && _photoBytes == null) {
-      _showToast('Attach photo before submitting for this stage.');
+      _showToast(UiStrings.t('attach_photo_before_stage_submit'));
       return;
     }
 
@@ -221,17 +239,50 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
     );
   }
 
+  String get _cropName => UiStrings.option(widget.crop);
+
+  String get _varietyName => UiStrings.option(widget.variety);
+
+  String get _farmContextText {
+    return '${UiStrings.t('selected_farm')}: ${widget.farmName}\n'
+        '${UiStrings.t('crop_label')}: $_cropName • ${UiStrings.t('variety')}: $_varietyName\n'
+        '${UiStrings.t('location')}: ${UiStrings.label(widget.location)}\n'
+        '${UiStrings.t('growth')}: ${UiStrings.f('day_stage', {
+          'day': LocaleText.number(widget.daysAfterSowing),
+          'stage': UiStrings.option(widget.stage),
+        })}';
+  }
+
+  String get _stageQuestionText {
+    return UiStrings.f('stage_question_for_crop', {
+      'crop': widget.crop,
+      'variety': widget.variety,
+      'question': widget.stageQuestion,
+    });
+  }
+
   List<String> get _quickSuggestions => [
-        'Growth looks normal, no stress',
-        'Irrigation done today',
-        'Need re-inspection and support',
-        'Unexpected yellowing seen',
+        UiStrings.f('quick_growth_normal_for_crop', {
+          'crop': widget.crop,
+          'variety': widget.variety,
+        }),
+        UiStrings.f('quick_irrigation_done_for_crop', {'crop': widget.crop}),
+        UiStrings.f('quick_reinspection_for_crop', {'crop': widget.crop}),
+        UiStrings.t('quick_unexpected_yellowing'),
       ];
 
   List<String> get _quickReplies {
-    final fromStage = _stageQuickReplies[widget.stage];
-    if (fromStage == null || fromStage.isEmpty) return _quickSuggestions;
-    return fromStage;
+    final fromStage = _stageQuickReplyKeys[widget.stage];
+    final stageReplies = fromStage == null || fromStage.isEmpty
+        ? _quickSuggestions
+        : fromStage.map(UiStrings.t).toList(growable: false);
+    return [
+      ...stageReplies.take(3),
+      UiStrings.f('quick_check_disease_spots', {
+        'crop': widget.crop,
+        'variety': widget.variety,
+      }),
+    ];
   }
 
   @override
@@ -239,7 +290,12 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: Text('Status Update • ${widget.farmName}'),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(
+          UiStrings.f('current_status_for_farm', {'farm': widget.farmName}),
+        ),
       ),
       body: SafeArea(
         child: Column(
@@ -249,7 +305,7 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
                 controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
                 itemCount: _messages.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = _messages[index];
                   return Align(
@@ -342,20 +398,20 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
                       controller: _inputController,
                       minLines: 1,
                       maxLines: 3,
-                      decoration: const InputDecoration(
-                        hintText: 'Type a farm status note...',
+                      decoration: InputDecoration(
+                        hintText: UiStrings.t('status_chat_hint'),
                         border: OutlineInputBorder(),
                       ),
                     ),
                   ),
                   const SizedBox(width: 6),
                   IconButton(
-                    tooltip: 'Attach photo',
+                    tooltip: UiStrings.t('attach_photo'),
                     onPressed: _pickPhoto,
                     icon: const Icon(Icons.photo_camera_outlined),
                   ),
                   IconButton(
-                    tooltip: 'Send',
+                    tooltip: UiStrings.t('send'),
                     onPressed: _sendMessage,
                     icon: const Icon(Icons.send_rounded),
                   ),
@@ -369,7 +425,7 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
                 child: ElevatedButton.icon(
                   onPressed: _submitStatus,
                   icon: const Icon(Icons.check_circle_rounded),
-                  label: const Text('Submit status'),
+                  label: Text(UiStrings.t('submit_status')),
                 ),
               ),
             ),

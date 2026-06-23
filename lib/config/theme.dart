@@ -39,11 +39,12 @@ class AppTheme {
       elevation: 0,
       scrolledUnderElevation: 0.5,
       centerTitle: false,
+      toolbarHeight: 66,
       titleTextStyle: TextStyle(
         color: greenDark,
         fontSize: 20,
         fontWeight: FontWeight.w700,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
       ),
     ),
     navigationBarTheme: NavigationBarThemeData(
@@ -187,12 +188,12 @@ class AppTheme {
       headlineLarge: TextStyle(
         color: textDark,
         fontWeight: FontWeight.w900,
-        letterSpacing: -0.3,
+        letterSpacing: 0,
       ),
       headlineMedium: TextStyle(
         color: textDark,
         fontWeight: FontWeight.w800,
-        letterSpacing: -0.2,
+        letterSpacing: 0,
       ),
       titleLarge: TextStyle(
         color: textDark,

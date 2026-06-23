@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../config/theme.dart';
+import '../config/locale_text.dart';
+import '../config/ui_strings.dart';
 import '../services/grain_grading_service.dart';
+import '../widgets/app_back_button.dart';
 
 class FpoGradingReviewScreen extends StatefulWidget {
   const FpoGradingReviewScreen({super.key});
@@ -64,11 +67,19 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
         notes: label,
       );
       if (!mounted) return;
-      Get.snackbar('Review updated', label, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        UiStrings.t('review_updated'),
+        label,
+        snackPosition: SnackPosition.BOTTOM,
+      );
       await _load();
     } on GradingException catch (e) {
       if (!mounted) return;
-      Get.snackbar('Review failed', e.message, snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        UiStrings.t('review_failed'),
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
   }
 
@@ -77,10 +88,13 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        title: const Text('Grading Review'),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('grading_review')),
         actions: [
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: UiStrings.t('refresh_farm'),
             onPressed: _load,
             icon: const Icon(Icons.refresh_rounded),
           ),
@@ -110,7 +124,7 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
               FilledButton.icon(
                 onPressed: _load,
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try again'),
+                label: Text(UiStrings.t('try_again')),
               ),
             ],
           ),
@@ -118,13 +132,16 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
       );
     }
     if (_jobs.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Text(
-            'No grading jobs need review.',
+            UiStrings.t('no_grading_jobs_need_review'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textMuted, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       );
@@ -133,15 +150,23 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemBuilder: (context, index) => _ReviewJobTile(
         job: _jobs[index],
-        onApprove: () => _update(_jobs[index], 'approved', 'Approved'),
+        onApprove: () => _update(
+          _jobs[index],
+          'approved',
+          UiStrings.t('approved'),
+        ),
         onRecapture: () => _update(
           _jobs[index],
           'recapture_requested',
-          'Recapture requested',
+          UiStrings.t('recapture_requested'),
         ),
-        onReject: () => _update(_jobs[index], 'rejected', 'Rejected'),
+        onReject: () => _update(
+          _jobs[index],
+          'rejected',
+          UiStrings.t('rejected'),
+        ),
       ),
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemCount: _jobs.length,
     );
   }
@@ -164,7 +189,7 @@ class _ReviewJobTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final moisture = job.moisturePercent == null
         ? '--'
-        : '${job.moisturePercent!.toStringAsFixed(1)}%';
+        : '${LocaleText.number(job.moisturePercent!, fractionDigits: 1)}%';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -210,7 +235,11 @@ class _ReviewJobTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '${job.cropType} ${job.variety} • Moisture $moisture',
+                      UiStrings.f('crop_variety_moisture', {
+                        'crop': job.cropType,
+                        'variety': job.variety,
+                        'moisture': moisture,
+                      }),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -230,12 +259,15 @@ class _ReviewJobTile extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _InfoChip(label: 'Farmer', value: job.farmerId),
-              _InfoChip(label: 'Farm', value: job.farmId),
+              _InfoChip(label: UiStrings.t('role_farmer'), value: job.farmerId),
+              _InfoChip(label: UiStrings.t('farm_label'), value: job.farmId),
               if (job.finalScore != null)
-                _InfoChip(label: 'Score', value: job.finalScore!.toStringAsFixed(0)),
+                _InfoChip(
+                  label: UiStrings.t('score'),
+                  value: LocaleText.number(job.finalScore!, fractionDigits: 0),
+                ),
               if (job.moistureRisk.isNotEmpty)
-                _InfoChip(label: 'Risk', value: job.moistureRisk),
+                _InfoChip(label: UiStrings.t('risk'), value: job.moistureRisk),
             ],
           ),
           if (job.errorMessage.isNotEmpty) ...[
@@ -252,18 +284,18 @@ class _ReviewJobTile extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: onApprove,
                   icon: const Icon(Icons.check_rounded),
-                  label: const Text('Approve'),
+                  label: Text(UiStrings.t('approve')),
                 ),
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
-                tooltip: 'Request recapture',
+                tooltip: UiStrings.t('request_recapture'),
                 onPressed: onRecapture,
                 icon: const Icon(Icons.camera_alt_outlined),
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
-                tooltip: 'Reject',
+                tooltip: UiStrings.t('reject'),
                 onPressed: onReject,
                 icon: const Icon(Icons.close_rounded),
               ),
@@ -283,7 +315,7 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      label: Text(label),
+      label: Text(UiStrings.option(label)),
       labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
       visualDensity: VisualDensity.compact,
     );
@@ -299,7 +331,12 @@ class _InfoChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      label: Text('$label: ${value.isEmpty ? '--' : value}'),
+      label: Text(
+        UiStrings.f('label_value', {
+          'label': label,
+          'value': value.isEmpty ? '--' : value,
+        }),
+      ),
       labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
       visualDensity: VisualDensity.compact,
     );

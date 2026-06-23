@@ -5,7 +5,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../services/local_app_database.dart';
 import '../services/location_service.dart';
 import '../services/map_tile_cache_service.dart';
@@ -14,6 +16,7 @@ import '../services/network_status_service.dart';
 import '../services/offline_map_service.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/polygon_simplify.dart';
+import '../widgets/app_back_button.dart';
 
 class PencilPolygonScreen extends StatefulWidget {
   final List<List<double>>? initialPolygon;
@@ -141,8 +144,8 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
 
     if (regions.isEmpty) {
       Get.snackbar(
-        'Downloaded maps',
-        'No downloaded map regions are available for drawing.',
+        UiStrings.t('downloaded_maps'),
+        UiStrings.t('no_downloaded_map_regions'),
       );
       return;
     }
@@ -157,11 +160,14 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return const Padding(
-                  padding: EdgeInsets.only(bottom: 4),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
-                    'Select downloaded map',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                    UiStrings.t('select_downloaded_map'),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 );
               }
@@ -182,7 +188,14 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 subtitle: Text(
-                  '${region.status.toUpperCase()} · ${region.radiusKm.toStringAsFixed(0)} km · zoom ${region.minZoom}-${region.maxZoom} · ${region.downloadedTileCount}/${region.tileCount} tiles',
+                  UiStrings.f('downloaded_region_status_summary', {
+                    'status': region.status,
+                    'radius': region.radiusKm,
+                    'minZoom': region.minZoom,
+                    'maxZoom': region.maxZoom,
+                    'downloaded': region.downloadedTileCount,
+                    'total': region.tileCount,
+                  }),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -218,8 +231,8 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
     _moveMap(center, zoom: zoom);
     if (showSnack) {
       Get.snackbar(
-        'Downloaded map selected',
-        'Centered on ${region.label}. Switch to Draw and mark the farm boundary.',
+        UiStrings.t('downloaded_map_selected'),
+        UiStrings.f('centered_on_draw_boundary', {'region': region.label}),
       );
     }
   }
@@ -289,7 +302,10 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
 
   void _save() {
     if (_ring.length < 3) {
-      Get.snackbar('Draw boundary', 'Add at least 3 boundary points');
+      Get.snackbar(
+        UiStrings.t('draw_boundary'),
+        UiStrings.t('add_three_boundary_points'),
+      );
       return;
     }
     Get.back(result: PolygonGeometry.toGeoJsonRing(_ring));
@@ -313,10 +329,13 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
     final area = PolygonGeometry.areaHectares(_ring);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Draw farm boundary'),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('draw_farm_boundary')),
         actions: [
           IconButton(
-            tooltip: 'Downloaded maps',
+            tooltip: UiStrings.t('downloaded_maps'),
             onPressed: _loadingDownloadedMaps ? null : _selectDownloadedMap,
             icon: _loadingDownloadedMaps
                 ? const SizedBox(
@@ -327,23 +346,23 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                 : const Icon(Icons.offline_pin_outlined),
           ),
           IconButton(
-            tooltip: 'Re-center',
+            tooltip: UiStrings.t('re_center'),
             onPressed: _loadLocation,
             icon: const Icon(Icons.my_location_rounded),
           ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: SegmentedButton<bool>(
-              segments: const [
+              segments: [
                 ButtonSegment(
                   value: false,
-                  icon: Icon(Icons.pan_tool_alt),
-                  label: Text('Pan'),
+                  icon: const Icon(Icons.pan_tool_alt),
+                  label: Text(UiStrings.t('pan')),
                 ),
                 ButtonSegment(
                   value: true,
-                  icon: Icon(Icons.edit),
-                  label: Text('Draw'),
+                  icon: const Icon(Icons.edit),
+                  label: Text(UiStrings.t('draw')),
                 ),
               ],
               selected: {_pencilMode},
@@ -379,8 +398,8 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
               },
             ),
             children: [
-              const OfflineMapBackground(
-                message: 'Offline map\nPan to your farm and draw',
+              OfflineMapBackground(
+                message: UiStrings.t('offline_map_pan_draw'),
               ),
               OfflineAwareTileLayer(
                 urlTemplate: fieldImageryTileUrl,
@@ -481,20 +500,25 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                       Expanded(
                         child: Text(
                           area > 0
-                              ? '${area.toStringAsFixed(2)} ha'
-                              : 'Pan to the field, then Draw: tap corners or drag the boundary',
+                              ? UiStrings.f('hectare_value', {
+                                  'value': LocaleText.number(
+                                    area,
+                                    fractionDigits: 2,
+                                  ),
+                                })
+                              : UiStrings.t('pan_field_then_draw'),
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Undo',
+                        tooltip: UiStrings.t('undo'),
                         onPressed: _ring.isEmpty && _liveStroke.isEmpty
                             ? null
                             : _undo,
                         icon: const Icon(Icons.undo_rounded),
                       ),
                       IconButton(
-                        tooltip: 'Clear',
+                        tooltip: UiStrings.t('clear'),
                         onPressed: _ring.isEmpty ? null : _clear,
                         icon: const Icon(Icons.delete_outline_rounded),
                       ),
@@ -502,7 +526,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
                       ElevatedButton.icon(
                         onPressed: _save,
                         icon: const Icon(Icons.check_rounded),
-                        label: const Text('Done'),
+                        label: Text(UiStrings.t('done')),
                       ),
                     ],
                   ),
@@ -610,7 +634,10 @@ class _DownloadedMapBanner extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              'Z${selected.minZoom}-${selected.maxZoom}',
+              UiStrings.f('zoom_range_short', {
+                'minZoom': selected.minZoom,
+                'maxZoom': selected.maxZoom,
+              }),
               style: const TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 11,
@@ -648,13 +675,13 @@ class _ZoomControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Zoom in',
+            tooltip: UiStrings.t('zoom_in'),
             onPressed: onZoomIn,
             icon: const Icon(Icons.add_rounded),
           ),
           const Divider(height: 1),
           IconButton(
-            tooltip: 'Zoom out',
+            tooltip: UiStrings.t('zoom_out'),
             onPressed: onZoomOut,
             icon: const Icon(Icons.remove_rounded),
           ),

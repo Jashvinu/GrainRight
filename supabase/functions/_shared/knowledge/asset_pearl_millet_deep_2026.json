@@ -1,0 +1,195 @@
+{
+  "doc_source": "asset_bajara_details_lifecycle_doc_2026",
+  "crop": "pearl_millet",
+  "source_title": "Bajari Pearl Millet Details Lifecycle Doc, Maharashtra Edition 2026",
+  "source_asset": "assets/Crop type and variety based doc/Bajara_Details_Lifecycle_Doc.pdf",
+  "records": [
+    {
+      "chunk_type": "variety",
+      "content": "Pearl millet variety choice for Maharashtra: ICTP 8203 or Dhanshakti is 80-85 days, has good grain and high iron trait, and suits Dhule, Nandurbar, Beed and Akola. HHB 67 Improved is 65-75 days, downy mildew resistant and useful for delayed rains or low-rainfall pockets of Beed and Dhule. GHB 558 or GHB group is 80-90 days, high yielding under good management and suited to Nashik, Ahilyanagar and Chhatrapati Sambhajinagar. Local white or grey landraces are useful for local bhakri markets only when cleaned and graded.",
+      "metadata": {
+        "source_section": "4.1 Variety Performance Matrix",
+        "varieties": ["ICTP 8203", "Dhanshakti", "HHB 67 Improved", "GHB 558", "MBBH", "local landraces"]
+      }
+    },
+    {
+      "chunk_type": "variety",
+      "content": "Pearl millet selection factors: use HHB 67 Improved or another short-duration line when monsoon is delayed; use ICTP 8203 or Dhanshakti when the premium nutrition market needs iron-rich identity; use dual-purpose local or state hybrids when fodder is important; use downy mildew tolerant hybrids in humid disease-prone pockets; keep seed packet photo, bill and lot number for traceability.",
+      "metadata": {
+        "source_section": "4.1 Detailed Field Notes"
+      }
+    },
+    {
+      "chunk_type": "soil",
+      "content": "Pearl millet prefers well-drained sandy loam to medium black soils with good aeration. It tolerates lower fertility better than maize but responds to balanced fertilizer and organic matter. Avoid waterlogged heavy clay, especially during germination and early vegetative growth. Use broad-bed furrow or ridge-furrow on medium black soils to remove excess rainwater.",
+      "metadata": {
+        "source_section": "5. Soil Requirements"
+      }
+    },
+    {
+      "chunk_type": "climate",
+      "content": "Pearl millet climate reference: 25-35 C during vegetative growth, warm weather at flowering, and 350-600 mm well-distributed rainfall. It can survive lower rainfall with reduced yield. Prolonged humid weather favours downy mildew and blast. Critical stress stages are seedling establishment, booting, flowering and grain filling.",
+      "metadata": {
+        "source_section": "6.1 Ideal Climate"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "germination-tillering",
+      "content": "Pearl millet water management at 0-7 DAS: keep the seed zone moist and avoid crusting. At 20-30 DAS, give life-saving irrigation if a dry spell exceeds 10-12 days. The main aim is uniform plant stand and enough tillers before reproductive growth.",
+      "metadata": {
+        "das_start": 0,
+        "das_end": 30,
+        "source_section": "6.2 Irrigation Management"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "booting-grain-filling",
+      "content": "Pearl millet booting and flowering at 40-55 DAS is the most critical irrigation stage for grain set. Grain filling at 60-75 DAS benefits from light irrigation where available to improve grain boldness. Stop irrigation at 80+ DAS and allow drying before harvest.",
+      "metadata": {
+        "das_start": 40,
+        "das_end": 80,
+        "source_section": "6.2 Irrigation Management"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "drought-stress",
+      "content": "Pearl millet drought response: patchy emergence needs gap filling within 7-10 days and crust breaking. Tillering leaf rolling needs interculture to conserve moisture and no heavy top dressing without rain. Booting stress needs protective irrigation where possible. Flowering stress can cause poor pollination and shrivelled grain. Grain filling stress gives light grains and low test weight.",
+      "metadata": {
+        "source_section": "6.3 Drought Management Stress Response"
+      }
+    },
+    {
+      "chunk_type": "sowing",
+      "content": "Pearl millet sowing window in Maharashtra is usually mid-June to mid-July after effective monsoon rain. Use short-duration varieties if sowing is delayed. Seed rate is 3-4 kg per hectare for line sowing, or 4-5 kg per hectare where stand risk is high. Recommended spacing is about 45 cm rows and 10-15 cm plant spacing in normal rainfall zones; sow 2.5-4 cm deep.",
+      "metadata": {
+        "source_section": "7. Sowing Management"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "pre-sowing-emergence",
+      "content": "Pearl millet pre-sowing to emergence: soil test, FYM application, land levelling and seed procurement in May-June; then line sowing with seed treatment, light crust breaking if needed, and stand correction from 0-10 DAS. Quality objective is a uniform plant stand from verified seed.",
+      "metadata": {
+        "das_start": -30,
+        "das_end": 10,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "early-vegetative-tillering",
+      "content": "Pearl millet early vegetative and tillering stage at 10-40 DAS: gap filling, thinning, first weeding or interculture, top dress nitrogen when moisture is adequate, and monitor downy mildew. Quality objective is optimum plant population, reduced weed competition, strong tillers and healthy foliage.",
+      "metadata": {
+        "das_start": 10,
+        "das_end": 40,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "booting-flowering",
+      "content": "Pearl millet booting and flowering at 40-60 DAS: give life-saving irrigation where possible and monitor pests and disease. The main quality objective is high grain set and proper earhead development. Avoid spray stress during flowering unless locally advised.",
+      "metadata": {
+        "das_start": 40,
+        "das_end": 60,
+        "source_section": "9. Complete Crop Cycle"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-post-harvest",
+      "content": "Pearl millet grain filling to post-harvest at 60 DAS onward: protect from bird damage, avoid late nitrogen, harvest at 80-95 DAS when earheads dry and grains harden, then dry, thresh, clean, grade and store. The target is a marketable Grade A or B lot.",
+      "metadata": {
+        "das_start": 60,
+        "das_end": 95,
+        "source_section": "9 and 14 Complete Crop Cycle and Storage"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "downy_mildew",
+      "growth_stage": "seedling-vegetative",
+      "content": "Pearl millet downy mildew is likely from seedling to vegetative growth. Symptoms include chlorotic leaves, white downy growth and malformed earheads. Risk is high in humid pockets. Main controls are resistant hybrid, clean seed, seed treatment, early roguing of infected plants and avoiding repeated susceptible hybrids in disease-prone villages.",
+      "metadata": {
+        "severity": "high",
+        "source_section": "10.1 Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "blast",
+      "growth_stage": "vegetative-grain-filling",
+      "content": "Pearl millet blast can appear from vegetative stage to grain filling. Look for spindle-shaped leaf lesions and possible neck infection. Risk is medium to high under dense humid canopy. Control focus is tolerant varieties, avoiding dense canopy, balanced nutrition and advisory-based action.",
+      "metadata": {
+        "severity": "medium-high",
+        "source_section": "10.1 Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "ergot_smut",
+      "growth_stage": "flowering-earhead",
+      "content": "Pearl millet ergot appears at flowering with honeydew droplets and sclerotia replacing grains; smut appears around earhead emergence with sori replacing grains. These contaminate the grain lot. Remove infected earheads before threshing, use clean seed, synchronize flowering where possible and keep diseased heads out of premium lots.",
+      "metadata": {
+        "severity": "medium-high",
+        "source_section": "10.1 Disease Profile"
+      }
+    },
+    {
+      "chunk_type": "scout_task",
+      "growth_stage": "7-95 DAS",
+      "content": "Pearl millet monitoring calendar: at 7-15 DAS check emergence, seedling rot and early downy mildew; at 20-35 DAS check tillering, leaf spots and shoot fly dead hearts; at 40-55 DAS check booting, blast lesions and ergot-risk weather; at flowering remove honeydew, smut balls and infected earheads; before harvest check bird damage, mould and off-type earheads.",
+      "metadata": {
+        "source_section": "10.2 Monitoring Calendar",
+        "frequency_days": 5
+      }
+    },
+    {
+      "chunk_type": "nutrition",
+      "content": "Pearl millet fertilizer reference: rainfed low fertility fields use about 40-60 kg N per hectare and 20-30 kg P2O5 per hectare; assured rainfall fields use 60-80 kg N and 30-40 kg P2O5, with K based on soil test; irrigated or summer crop can need 80-100 kg N, 40 kg P2O5 and 20-40 kg K2O per hectare. Use soil test and split nitrogen to reduce loss and lodging risk.",
+      "metadata": {
+        "source_section": "11.1 NPK Recommendations"
+      }
+    },
+    {
+      "chunk_type": "grading",
+      "content": "Pearl millet Grade A requires moisture at or below 12 percent, foreign matter at or below 0.5 percent, other edible grain admixture at or below 1 percent, damaged or discoloured grains at or below 1.5 percent, immature or shrivelled grains at or below 3 percent, and no live insects or musty odour. Clean, bold, uniform grey-green or cream grains are preferred.",
+      "metadata": {
+        "source_section": "12. Grain Grading System"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Dhule-Nandurbar-Akola-Beed",
+      "content": "Pearl millet district guidance: Dhule is a semi-arid Khandesh belt where drought-tolerant hybrids and 45 cm rows fit. Nandurbar has hilly and tribal pockets where contour cultivation and locally accepted varieties matter. Akola has medium black soils where drainage care is needed. Beed is drought-prone; early maturing hybrids and life-saving irrigation at flowering reduce shrivelled grain and grade loss.",
+      "metadata": {
+        "source_section": "13.1 to 13.4 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Chhatrapati Sambhajinagar-Nashik-Ahilyanagar",
+      "content": "Pearl millet in Chhatrapati Sambhajinagar uses ridge-furrow on heavier soils and balanced fertilizer where rainfall permits. Nashik and Ahilyanagar have rainfed to semi-irrigated belts with market connectivity; high-yielding hybrids fit assured rainfall pockets, but blast should be managed during humid spells.",
+      "metadata": {
+        "source_section": "13.5 to 13.6 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "post_harvest",
+      "content": "Pearl millet harvest and storage: harvest when earheads are dry and grains are hard, usually 80-95 DAS. Avoid harvest immediately after rain. Dry earheads on a clean floor or tarpaulin before threshing, winnow and sieve to remove dust, husk, immature grain and stones, store at 11-12 percent moisture for premium lots, and keep varieties, villages and harvest dates separate unless blending is recorded.",
+      "metadata": {
+        "source_section": "14. Harvesting, Threshing and Storage"
+      }
+    },
+    {
+      "chunk_type": "traceability",
+      "content": "Pearl millet traceability gates: seed invoice, variety, lot number and seed treatment; plot geo-tag, sowing date, crop-stage photos and input entries; harvest date, drying surface, threshing method and moisture; grade certificate based on moisture, foreign matter, damaged and shrivelled grains; bag ID, warehouse, buyer and dispatch record.",
+      "metadata": {
+        "source_section": "16. Traceability Workflow"
+      }
+    }
+  ]
+}

@@ -32,6 +32,6 @@ Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
 
   return HarvestMachineCaptureResult(
     bytes: bytes,
-    name: image.name.isNotEmpty ? image.name : 'machine-image.jpg',
+    name: image.name.isNotEmpty ? image.name : 'moisture-meter.jpg',
   );
 }

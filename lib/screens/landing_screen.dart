@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/brand_text.dart';
 
 class LandingScreen extends StatelessWidget {
@@ -20,15 +21,16 @@ class LandingScreen extends StatelessWidget {
               // Header
               Row(
                 children: [
-                  Image.asset(BrandAssets.logo, width: 40, height: 40),
+                  Image.asset(
+                    BrandAssets.logo,
+                    width: 40,
+                    height: 40,
+                    cacheWidth: 120,
+                  ),
                   const SizedBox(width: 10),
                   const BrandText(fontSize: 22),
                   const Spacer(),
-                  IconButton(
-                    tooltip: 'Back to roles',
-                    onPressed: () => Get.offAllNamed('/login'),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
+                  AppBackButton(onPressed: () => Get.offAllNamed('/login')),
                 ],
               ),
               const SizedBox(height: 8),

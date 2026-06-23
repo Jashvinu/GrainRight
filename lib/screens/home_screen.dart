@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/brand_assets.dart';
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/survey_controller.dart';
 import '../models/farmer_survey.dart';
 import '../models/survey_launch.dart';
 import '../services/offline_survey_queue_service.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/survey_list_tile.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -17,21 +20,23 @@ class HomeScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Survey'),
+        title: Text(UiStrings.t('delete_survey')),
         content: Text(
-          'Delete survey for "${survey.farmerName ?? 'Unnamed'}" from the remote database and Google Sheet? This cannot be undone.',
+          UiStrings.f('delete_survey_prompt', {
+            'name': survey.farmerName ?? UiStrings.t('not_available'),
+          }),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(UiStrings.t('cancel')),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red.shade400,
             ),
-            child: const Text('Delete'),
+            child: Text(UiStrings.t('delete')),
           ),
         ],
       ),
@@ -89,16 +94,25 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        toolbarHeight: 70,
+        toolbarHeight: appHeaderToolbarHeight,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(
+          context,
+          onPressed: () => Get.offAllNamed('/login'),
+        ),
         title: Row(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.asset(BrandAssets.logo, height: 60),
+              child: Image.asset(
+                BrandAssets.logo,
+                height: 60,
+                cacheWidth: 160,
+              ),
             ),
             const SizedBox(width: 14),
             Text(
-              'by',
+              UiStrings.t('by_label'),
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[600],
@@ -118,13 +132,6 @@ class HomeScreen extends StatelessWidget {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            tooltip: 'Back to roles',
-            onPressed: () => Get.offAllNamed('/login'),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-        ],
       ),
       body: Obx(() {
         final pending = controller.pendingSubmissions;
@@ -162,7 +169,7 @@ class HomeScreen extends StatelessWidget {
                   ElevatedButton.icon(
                     onPressed: controller.loadSurveys,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Retry'),
+                    label: Text(UiStrings.t('try_again')),
                   ),
                 ],
               ),
@@ -183,8 +190,8 @@ class HomeScreen extends StatelessWidget {
                   color: Colors.grey[350],
                 ),
                 const SizedBox(height: 18),
-                const Text(
-                  'No surveys found',
+                Text(
+                  UiStrings.t('no_surveys_found'),
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 20,
@@ -194,7 +201,7 @@ class HomeScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Farmer survey records will appear here.',
+                  UiStrings.t('farmer_survey_records_here'),
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 14, color: AppTheme.textMuted),
                 ),
@@ -208,12 +215,12 @@ class HomeScreen extends StatelessWidget {
                       OutlinedButton.icon(
                         onPressed: () => Get.toNamed('/offline-maps'),
                         icon: const Icon(Icons.map_outlined),
-                        label: const Text('Offline Maps'),
+                        label: Text(UiStrings.t('offline_maps')),
                       ),
                       ElevatedButton.icon(
                         onPressed: () => _openNewSurvey(controller),
                         icon: const Icon(Icons.add_rounded),
-                        label: const Text('New Survey'),
+                        label: Text(UiStrings.t('new_survey')),
                       ),
                     ],
                   ),
@@ -248,7 +255,9 @@ class HomeScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${controller.surveys.length + pending.length} survey${controller.surveys.length + pending.length == 1 ? '' : 's'}',
+                          _surveyCountLabel(
+                            controller.surveys.length + pending.length,
+                          ),
                           style: const TextStyle(
                             color: AppTheme.green,
                             fontWeight: FontWeight.w600,
@@ -259,9 +268,9 @@ class HomeScreen extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  const Text(
-                    'Farmer Baseline Surveys',
-                    style: TextStyle(
+                  Text(
+                    UiStrings.t('farmer_baseline_surveys'),
+                    style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: AppTheme.greenDark,
@@ -308,13 +317,13 @@ class HomeScreen extends StatelessWidget {
                               OutlinedButton.icon(
                                 onPressed: () => Get.toNamed('/diagnostics'),
                                 icon: const Icon(Icons.satellite_alt_outlined),
-                                label: const Text('View Diagnostics'),
+                                label: Text(UiStrings.t('view_diagnostics')),
                               ),
                             if (hasDiagnostics) const SizedBox(height: 8),
                             OutlinedButton.icon(
                               onPressed: () => Get.toNamed('/offline-maps'),
                               icon: const Icon(Icons.map_outlined),
-                              label: const Text('Offline Maps'),
+                              label: Text(UiStrings.t('offline_maps')),
                             ),
                             TextButton(
                               onPressed: () => hasDraft
@@ -323,9 +332,9 @@ class HomeScreen extends StatelessWidget {
                               child: Text(
                                 pending.isEmpty
                                     ? hasDraft
-                                          ? 'Resume saved survey'
-                                          : 'Start chat survey'
-                                    : 'Continue / New Survey',
+                                          ? UiStrings.t('resume_saved_survey')
+                                          : UiStrings.t('start_chat_survey')
+                                    : UiStrings.t('continue_new_survey'),
                               ),
                             ),
                             if (pending.isNotEmpty)
@@ -359,8 +368,12 @@ class HomeScreen extends StatelessWidget {
                                     Expanded(
                                       child: Text(
                                         controller.isSyncingPending.value
-                                            ? 'Syncing offline surveys...'
-                                            : '${pending.length} survey${pending.length == 1 ? '' : 's'} pending sync',
+                                            ? UiStrings.t(
+                                                'syncing_offline_surveys',
+                                              )
+                                            : _pendingSyncLabel(
+                                                pending.length,
+                                              ),
                                         style: const TextStyle(
                                           color: AppTheme.greenDark,
                                           fontWeight: FontWeight.w700,
@@ -369,7 +382,7 @@ class HomeScreen extends StatelessWidget {
                                       ),
                                     ),
                                     IconButton(
-                                      tooltip: 'Retry sync',
+                                      tooltip: UiStrings.t('retry_sync'),
                                       visualDensity: VisualDensity.compact,
                                       onPressed:
                                           controller.isSyncingPending.value
@@ -455,7 +468,7 @@ class HomeScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openNewSurvey(controller),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('New Survey'),
+        label: Text(UiStrings.t('new_survey')),
       ),
     );
   }
@@ -490,21 +503,24 @@ class _DraftSurveyTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 14),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Unfinished survey',
-                      style: TextStyle(
+                      UiStrings.t('unfinished_survey'),
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
                       ),
                     ),
-                    SizedBox(height: 3),
+                    const SizedBox(height: 3),
                     Text(
-                      'Continue from the last saved page',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                      UiStrings.t('continue_from_last_saved_page'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textMuted,
+                      ),
                     ),
                   ],
                 ),
@@ -535,10 +551,10 @@ class _PendingSurveyTile extends StatelessWidget {
     ].where((value) => value != null && value.isNotEmpty).join(', ');
     final syncing = submission.isSyncing || isSyncing;
     final statusText = submission.isFailed
-        ? 'Sync failed'
+        ? UiStrings.t('sync_failed')
         : syncing
-        ? 'Syncing'
-        : 'Pending sync';
+        ? UiStrings.t('syncing')
+        : UiStrings.t('pending_sync_status');
     final statusColor = submission.isFailed
         ? Colors.red.shade600
         : syncing
@@ -614,7 +630,7 @@ class _PendingSurveyTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  submission.surveyDate ?? 'Saved offline',
+                  submission.surveyDate ?? UiStrings.t('saved_offline'),
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey[400],
@@ -628,4 +644,16 @@ class _PendingSurveyTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _surveyCountLabel(int count) {
+  return UiStrings.f(count == 1 ? 'survey_count_one' : 'survey_count_many', {
+    'count': LocaleText.number(count),
+  });
+}
+
+String _pendingSyncLabel(int count) {
+  return UiStrings.f(count == 1 ? 'pending_sync_one' : 'pending_sync_many', {
+    'count': LocaleText.number(count),
+  });
 }

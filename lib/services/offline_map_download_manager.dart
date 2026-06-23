@@ -14,7 +14,13 @@ void offlineMapCallbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task != offlineMapDownloadTask || inputData == null) return true;
     WidgetsFlutterBinding.ensureInitialized();
-    await RuntimeConfig.initialize();
+    try {
+      await RuntimeConfig.initialize();
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Offline map config init skipped: $error');
+      }
+    }
     final service = OfflineMapService();
     try {
       final place = OfflinePlaceResult(
@@ -108,29 +114,35 @@ class OfflineMapDownloadManager {
     required int maxZoom,
   }) async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    await Workmanager().registerOneOffTask(
-      'offline-map-${place.placeId}',
-      offlineMapDownloadTask,
-      inputData: {
-        'placeId': place.placeId,
-        'title': place.title,
-        'address': place.address,
-        'latitude': place.latitude,
-        'longitude': place.longitude,
-        'radiusKm': radiusKm,
-        'minZoom': minZoom,
-        'maxZoom': maxZoom,
-      },
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-        requiresBatteryNotLow: true,
-        requiresStorageNotLow: true,
-      ),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
-      backoffPolicy: BackoffPolicy.exponential,
-      backoffPolicyDelay: const Duration(minutes: 1),
-      tag: offlineMapDownloadTask,
-    );
+    try {
+      await Workmanager().registerOneOffTask(
+        'offline-map-${place.placeId}',
+        offlineMapDownloadTask,
+        inputData: {
+          'placeId': place.placeId,
+          'title': place.title,
+          'address': place.address,
+          'latitude': place.latitude,
+          'longitude': place.longitude,
+          'radiusKm': radiusKm,
+          'minZoom': minZoom,
+          'maxZoom': maxZoom,
+        },
+        constraints: Constraints(
+          networkType: NetworkType.connected,
+          requiresBatteryNotLow: true,
+          requiresStorageNotLow: true,
+        ),
+        existingWorkPolicy: ExistingWorkPolicy.replace,
+        backoffPolicy: BackoffPolicy.exponential,
+        backoffPolicyDelay: const Duration(minutes: 1),
+        tag: offlineMapDownloadTask,
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Offline map background resume skipped: $error');
+      }
+    }
   }
 
   Future<void> dispose() async {

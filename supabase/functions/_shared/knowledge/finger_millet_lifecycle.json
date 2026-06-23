@@ -1,0 +1,43 @@
+{
+  "doc_source": "crop_lifecycle_finger_millet_local_2026",
+  "crop": "finger_millet",
+  "source_title": "Finger Millet Details Lifecycle Doc",
+  "records": [
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "germination-seedling",
+      "content": "Finger millet or ragi at 0-20 DAS needs a fine seedbed, shallow sowing or healthy transplanted seedlings, and protection from waterlogging. Scout for damping-off, seedling blight, poor emergence, and gaps.",
+      "metadata": { "das_start": 0, "das_end": 20, "aliases": ["ragi", "nachani"] }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "vegetative-tillering",
+      "content": "Finger millet vegetative and tillering stage from about 21-45 DAS needs weed control, balanced nutrition, and early blast scouting. Avoid dense humid canopy and excess nitrogen because blast pressure rises in lush growth.",
+      "metadata": { "das_start": 21, "das_end": 45 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "booting-flowering",
+      "content": "Finger millet booting and flowering around 46-70 DAS is highly sensitive to blast and water stress. Avoid overhead irrigation during flowering, inspect neck and finger blast symptoms, and keep soil moisture steady.",
+      "metadata": { "das_start": 46, "das_end": 70 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-maturity",
+      "content": "Finger millet grain filling and maturity from about 71 DAS onward requires scouting for rust, green ear, downy mildew, lodging, and grain maturity. Reduce excess moisture near harvest while avoiding early grain-fill stress.",
+      "metadata": { "das_start": 71, "das_end": 110 }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "booting-grain-filling",
+      "content": "Finger millet is hardy, but stress during booting, flowering, and early grain filling reduces head development and grain size. Use forecast ET0, rain, heat, and satellite moisture to trigger irrigation checks.",
+      "metadata": { "priority": "medium-high" }
+    },
+    {
+      "chunk_type": "scout_task",
+      "growth_stage": "vegetative-grain-filling",
+      "content": "Finger millet scout task: start from 20 DAS, inspect leaves for blast spots, lower leaves for rust, panicles for neck blast or green ear, and note humid patches or overhead-irrigated sections.",
+      "metadata": { "frequency_days": 4 }
+    }
+  ]
+}

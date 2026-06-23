@@ -31,6 +31,12 @@ import {
   thermalConfounder,
   type WeatherFeatures,
 } from "../_shared/disease-models.ts";
+import {
+  loadLinkedUserIds,
+  normalizePhone,
+  requireUserId,
+  text,
+} from "../_shared/farmer-links.ts";
 
 const SCOUT_ZONE_MIN_RISK = 0.40; // cells above this are candidates
 const SCOUT_ZONE_MERGE_M = 50; // meters — merge radius for clustering
@@ -58,6 +64,55 @@ function createSupabaseClient(req: Request) {
       },
     },
   });
+}
+
+async function authorizeFarmAccess(
+  req: Request,
+  supabase: ReturnType<typeof createSupabaseClient>,
+  farmId: string,
+  body: Record<string, unknown>,
+): Promise<
+  | {
+    farm: Record<string, unknown>;
+  }
+  | Response
+> {
+  const { data: farm, error: farmError } = await supabase
+    .from("farms")
+    .select("id, user_id, geometry, bounds")
+    .eq("id", farmId)
+    .maybeSingle();
+  if (farmError) throw farmError;
+  if (!farm) {
+    return errorResponse("Farm not found", 404, undefined, "farm_not_found");
+  }
+
+  const userId = await requireUserId(supabase, req);
+  if (userId instanceof Response) return userId;
+
+  const farmOwner = text(farm.user_id);
+  if (farmOwner.length > 0 && farmOwner === userId) {
+    return { farm };
+  }
+
+  const phone = normalizePhone(body.phone);
+  if (phone.length === 10) {
+    const linkedUserIds = await loadLinkedUserIds(
+      supabase,
+      userId,
+      phone,
+      text(body.farmerId ?? body.farmer_id),
+    );
+    if (linkedUserIds instanceof Response) return linkedUserIds;
+    if (linkedUserIds.includes(farmOwner)) return { farm };
+  }
+
+  return errorResponse(
+    "Farm not found for this farmer",
+    404,
+    undefined,
+    "farmer_farm_not_found",
+  );
 }
 
 /** Haversine distance in meters */
@@ -266,10 +321,46 @@ async function fetchWeatherRisk(
   }
 }
 
+function buildSentinelCollection(
+  eeGeometry: any,
+  startDate: string,
+  endDate: string,
+): any {
+  return ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    .filterBounds(eeGeometry)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 30))
+    .map((img: any) => {
+      return img.select(
+        ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"],
+        [
+          "blue",
+          "green",
+          "red",
+          "rededge",
+          "rededge2",
+          "rededge3",
+          "nir",
+          "nir2",
+          "swir1",
+          "swir2",
+        ],
+      )
+        .multiply(0.0001);
+    });
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
-  if (req.method !== "POST") return errorResponse("Method not allowed", 405);
+  if (req.method !== "POST") {
+    return errorResponse(
+      "Method not allowed",
+      405,
+      undefined,
+      "method_not_allowed",
+    );
+  }
 
   try {
     const body = await req.json();
@@ -284,56 +375,55 @@ Deno.serve(async (req) => {
     const scanDate = new Date().toISOString().split("T")[0];
 
     const supabase = createSupabaseClient(req);
+    let farm: Record<string, unknown> | null = null;
+    if (farmId) {
+      const authorization = await authorizeFarmAccess(
+        req,
+        supabase,
+        farmId,
+        body,
+      );
+      if (authorization instanceof Response) return authorization;
+      farm = authorization.farm;
+    }
 
     // Load farm geometry
     let geometry = body.geometry;
     let farmBounds: number[][] | null = null;
-    if (!geometry && farmId) {
-      const { data: farm } = await supabase
-        .from("farms")
-        .select("geometry, bounds")
-        .eq("id", farmId)
-        .maybeSingle();
-      if (farm?.geometry) geometry = farm.geometry;
-      if (farm?.bounds) farmBounds = farm.bounds;
+    if (farm) {
+      if (!geometry && farm.geometry) geometry = farm.geometry;
+      if (farm.bounds) farmBounds = farm.bounds as number[][];
     }
-    if (!geometry) return errorResponse("farm geometry required", 400);
+    if (!geometry) {
+      return errorResponse(
+        "farm geometry required",
+        400,
+        undefined,
+        "farm_geometry_required",
+      );
+    }
 
     // Initialize Earth Engine
     await initializeEarthEngine();
     const eeGeometry = ee.Geometry(geometry);
 
     // Build date window (14 days)
-    const endDate = body.end_date ?? scanDate;
-    const startDate = body.start_date ??
-      new Date(new Date(endDate).getTime() - 14 * 86400000)
+    const requestedStartDate = text(body.start_date);
+    const endDate = text(body.end_date) || scanDate;
+    let startDate = requestedStartDate.length > 0
+      ? requestedStartDate
+      : new Date(new Date(endDate).getTime() - 14 * 86400000)
         .toISOString().split("T")[0];
 
     // Load Sentinel-2 harmonized collection
-    const s2Collection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-      .filterBounds(eeGeometry)
-      .filterDate(startDate, endDate)
-      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 30))
-      .map((img: any) => {
-        return img.select(
-          ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"],
-          [
-            "blue",
-            "green",
-            "red",
-            "rededge",
-            "rededge2",
-            "rededge3",
-            "nir",
-            "nir2",
-            "swir1",
-            "swir2",
-          ],
-        )
-          .multiply(0.0001);
-      });
-
-    const imageCount: number = await evaluate(s2Collection.size());
+    let s2Collection = buildSentinelCollection(eeGeometry, startDate, endDate);
+    let imageCount: number = await evaluate(s2Collection.size());
+    if (imageCount === 0 && requestedStartDate.length === 0) {
+      startDate = new Date(new Date(endDate).getTime() - 60 * 86400000)
+        .toISOString().split("T")[0];
+      s2Collection = buildSentinelCollection(eeGeometry, startDate, endDate);
+      imageCount = await evaluate(s2Collection.size());
+    }
     if (imageCount === 0) {
       return successResponse({
         scout_zones: [],
@@ -516,6 +606,17 @@ Deno.serve(async (req) => {
 
     // Persist risk cells to DB (after Gi* so gi_star_z is populated)
     if (farmId && riskCells.length > 0) {
+      const { error: deleteCellsError } = await supabase
+        .from("disease_risk_cells")
+        .delete()
+        .eq("farm_id", farmId)
+        .eq("scan_date", scanDate);
+      if (deleteCellsError) {
+        throw new Error(
+          `Failed to replace disease risk cells: ${deleteCellsError.message}`,
+        );
+      }
+
       const rows = riskCells.map((c) => ({
         farm_id: farmId,
         scan_date: scanDate,
@@ -616,6 +717,10 @@ Deno.serve(async (req) => {
       .sort((a, b) => b.composite_risk - a.composite_risk)
       .slice(0, 60)
       .map((c) => ({
+        farm_id: farmId,
+        scan_date: scanDate,
+        crop,
+        growth_stage: body.growth_stage ?? growthStage,
         lat: c.lat,
         lng: c.lng,
         composite_risk: Number(c.composite_risk.toFixed(3)),
@@ -664,6 +769,11 @@ Deno.serve(async (req) => {
         : {},
     });
   } catch (err) {
-    return errorResponse("disease-risk-screen failed", 500, err);
+    return errorResponse(
+      "disease-risk-screen failed",
+      500,
+      err,
+      "disease_risk_scan_failed",
+    );
   }
 });

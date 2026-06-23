@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/chat_survey_controller.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
@@ -15,6 +16,7 @@ import '../widgets/chat/repeat_group_prompt.dart';
 import '../widgets/chat/summary_card.dart';
 import '../widgets/chat/typing_indicator.dart';
 import '../widgets/chat/user_text_bubble.dart';
+import '../widgets/app_back_button.dart';
 
 class ChatbotSurveyScreen extends StatefulWidget {
   const ChatbotSurveyScreen({super.key});
@@ -116,11 +118,14 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
       backgroundColor: AppTheme.surface,
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: const Text('Baseline Survey'),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('baseline_survey')),
         actions: [
           _buildLanguageMenu(),
           IconButton(
-            tooltip: 'Use classic form',
+            tooltip: UiStrings.t('use_classic_form'),
             onPressed: _switchToClassic,
             icon: const Icon(Icons.article_outlined),
           ),
@@ -198,14 +203,14 @@ class _ChatbotSurveyScreenState extends State<ChatbotSurveyScreen>
     return Obx(() {
       final code = _languageController.language.value;
       return PopupMenuButton<String>(
-        tooltip: 'Change language',
+        tooltip: UiStrings.t('change_language'),
         initialValue: code,
         icon: const Icon(Icons.translate_rounded),
         onSelected: _setLanguage,
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'en', child: Text('English')),
-          PopupMenuItem(value: 'hi', child: Text('हिन्दी')),
-          PopupMenuItem(value: 'mr', child: Text('मराठी')),
+        itemBuilder: (context) => [
+          PopupMenuItem(value: 'en', child: Text(UiStrings.t('language_english'))),
+          PopupMenuItem(value: 'hi', child: Text(UiStrings.t('language_hindi'))),
+          PopupMenuItem(value: 'mr', child: Text(UiStrings.t('language_marathi'))),
         ],
       );
     });

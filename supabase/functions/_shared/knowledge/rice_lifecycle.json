@@ -1,0 +1,43 @@
+{
+  "doc_source": "crop_lifecycle_rice_local_2026",
+  "crop": "rice",
+  "source_title": "Rice Details LifeCycle Doc",
+  "records": [
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "germination-seedling",
+      "content": "Rice lifecycle at 0-20 days after sowing is germination and seedling establishment. Keep a shallow, even moisture profile, avoid seedling submergence, fill gaps early, and inspect for poor emergence, damping-off, and early leaf yellowing.",
+      "metadata": { "das_start": 0, "das_end": 20 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "vegetative-tillering",
+      "content": "Rice vegetative and tillering stage normally spans 21-45 DAS. Maintain consistent field moisture, control weeds before canopy closure, watch for leaf folder, stem borer, blast spots, and nutrient deficiency, and avoid excess nitrogen that creates lush disease-prone growth.",
+      "metadata": { "das_start": 21, "das_end": 45 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "panicle-initiation-flowering",
+      "content": "Rice panicle initiation to flowering is a water-critical stage around 46-75 DAS. Avoid water stress, keep drainage ready during heavy rain, scout for neck blast, sheath blight, brown spot, and panicle pests, and avoid spraying during active flowering unless advised.",
+      "metadata": { "das_start": 46, "das_end": 75 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-maturity",
+      "content": "Rice grain filling and maturity often runs from 76 DAS onward. Keep enough moisture through early grain fill, then gradually drain near maturity, monitor lodging and panicle disease, and plan harvest when grains harden and field traffic is possible.",
+      "metadata": { "das_start": 76, "das_end": 125 }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "panicle-initiation-flowering",
+      "content": "Rice is most sensitive to water stress during panicle initiation, flowering, and early grain filling. Forecast heat, low humidity, high ET0, and low rain should trigger a field moisture check and irrigation planning before visible wilting appears.",
+      "metadata": { "priority": "high" }
+    },
+    {
+      "chunk_type": "scout_task",
+      "growth_stage": "vegetative-flowering",
+      "content": "Rice scout task: walk a W pattern, inspect lower canopy humidity, leaf blast lesions, sheath blight near the water line, stem borer dead hearts or white ears, and weeds along bunds. Record hotspots with photos and coordinates.",
+      "metadata": { "frequency_days": 4 }
+    }
+  ]
+}

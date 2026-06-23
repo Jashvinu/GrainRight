@@ -32,6 +32,12 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+.build_logs/
+.code-review-graph/
+.dist/
+graphify-out/
+.claude/
+.dart-appdata/
 
 # Symbolication related
 app.*.symbols

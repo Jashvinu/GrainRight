@@ -89,9 +89,13 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
 
   LatLng get _initialCenter {
     if (widget.farmPolygon != null && widget.farmPolygon!.isNotEmpty) {
-      final lat = widget.farmPolygon!.map((point) => point.latitude).reduce((a, b) => a + b) /
+      final lat =
+          widget.farmPolygon!
+              .map((point) => point.latitude)
+              .reduce((a, b) => a + b) /
           widget.farmPolygon!.length;
-      final lng = widget.farmPolygon!
+      final lng =
+          widget.farmPolygon!
               .map((point) => point.longitude)
               .reduce((a, b) => a + b) /
           widget.farmPolygon!.length;
@@ -128,7 +132,13 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
   /// farm centroid (or a point-only farm) are brought into view.
   void _fitToContent() {
     final points = _contentPoints();
-    if (points.length < 2) return;
+    if (points.isEmpty) return;
+    if (points.length == 1) {
+      try {
+        _mapController.move(points.first, 16);
+      } catch (_) {}
+      return;
+    }
     try {
       _mapController.fitCamera(
         CameraFit.bounds(
@@ -144,8 +154,9 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
     if (!_mapReady) return;
     try {
       final camera = _mapController.camera;
-      final nextZoom =
-          (camera.zoom + delta).clamp(mapTileMinZoom, mapTileMaxZoom).toDouble();
+      final nextZoom = (camera.zoom + delta)
+          .clamp(mapTileMinZoom, mapTileMaxZoom)
+          .toDouble();
       _mapController.move(camera.center, nextZoom);
     } catch (_) {}
   }
@@ -153,6 +164,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
   void _zoomIn() => _zoomBy(0.9);
 
   void _zoomOut() => _zoomBy(-0.9);
+
+  void _locate() => _fitToContent();
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +207,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
-                if (widget.farmPolygon != null && widget.farmPolygon!.length >= 3)
+                if (widget.farmPolygon != null &&
+                    widget.farmPolygon!.length >= 3)
                   PolygonLayer(
                     polygons: [
                       Polygon(
@@ -205,7 +219,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
-                if (widget.heatCircles != null && widget.heatCircles!.isNotEmpty)
+                if (widget.heatCircles != null &&
+                    widget.heatCircles!.isNotEmpty)
                   CircleLayer(circles: widget.heatCircles!),
                 if (widget.markers != null && widget.markers!.isNotEmpty)
                   MarkerLayer(markers: widget.markers!),
@@ -217,14 +232,28 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 top: 12,
                 child: Column(
                   children: [
-                    _ZoomControlButton(
-                      icon: Icons.add,
-                      onTap: _zoomIn,
+                    Tooltip(
+                      message: 'Zoom in',
+                      child: _ZoomControlButton(
+                        icon: Icons.add,
+                        onTap: _zoomIn,
+                      ),
                     ),
                     const SizedBox(height: 6),
-                    _ZoomControlButton(
-                      icon: Icons.remove,
-                      onTap: _zoomOut,
+                    Tooltip(
+                      message: 'Zoom out',
+                      child: _ZoomControlButton(
+                        icon: Icons.remove,
+                        onTap: _zoomOut,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Tooltip(
+                      message: 'Locate farm area',
+                      child: _ZoomControlButton(
+                        icon: Icons.location_on,
+                        onTap: _locate,
+                      ),
                     ),
                   ],
                 ),
@@ -263,10 +292,7 @@ class _ZoomControlButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _ZoomControlButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _ZoomControlButton({required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {

@@ -18,6 +18,10 @@ class Farm {
   final String? ownershipType;
   final String? seedSource;
   final String? harvestIntent;
+  final String? sowingDate;
+  final String? currentStatus;
+  final String? currentStatusStage;
+  final String? currentStatusUpdatedAt;
 
   const Farm({
     required this.id,
@@ -37,6 +41,10 @@ class Farm {
     this.ownershipType,
     this.seedSource,
     this.harvestIntent,
+    this.sowingDate,
+    this.currentStatus,
+    this.currentStatusStage,
+    this.currentStatusUpdatedAt,
   });
 
   factory Farm.fromJson(Map<String, dynamic> json) {
@@ -76,14 +84,19 @@ class Farm {
       ownershipType: json['ownership_type'] as String?,
       seedSource: json['seed_source'] as String?,
       harvestIntent: json['harvest_intent'] as String?,
+      sowingDate: json['sowing_date'] as String?,
+      currentStatus: json['current_status'] as String?,
+      currentStatusStage: json['current_status_stage'] as String?,
+      currentStatusUpdatedAt: json['current_status_updated_at'] as String?,
     );
   }
 
   Map<String, dynamic> toInsertJson() => {
-        'name': name,
-        'geometry': geometry,
-        if (bounds != null) 'bounds': bounds,
-        if (areaHectares != null) 'area_hectares': areaHectares,
-        if (userId != null) 'user_id': userId,
-      };
+    'name': name,
+    'geometry': geometry,
+    if (bounds != null) 'bounds': bounds,
+    if (areaHectares != null) 'area_hectares': areaHectares,
+    if (userId != null) 'user_id': userId,
+    if (sowingDate != null) 'sowing_date': sowingDate,
+  };
 }

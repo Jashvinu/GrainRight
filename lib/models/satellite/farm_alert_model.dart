@@ -66,6 +66,7 @@ class DiseaseScreenResult {
     'risk_cells_count': riskCellsCount,
     'high_risk_cells': highRiskCells,
     'scout_zones': scoutZones,
+    'risk_cells': riskCells.map((cell) => cell.toJson()).toList(),
     if (weatherContext != null) 'weather_context': weatherContext,
     'top_disease_risks': topDiseaseRisks,
     if (message != null) 'message': message,
@@ -146,19 +147,47 @@ class FarmIssueCell {
               .where((entry) => entry.value > 0.30)
               .map((entry) => entry.key)
               .toList(growable: false);
+    final likelyAbioticRaw = json['likely_abiotic'];
+    final likelyAbiotic = switch (likelyAbioticRaw) {
+      bool value => value,
+      num value => value != 0,
+      String value => value.toLowerCase() == 'true' || value == '1',
+      _ => false,
+    };
 
     return FarmIssueCell(
-      lat: _num(json, const ['lat', 'cell_lat', 'centroid_lat']) ?? 0,
-      lng: _num(json, const ['lng', 'cell_lng', 'centroid_lng']) ?? 0,
+      lat:
+          _num(json, const [
+            'lat',
+            'latitude',
+            'cell_lat',
+            'center_lat',
+            'centroid_lat',
+            'y',
+          ]) ??
+          0,
+      lng:
+          _num(json, const [
+            'lng',
+            'lon',
+            'long',
+            'longitude',
+            'cell_lng',
+            'center_lng',
+            'centroid_lng',
+            'x',
+          ]) ??
+          0,
       compositeRisk:
           _num(json, const [
             'composite_risk',
             'max_risk_score',
             'risk_score',
+            'risk',
           ]) ??
           0,
       diseaseCandidates: candidates,
-      likelyAbiotic: json['likely_abiotic'] == true,
+      likelyAbiotic: likelyAbiotic,
       perDisease: perDisease,
       ndvi: _num(json, const ['ndvi']),
       moisture: _num(json, const ['moisture']),
@@ -285,6 +314,14 @@ class FarmAlertAdvice {
         .where((item) => item.title.isNotEmpty)
         .toList(growable: false);
   }
+
+  Map<String, dynamic> toJson() => {
+    'important_alerts': importantAlerts.map((item) => item.toJson()).toList(),
+    'weather_alerts': weatherAlerts.map((item) => item.toJson()).toList(),
+    'next_actions': nextActions,
+    'confidence': confidence,
+    if (model != null) 'model': model,
+  };
 }
 
 class FarmAlertItem {
@@ -308,4 +345,11 @@ class FarmAlertItem {
       action: json['action'] as String? ?? '',
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'detail': detail,
+    'severity': severity,
+    'action': action,
+  };
 }

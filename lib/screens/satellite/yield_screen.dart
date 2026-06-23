@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../config/theme.dart';
+import '../../config/ui_strings.dart';
 import '../../controllers/satellite_controller.dart';
 import '../../models/satellite/timeline_entry_model.dart';
 import '../../widgets/satellite/time_series_chart.dart';
@@ -17,11 +18,11 @@ class YieldScreen extends StatelessWidget {
 
   String _recommendation(double ndvi) {
     if (ndvi > 0.6) {
-      return 'Crop health is excellent. Current NDVI levels indicate optimal canopy coverage. Maintain current irrigation and fertilisation practices.';
+      return UiStrings.t('ndvi_recommendation_good');
     } else if (ndvi > 0.3) {
-      return 'Moderate crop health detected. Consider checking irrigation schedules and applying a balanced fertiliser. Monitor weekly for changes.';
+      return UiStrings.t('ndvi_recommendation_moderate');
     } else {
-      return 'Low vegetation index detected. Immediate field inspection recommended. Check for water stress, pest activity, or nutrient deficiency.';
+      return UiStrings.t('ndvi_recommendation_low');
     }
   }
 
@@ -64,7 +65,7 @@ class YieldScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Predicted Yield',
+                    UiStrings.t('predicted_yield'),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
                         fontSize: 14),
@@ -74,7 +75,9 @@ class YieldScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        predictedYield.toStringAsFixed(1),
+                        UiStrings.localizedValue(
+                          predictedYield.toStringAsFixed(1),
+                        ),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 52,
@@ -84,17 +87,19 @@ class YieldScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(bottom: 8),
-                        child: Text('t/ha',
-                            style: TextStyle(
+                        child: Text(UiStrings.t('tonnes_per_hectare'),
+                            style: const TextStyle(
                                 color: Colors.white70, fontSize: 18)),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Based on NDVI: ${currentNdvi.toStringAsFixed(3)}',
+                    UiStrings.f('based_on_ndvi', {
+                      'value': currentNdvi.toStringAsFixed(3),
+                    }),
                     style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.65),
                         fontSize: 12),
@@ -105,17 +110,17 @@ class YieldScreen extends StatelessWidget {
             const SizedBox(height: 20),
 
             // NDVI + EVI chart
-            const Text('Vegetation Index History',
-                style: TextStyle(
+            Text(UiStrings.t('vegetation_index_history'),
+                style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: AppTheme.textDark)),
             const SizedBox(height: 4),
             Row(
               children: [
-                _Legend(color: AppTheme.green, label: 'NDVI'),
+                _Legend(color: AppTheme.green, label: UiStrings.t('ndvi')),
                 const SizedBox(width: 16),
-                _Legend(color: AppTheme.greenLight, label: 'EVI'),
+                _Legend(color: AppTheme.greenLight, label: UiStrings.t('evi')),
               ],
             ),
             const SizedBox(height: 10),
@@ -129,9 +134,9 @@ class YieldScreen extends StatelessWidget {
             else
               TimeSeriesChart(
                 data: ndviData,
-                label: 'NDVI',
+                label: UiStrings.t('ndvi'),
                 secondData: eviData,
-                secondLabel: 'EVI',
+                secondLabel: UiStrings.t('evi'),
               ),
             const SizedBox(height: 20),
 
@@ -154,8 +159,8 @@ class YieldScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Recommendation',
-                            style: TextStyle(
+                        Text(UiStrings.t('recommendation'),
+                            style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
                                 color: AppTheme.textDark)),

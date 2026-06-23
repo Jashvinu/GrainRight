@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../config/grading_strings.dart';
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/farm_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/grading/crop_option.dart';
@@ -12,6 +14,7 @@ import '../models/grading/grade_result.dart';
 import '../models/satellite/farm_model.dart';
 import '../services/grain_grading_service.dart';
 import '../utils/harvest_machine_capture.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 /// Standalone AI grain-grading flow.
@@ -70,13 +73,16 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
 
   String get _fpcCustomerName => _arg('fpcCustomerName', _arg('farmerName'));
 
+  String get _farmLocation =>
+      _arg('farmLocation', _arg('location', _arg('village')));
+
   Map<String, String> get _farmArgs {
     return {
-      'farmName': _arg('farmName', 'Rajur Millet Plot'),
+      'farmName': _arg('farmName'),
       'farmId': _arg('farmId'),
       'crop': _arg('crop', 'Finger Millet'),
       'variety': _arg('variety', 'Local'),
-      'village': _arg('village', 'Rajur'),
+      'village': _farmLocation,
       'product': _arg('product'),
       'actorRole': _actorRole,
       'fpcCustomerId': _fpcCustomerId,
@@ -320,7 +326,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     if (result.manualReviewRequired) {
       Get.snackbar(
         GradingStrings.t('needs_human_check'),
-        'FPO approval is required before QR generation.',
+        GradingStrings.t('fpo_approval_required'),
         snackPosition: SnackPosition.BOTTOM,
       );
       return;
@@ -336,7 +342,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         result.analysisId.isEmpty) {
       Get.snackbar(
         GradingStrings.t('generate_qr'),
-        'Complete farmer, farm, batch, bag, and grading details first.',
+        GradingStrings.t('complete_qr_details_first'),
         snackPosition: SnackPosition.BOTTOM,
       );
       return;
@@ -358,7 +364,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           '--',
       'moisture': moisture != null ? '${moisture.toStringAsFixed(1)}%' : '--',
       'moistureSource': result.moistureSource.isEmpty ? '--' : result.moistureSource,
-      'grader': 'AI grading',
+      'grader': GradingStrings.t('ai_grading'),
       'batchId': _batchCtrl.text.trim(),
       'bagSizeKg': bagSize.toStringAsFixed(1),
       'bagCount': bagCount.toString(),
@@ -368,6 +374,58 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       if (_isFpcMode) 'fpcCustomerId': _fpcCustomerId,
       if (_isFpcMode) 'fpcCustomerName': _fpcCustomerName,
     });
+  }
+
+  void _addResultToInventory() {
+    final result = _result;
+    if (result == null) return;
+    if (result.manualReviewRequired) {
+      Get.snackbar(
+        GradingStrings.t('needs_human_check'),
+        GradingStrings.t('fpo_approval_required'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    final bagSize = double.tryParse(_bagSizeCtrl.text.trim());
+    final bagCount = int.tryParse(_bagCountCtrl.text.trim());
+    final moisture =
+        result.moisturePercent ??
+        double.tryParse(_manualMoistureCtrl.text.trim());
+    if (bagSize == null ||
+        bagCount == null ||
+        bagSize <= 0 ||
+        bagCount <= 0 ||
+        moisture == null) {
+      Get.snackbar(
+        UiStrings.t('inventory'),
+        GradingStrings.t('complete_qr_details_first'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    Get.back<Map<String, dynamic>>(
+      result: {
+        'action': 'add_inventory',
+        'batchId': _batchCtrl.text.trim(),
+        'crop': _crop?.label ?? _farmArgs['crop'] ?? '',
+        'variety': _variety?.label ?? _farmArgs['variety'] ?? 'Local',
+        'bagSizeKg': bagSize,
+        'bagCount': bagCount,
+        'moisturePercent': moisture,
+        'grade': result.grade,
+        'gradeScore':
+            result.finalScore?.round() ??
+            result.confidenceOverall?.round() ??
+            0,
+        'gradeBasis': result.operatorSummary.isEmpty
+            ? GradingStrings.t('ai_grading')
+            : result.operatorSummary,
+        'imageName': result.analysisId.isEmpty
+            ? 'grain-grading'
+            : result.analysisId,
+      },
+    );
   }
 
   String _batchId() {
@@ -384,7 +442,12 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       bottomNavigationBar:
           _isFpcMode ? const FpcBottomNavBar(current: FpcNavTab.grading) : null,
       appBar: AppBar(
-        title: Text(_isFpcMode ? 'FPC Grain Grading' : GradingStrings.t('title')),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(
+          _isFpcMode ? GradingStrings.t('fpc_title') : GradingStrings.t('title'),
+        ),
       ),
       body: SafeArea(
         child: _notConfigured
@@ -407,10 +470,13 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       case _Step.setup:
         return _SetupStep(
           farmName: _farmName,
+          farmLocation: _farmLocation,
           farmId: _farmId,
           farmerId: _farmerId,
           farmerName: _farmerName,
-          actorLabel: _isFpcMode ? 'FPC customer lot' : 'Farmer farm lot',
+          actorLabel: _isFpcMode
+              ? GradingStrings.t('fpc_customer_lot')
+              : GradingStrings.t('farmer_farm_lot'),
           batchController: _batchCtrl,
           bagSizeController: _bagSizeCtrl,
           bagCountController: _bagCountCtrl,
@@ -459,8 +525,9 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           result: result,
           onFeedback: () => _openFeedback(result),
           onHarvestQr: _goToHarvestQr,
+          onAddInventory: _isFpcMode ? null : _addResultToInventory,
           primaryLabel: _isFpcMode
-              ? 'Generate public trace QR'
+              ? GradingStrings.t('generate_public_trace_qr')
               : GradingStrings.t('generate_qr'),
           onAgain: () => setState(() {
             _step = _Step.setup;
@@ -588,6 +655,7 @@ class _StepBar extends StatelessWidget {
 
 class _SetupStep extends StatelessWidget {
   final String farmName;
+  final String farmLocation;
   final String farmId;
   final String farmerId;
   final String farmerName;
@@ -605,6 +673,7 @@ class _SetupStep extends StatelessWidget {
 
   const _SetupStep({
     required this.farmName,
+    required this.farmLocation,
     required this.farmId,
     required this.farmerId,
     required this.farmerName,
@@ -630,10 +699,14 @@ class _SetupStep extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
-              _StepTitle(text: GradingStrings.t('setup_batch'), icon: Icons.inventory_2_rounded),
+              _StepTitle(
+                text: GradingStrings.t('setup_batch'),
+                icon: Icons.inventory_2_rounded,
+              ),
               const SizedBox(height: 12),
               _ContextCard(
                 farmName: farmName,
+                farmLocation: farmLocation,
                 farmId: farmId,
                 farmerId: farmerId,
                 farmerName: farmerName,
@@ -642,11 +715,14 @@ class _SetupStep extends StatelessWidget {
               const SizedBox(height: 16),
               TextField(
                 controller: batchController,
-                onChanged: (_) => onChanged(),
+                readOnly: true,
+                enableInteractiveSelection: true,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Batch ID',
-                  prefixIcon: Icon(Icons.qr_code_2_rounded),
+                decoration: InputDecoration(
+                  labelText: GradingStrings.t('batch_id'),
+                  prefixIcon: const Icon(Icons.qr_code_2_rounded),
+                  suffixIcon: const Icon(Icons.lock_outline_rounded),
+                  helperText: GradingStrings.t('generated_automatically'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -656,10 +732,11 @@ class _SetupStep extends StatelessWidget {
                     child: TextField(
                       controller: bagSizeController,
                       onChanged: (_) => onChanged(),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Bag kg',
-                        prefixIcon: Icon(Icons.scale_rounded),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: GradingStrings.t('bag_kg'),
+                        prefixIcon: const Icon(Icons.scale_rounded),
                       ),
                     ),
                   ),
@@ -669,33 +746,39 @@ class _SetupStep extends StatelessWidget {
                       controller: bagCountController,
                       onChanged: (_) => onChanged(),
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Bags',
-                        prefixIcon: Icon(Icons.inventory_rounded),
+                      decoration: InputDecoration(
+                        labelText: GradingStrings.t('bags'),
+                        prefixIcon: const Icon(Icons.inventory_rounded),
                       ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 20),
-              _StepTitle(text: GradingStrings.t('choose_crop'), icon: Icons.eco_rounded),
+              _StepTitle(
+                text: GradingStrings.t('choose_crop'),
+                icon: Icons.eco_rounded,
+              ),
               const SizedBox(height: 12),
               ...crops.map((c) => _SelectTile(
-                    label: c.label,
+                    label: _gradingOptionLabel(c.label),
                     icon: Icons.grass_rounded,
                     selected: c.value == selectedCrop?.value,
                     onTap: () => onCrop(c),
                   )),
               if (varieties.isNotEmpty) ...[
                 const SizedBox(height: 20),
-                _StepTitle(text: GradingStrings.t('choose_variety'), icon: Icons.spa_rounded),
+                _StepTitle(
+                  text: GradingStrings.t('choose_variety'),
+                  icon: Icons.spa_rounded,
+                ),
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 10,
                   runSpacing: 10,
                   children: varieties
                       .map((v) => ChoiceChip(
-                            label: Text(v.label),
+                            label: Text(_gradingOptionLabel(v.label)),
                             selected: v.value == selectedVariety?.value,
                             labelStyle: TextStyle(
                               fontWeight: FontWeight.w700,
@@ -721,8 +804,17 @@ class _SetupStep extends StatelessWidget {
   }
 }
 
+String _gradingOptionLabel(String label) {
+  return switch (label.trim().toLowerCase()) {
+    'finger millet (ragi)' => GradingStrings.t('finger_millet_ragi'),
+    'local' => GradingStrings.t('local'),
+    _ => label,
+  };
+}
+
 class _ContextCard extends StatelessWidget {
   final String farmName;
+  final String farmLocation;
   final String farmId;
   final String farmerId;
   final String farmerName;
@@ -730,6 +822,7 @@ class _ContextCard extends StatelessWidget {
 
   const _ContextCard({
     required this.farmName,
+    required this.farmLocation,
     required this.farmId,
     required this.farmerId,
     required this.farmerName,
@@ -740,6 +833,7 @@ class _ContextCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final missingFarmId = farmId.trim().isEmpty;
     final missingFarmer = farmerId.trim().isEmpty;
+    final missingLocation = farmLocation.trim().isEmpty;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -760,32 +854,77 @@ class _ContextCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  farmName.isEmpty ? 'No farm selected' : farmName,
+                  actorLabel,
                   style: const TextStyle(
                     color: AppTheme.textDark,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  [
-                    actorLabel,
-                    if (farmerName.isNotEmpty) farmerName,
-                    if (farmerId.isNotEmpty) 'Farmer $farmerId',
-                    if (farmId.isNotEmpty) 'Farm $farmId',
-                    if (farmId.isEmpty) 'Farm ID missing',
-                  ].join(' • '),
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
+                const SizedBox(height: 10),
+                _LotInfoLine(
+                  label: GradingStrings.t('farmer'),
+                  value:
+                      farmerName.isEmpty
+                          ? GradingStrings.t('farmer_name_unavailable')
+                          : farmerName,
+                ),
+                const SizedBox(height: 6),
+                _LotInfoLine(
+                  label: GradingStrings.t('farm_name'),
+                  value: farmName.isEmpty
+                      ? GradingStrings.t('no_farm_selected')
+                      : farmName,
+                ),
+                const SizedBox(height: 6),
+                _LotInfoLine(
+                  label: GradingStrings.t('location'),
+                  value: missingLocation
+                      ? GradingStrings.t('location_unavailable')
+                      : farmLocation,
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _LotInfoLine extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _LotInfoLine({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 76,
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              color: AppTheme.textDark,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              height: 1.25,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1032,6 +1171,7 @@ class _ResultStep extends StatelessWidget {
   final GradeResult result;
   final VoidCallback onFeedback;
   final VoidCallback onHarvestQr;
+  final VoidCallback? onAddInventory;
   final String primaryLabel;
   final VoidCallback onAgain;
 
@@ -1039,6 +1179,7 @@ class _ResultStep extends StatelessWidget {
     required this.result,
     required this.onFeedback,
     required this.onHarvestQr,
+    required this.onAddInventory,
     required this.primaryLabel,
     required this.onAgain,
   });
@@ -1067,6 +1208,17 @@ class _ResultStep extends StatelessWidget {
               const SizedBox(height: 12),
               _WhyCard(result: result),
               const SizedBox(height: 12),
+              if (onAddInventory != null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: onAddInventory,
+                    icon: const Icon(Icons.inventory_2_rounded),
+                    label: Text(UiStrings.t('add_product_inventory')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               TextButton.icon(
                 onPressed: onFeedback,
                 icon: const Icon(Icons.flag_outlined),
@@ -1076,7 +1228,6 @@ class _ResultStep extends StatelessWidget {
           ),
         ),
         _BottomBar(
-          backLabel: GradingStrings.t('grade_again'),
           onBack: onAgain,
           primaryLabel: primaryLabel,
           primaryIcon: Icons.qr_code_2_rounded,
@@ -1206,45 +1357,48 @@ class _CloudModelAnalysisCard extends StatelessWidget {
     final moisture = result.moisturePercent;
     final rows = <Widget>[
       _AnalysisMetric(
-        label: 'Cloud score',
+        label: GradingStrings.t('cloud_score'),
         value: finalScore == null ? '--' : '${finalScore.round()}/100',
       ),
-      _AnalysisMetric(label: 'Score grade', value: scoreGrade),
-      _AnalysisMetric(label: 'Model suggested', value: modelGrade),
+      _AnalysisMetric(label: GradingStrings.t('score_grade'), value: scoreGrade),
       _AnalysisMetric(
-        label: 'Grain score',
+        label: GradingStrings.t('model_suggested'),
+        value: modelGrade,
+      ),
+      _AnalysisMetric(
+        label: GradingStrings.t('grain_score'),
         value: grainScore == null ? '--' : '${grainScore.round()}/100',
       ),
       _AnalysisMetric(
-        label: 'Moisture score',
+        label: GradingStrings.t('moisture_score'),
         value: moistureScore == null ? '--' : '${moistureScore.round()}/100',
       ),
       _AnalysisMetric(
-        label: 'Moisture',
+        label: GradingStrings.t('moisture_label'),
         value: moisture == null
             ? _riskLabel(result.moistureRisk)
             : '${moisture.toStringAsFixed(1)}% - ${_riskLabel(result.moistureRisk)}',
       ),
       _AnalysisMetric(
-        label: 'Broken grain',
+        label: GradingStrings.t('broken_grain'),
         value: result.brokenGrainPercent == null
             ? '--'
             : '${result.brokenGrainPercent!.toStringAsFixed(1)}%',
       ),
       _AnalysisMetric(
-        label: 'Foreign matter',
+        label: GradingStrings.t('foreign_matter'),
         value: result.foreignMatterPercent == null
             ? '--'
             : '${result.foreignMatterPercent!.toStringAsFixed(2)}%',
       ),
       _AnalysisMetric(
-        label: 'Damaged grain',
+        label: GradingStrings.t('damaged_grain'),
         value: result.damagedPercent == null
             ? '--'
             : '${result.damagedPercent!.toStringAsFixed(1)}%',
       ),
       _AnalysisMetric(
-        label: 'Uniformity',
+        label: GradingStrings.t('uniformity'),
         value: result.uniformityScore == null
             ? '--'
             : '${result.uniformityScore!.round()}/100',
@@ -1258,14 +1412,14 @@ class _CloudModelAnalysisCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.cloud_done_outlined, color: AppTheme.green),
-                SizedBox(width: 10),
+                const Icon(Icons.cloud_done_outlined, color: AppTheme.green),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Cloud Model Analysis',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                    GradingStrings.t('cloud_model_analysis'),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
                   ),
                 ),
               ],
@@ -1387,7 +1541,9 @@ class _MoistureCard extends StatelessWidget {
               ),
             ),
             if (percent != null)
-              Text('${percent.toStringAsFixed(1)}%',
+              Text(UiStrings.f('percent_value', {
+                'value': LocaleText.number(percent, fractionDigits: 1),
+              }),
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
           ],
         ),
@@ -1627,14 +1783,12 @@ class _CaptureButtons extends StatelessWidget {
 }
 
 class _BottomBar extends StatelessWidget {
-  final String? backLabel;
   final VoidCallback? onBack;
   final String primaryLabel;
   final IconData primaryIcon;
   final VoidCallback? onPrimary;
 
   const _BottomBar({
-    this.backLabel,
     this.onBack,
     required this.primaryLabel,
     required this.primaryIcon,
@@ -1655,12 +1809,7 @@ class _BottomBar extends StatelessWidget {
       child: Row(
         children: [
           if (onBack != null) ...[
-            OutlinedButton.icon(
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
-              label: Text(backLabel ?? GradingStrings.t('back')),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 56)),
-            ),
+            AppBackButton(onPressed: onBack),
             const SizedBox(width: 12),
           ],
           Expanded(

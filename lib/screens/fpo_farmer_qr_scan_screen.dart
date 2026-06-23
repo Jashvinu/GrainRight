@@ -6,6 +6,8 @@ import 'package:get/get.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoFarmerQrScanScreen extends StatefulWidget {
@@ -47,22 +49,25 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
     try {
       final decoded = jsonDecode(payload);
       if (decoded is! Map) {
-        throw const FormatException('Invalid farmer QR.');
+        throw FormatException(UiStrings.t('invalid_farmer_qr'));
       }
       final farmer = Map<String, dynamic>.from(decoded);
       if (farmer['type'] != 'farmer_profile' ||
           farmer['allowedRole'] != 'fpo_fpc') {
-        throw const FormatException('This QR is not for FPO / FPC access.');
+        throw FormatException(UiStrings.t('farmer_qr_not_fpo_access'));
       }
       setState(() {
         _farmer = farmer;
         _error = null;
         _scannerVisible = false;
       });
-    } catch (_) {
+    } catch (error) {
+      final message = error is FormatException && error.message.isNotEmpty
+          ? error.message
+          : UiStrings.t('farmer_qr_scan_failed');
       setState(() {
         _farmer = null;
-        _error = 'Scan failed. Use a valid Kalsubai Farms farmer QR.';
+        _error = message;
         if (!fromCamera) _scanLocked = false;
       });
     }
@@ -83,7 +88,12 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
       backgroundColor: AppTheme.surface,
       extendBody: true,
       bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.farmerScan),
-      appBar: AppBar(title: const Text('Scan Farmer QR')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('scan_farmer_qr')),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 128),
         children: [
@@ -138,20 +148,20 @@ class _ScannerCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'FPC Farmer Verification',
+          Text(
+            UiStrings.t('fpc_farmer_verification'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.black,
               fontSize: 21,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Use this FPC login scanner for farmer passport/profile QR only.',
+          Text(
+            UiStrings.t('fpc_farmer_verification_desc'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppTheme.textMuted,
               fontWeight: FontWeight.w600,
               height: 1.4,
@@ -182,7 +192,7 @@ class _ScannerCard extends StatelessWidget {
                     key: const ValueKey('restart'),
                     onPressed: onRestart,
                     icon: const Icon(Icons.photo_camera_outlined),
-                    label: const Text('Open camera scanner'),
+                    label: Text(UiStrings.t('open_camera_scanner')),
                   ),
           ),
           const SizedBox(height: 18),
@@ -190,16 +200,16 @@ class _ScannerCard extends StatelessWidget {
             controller: payloadController,
             minLines: 3,
             maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'QR payload',
-              hintText: 'Paste farmer QR payload for verification',
+            decoration: InputDecoration(
+              labelText: UiStrings.t('qr_payload'),
+              hintText: UiStrings.t('paste_farmer_qr_payload'),
             ),
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
             onPressed: onVerify,
             icon: const Icon(Icons.verified_user_outlined),
-            label: const Text('Verify farmer'),
+            label: Text(UiStrings.t('verify_farmer')),
           ),
         ],
       ),
@@ -254,7 +264,7 @@ class _ScanError extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: onRetry, child: const Text('Scan again')),
+          TextButton(onPressed: onRetry, child: Text(UiStrings.t('scan_again'))),
         ],
       ),
     );
@@ -275,7 +285,7 @@ class _FarmerResultCard extends StatelessWidget {
     final variety = _text(currentCrop, 'variety', _text(farmer, 'variety'));
     final grade = _text(farmer, 'lastGrade', _text(currentCrop, 'grade'));
     final yield = _text(farmer, 'lastYield', _text(currentCrop, 'expectedYield'));
-    final rating = _text(farmer, 'fpcRating', 'Not rated');
+    final rating = _text(farmer, 'fpcRating', UiStrings.t('not_rated'));
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -309,7 +319,9 @@ class _FarmerResultCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _text(farmer, 'farmerName', 'Farmer'),
+                      UiStrings.label(
+                        _text(farmer, 'farmerName', UiStrings.t('role_farmer')),
+                      ),
                       style: const TextStyle(
                         color: Colors.black,
                         fontSize: 20,
@@ -333,46 +345,52 @@ class _FarmerResultCard extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _MetricBox(label: 'Rating', value: rating),
-              _MetricBox(label: 'Yield', value: yield),
-              _MetricBox(label: 'Grade', value: grade),
+              _MetricBox(label: UiStrings.t('rating'), value: rating),
+              _MetricBox(label: UiStrings.t('yield'), value: yield),
+              _MetricBox(label: UiStrings.t('grade'), value: grade),
             ],
           ),
           const SizedBox(height: 16),
-          _ResultRow(label: 'Phone', value: _text(farmer, 'phone')),
-          _ResultRow(label: 'Village', value: _text(farmer, 'village')),
-          _ResultRow(label: 'Primary Farm', value: _text(farmer, 'primaryFarm')),
-          _ResultRow(label: 'Area', value: _text(farmer, 'area')),
-          _ResultRow(label: 'Detail', value: _text(farmer, 'detail')),
+          _ResultRow(label: UiStrings.t('phone'), value: _text(farmer, 'phone')),
+          _ResultRow(label: UiStrings.t('village'), value: _text(farmer, 'village')),
+          _ResultRow(
+            label: UiStrings.t('primary_farm'),
+            value: _text(farmer, 'primaryFarm'),
+          ),
+          _ResultRow(label: UiStrings.t('area'), value: _text(farmer, 'area')),
+          _ResultRow(label: UiStrings.t('detail'), value: _text(farmer, 'detail')),
           const SizedBox(height: 12),
           _DetailSection(
-            title: 'Current Crop',
+            title: UiStrings.t('current_crop'),
             rows: [
-              _ResultRow(label: 'Crop', value: crop),
-              _ResultRow(label: 'Variety', value: variety),
+              _ResultRow(label: UiStrings.t('crop'), value: crop),
+              _ResultRow(label: UiStrings.t('variety'), value: variety),
               _ResultRow(
-                label: 'Season',
-                value: _text(currentCrop, 'season', 'Current'),
+                label: UiStrings.t('season'),
+                value: _text(currentCrop, 'season', UiStrings.t('current')),
               ),
               _ResultRow(
-                label: 'Expected Yield',
+                label: UiStrings.t('expected_yield'),
                 value: _text(currentCrop, 'expectedYield', yield),
               ),
-              _ResultRow(label: 'Grade', value: _text(currentCrop, 'grade', grade)),
-              _ResultRow(label: 'Detail', value: _text(currentCrop, 'detail')),
+              _ResultRow(
+                label: UiStrings.t('grade'),
+                value: _text(currentCrop, 'grade', grade),
+              ),
+              _ResultRow(label: UiStrings.t('detail'), value: _text(currentCrop, 'detail')),
             ],
           ),
           const SizedBox(height: 12),
           _HistorySection(
-            title: 'Past Crop Production',
-            emptyText: 'No past crop production captured in this QR.',
+            title: UiStrings.t('past_crop_production'),
+            emptyText: UiStrings.t('no_past_crop_production_qr'),
             rows: production,
             fields: const ['season', 'crop', 'yield', 'grade', 'detail'],
           ),
           const SizedBox(height: 12),
           _HistorySection(
-            title: 'Selling History',
-            emptyText: 'No selling history captured in this QR.',
+            title: UiStrings.t('selling_history'),
+            emptyText: UiStrings.t('no_selling_history_qr'),
             rows: sales,
             fields: const ['date', 'buyer', 'quantity', 'rate', 'rating'],
           ),
@@ -382,12 +400,12 @@ class _FarmerResultCard extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => Get.snackbar(
-                    'Farmer linked',
-                    'Farmer profile is verified for FPO / FPC access.',
+                    UiStrings.t('farmer_linked'),
+                    UiStrings.t('farmer_profile_verified_fpo'),
                     snackPosition: SnackPosition.BOTTOM,
                   ),
                   icon: const Icon(Icons.group_add_outlined),
-                  label: const Text('Add to FPC records'),
+                  label: Text(UiStrings.t('add_to_fpc_records')),
                 ),
               ),
               const SizedBox(width: 10),
@@ -398,7 +416,7 @@ class _FarmerResultCard extends StatelessWidget {
                     arguments: _gradingArgs(farmer),
                   ),
                   icon: const Icon(Icons.grain_rounded),
-                  label: const Text('Grade lot'),
+                  label: Text(UiStrings.t('grade_lot')),
                 ),
               ),
             ],
@@ -411,7 +429,7 @@ class _FarmerResultCard extends StatelessWidget {
   static Map<String, dynamic> _gradingArgs(Map<String, dynamic> farmer) {
     final currentCrop = _mapValue(farmer['currentCrop']);
     final farmerId = _text(farmer, 'farmerId');
-    final farmerName = _text(farmer, 'farmerName', 'FPC customer');
+    final farmerName = _text(farmer, 'farmerName', UiStrings.t('fpc_customer'));
     return {
       'mode': 'fpc',
       'farmerId': farmerId,
@@ -423,7 +441,7 @@ class _FarmerResultCard extends StatelessWidget {
       ),
       'fpcCustomerName': farmerName,
       'farmId': _text(farmer, 'farmId', farmerId),
-      'farmName': _text(farmer, 'primaryFarm', 'FPC customer farm'),
+      'farmName': _text(farmer, 'primaryFarm', UiStrings.t('fpc_customer_farm')),
       'crop': _text(currentCrop, 'crop', _text(farmer, 'crop', 'Finger Millet')),
       'variety': _text(currentCrop, 'variety', _text(farmer, 'variety', 'Local')),
       'village': _text(farmer, 'village'),
@@ -461,7 +479,7 @@ class _MetricBox extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              value,
+              UiStrings.label(value),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -550,6 +568,7 @@ class _HistorySection extends StatelessWidget {
                             .take(2)
                             .map((field) => _text(row, field))
                             .where((value) => value != '--')
+                            .map(UiStrings.label)
                             .join(' - '),
                         style: const TextStyle(
                           color: Colors.black,
@@ -562,6 +581,7 @@ class _HistorySection extends StatelessWidget {
                             .skip(2)
                             .map((field) => _text(row, field))
                             .where((value) => value != '--')
+                            .map(UiStrings.label)
                             .join(' - '),
                         style: const TextStyle(
                           color: AppTheme.textMuted,
@@ -604,7 +624,7 @@ class _ResultRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value,
+              UiStrings.label(value),
               style: const TextStyle(
                 color: Colors.black,
                 fontWeight: FontWeight.w800,

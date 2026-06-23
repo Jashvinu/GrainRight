@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/farm_hills_background.dart';
 import '../widgets/language_selector_button.dart';
 
@@ -72,15 +74,7 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                   children: [
                     Row(
                       children: [
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: _goBack,
-                          icon: const Icon(
-                            Icons.arrow_back_rounded,
-                            color: AppTheme.greenDark,
-                            size: 30,
-                          ),
-                        ),
+                        AppBackButton(onPressed: _goBack),
                         const Spacer(),
                         Obx(() {
                           final code = language.language.value;
@@ -104,17 +98,19 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
-                          decoration: const InputDecoration(
-                            labelText: 'Email Address',
-                            hintText: 'Enter registered FPC email',
-                            prefixIcon: Icon(Icons.email_outlined),
+                          decoration: InputDecoration(
+                            labelText: UiStrings.t('email_address'),
+                            hintText: UiStrings.t('enter_registered_fpc_email'),
+                            prefixIcon: const Icon(Icons.email_outlined),
                           ),
                           validator: (value) {
                             final text = (value ?? '').trim();
                             final valid =
                                 RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
                                     .hasMatch(text);
-                            return valid ? null : 'Enter a valid email';
+                            return valid
+                                ? null
+                                : UiStrings.t('enter_valid_email');
                           },
                         ),
                         const SizedBox(height: 14),
@@ -124,12 +120,13 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                           textInputAction: TextInputAction.done,
                           onFieldSubmitted: (_) => _submit(),
                           decoration: InputDecoration(
-                            labelText: 'Password',
-                            hintText: 'Enter FPC login password',
+                            labelText: UiStrings.t('password'),
+                            hintText: UiStrings.t('enter_fpc_login_password'),
                             prefixIcon: const Icon(Icons.lock_outline_rounded),
                             suffixIcon: IconButton(
-                              tooltip:
-                                  _obscure ? 'Show password' : 'Hide password',
+                              tooltip: _obscure
+                                  ? UiStrings.t('show_password')
+                                  : UiStrings.t('hide_password'),
                               icon: Icon(
                                 _obscure
                                     ? Icons.visibility_off_outlined
@@ -141,7 +138,7 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                           ),
                           validator: (value) => (value?.length ?? 0) >= 6
                               ? null
-                              : 'Password must be at least 6 characters',
+                              : UiStrings.t('password_min_six_chars'),
                         ),
                       ],
                     ),
@@ -163,8 +160,8 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                               : const Icon(Icons.login_rounded),
                           label: Text(
                             auth.isLoading.value
-                                ? 'Verifying'
-                                : 'Login to FPC Dashboard',
+                                ? UiStrings.t('verifying')
+                                : UiStrings.t('login_to_fpc_dashboard'),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF1976D2),
@@ -208,25 +205,25 @@ class _FpcHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
+    return Column(
       children: [
-        _FpcIcon(),
-        SizedBox(height: 20),
+        const _FpcIcon(),
+        const SizedBox(height: 20),
         Text(
-          'FPC Login',
+          UiStrings.t('fpc_login'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.greenDark,
             fontSize: 34,
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
           ),
         ),
-        SizedBox(height: 10),
+        const SizedBox(height: 10),
         Text(
-          'Login with your registered FPC account to access farmer verification, procurement and field tools.',
+          UiStrings.t('fpc_login_desc'),
           textAlign: TextAlign.center,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textMuted,
             fontSize: 16,
             height: 1.45,
@@ -272,14 +269,14 @@ class _FpcInfoStrip extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE1E8F0)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.verified_user_outlined, color: Color(0xFF1976D2)),
-          SizedBox(width: 10),
+          const Icon(Icons.verified_user_outlined, color: Color(0xFF1976D2)),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Use the email and password configured in Supabase for your FPC account.',
-              style: TextStyle(
+              UiStrings.t('fpc_login_info'),
+              style: const TextStyle(
                 color: AppTheme.textMuted,
                 height: 1.35,
                 fontWeight: FontWeight.w700,

@@ -36,6 +36,11 @@ class AuthController extends GetxController {
     final userId = await _secureStorage.readString(_keyUserId) ?? '';
     final email = await _secureStorage.readString(_keyEmail) ?? '';
 
+    if (accessToken.value.isNotEmpty &&
+        (currentUser.value?.id.isNotEmpty ?? false)) {
+      return;
+    }
+
     if (token.isEmpty) return;
 
     // Check JWT exp claim
@@ -43,15 +48,27 @@ class AuthController extends GetxController {
       if (refresh.isNotEmpty) {
         final result = await _service.refreshToken(refresh);
         if (result != null && result.accessToken.isNotEmpty) {
+          if (accessToken.value.isNotEmpty &&
+              (currentUser.value?.id.isNotEmpty ?? false)) {
+            return;
+          }
           await _saveSession(result);
           _setLoggedIn(result.accessToken, result.userId, result.email);
           return;
         }
       }
+      if (accessToken.value.isNotEmpty &&
+          (currentUser.value?.id.isNotEmpty ?? false)) {
+        return;
+      }
       await _clearSession();
       return;
     }
 
+    if (accessToken.value.isNotEmpty &&
+        (currentUser.value?.id.isNotEmpty ?? false)) {
+      return;
+    }
     _setLoggedIn(token, userId, email);
   }
 

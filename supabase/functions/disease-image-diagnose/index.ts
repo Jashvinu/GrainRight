@@ -42,7 +42,37 @@ function safeJsonParse(value: string): Record<string, unknown> | null {
   }
 }
 
-function normalizeDiagnosis(value: Record<string, unknown>): DiagnosisPayload {
+function normalizeLanguage(value: unknown): "en" | "hi" | "mr" {
+  const code = String(value ?? "en").toLowerCase();
+  return code === "hi" || code === "mr" ? code : "en";
+}
+
+function languageName(language: string): string {
+  if (language === "hi") return "Hindi";
+  if (language === "mr") return "Marathi";
+  return "English";
+}
+
+function fallbackDiagnosis(language: string): string {
+  if (language === "hi") return "दृश्य समीक्षा आवश्यक";
+  if (language === "mr") return "दृश्य तपासणी आवश्यक";
+  return "visual review needed";
+}
+
+function fallbackScoutAction(language: string): string {
+  if (language === "hi") {
+    return "खेत की टिप्पणियों के साथ कृषि विशेषज्ञ से फोटो की समीक्षा कराएं";
+  }
+  if (language === "mr") {
+    return "शेतातील नोंदींसह कृषी तज्ज्ञांकडून फोटो तपासून घ्या";
+  }
+  return "Ask an agronomist to review the image with field notes";
+}
+
+function normalizeDiagnosis(
+  value: Record<string, unknown>,
+  language: string,
+): DiagnosisPayload {
   const severityRaw = String(value.severity ?? "medium").toLowerCase();
   const severity = severityRaw === "low" || severityRaw === "high"
     ? severityRaw
@@ -53,7 +83,10 @@ function normalizeDiagnosis(value: Record<string, unknown>): DiagnosisPayload {
     : 0.5;
 
   return {
-    diagnosis: String(value.diagnosis ?? "visual review needed").slice(0, 240),
+    diagnosis: String(value.diagnosis ?? fallbackDiagnosis(language)).slice(
+      0,
+      240,
+    ),
     confidence,
     severity,
     differential: Array.isArray(value.differential)
@@ -66,8 +99,7 @@ function normalizeDiagnosis(value: Record<string, unknown>): DiagnosisPayload {
       ? value.evidence.map((item) => String(item)).filter(Boolean).slice(0, 6)
       : [],
     scout_action: String(
-      value.scout_action ??
-        "Ask an agronomist to review the image with field notes",
+      value.scout_action ?? fallbackScoutAction(language),
     ).slice(0, 500),
   };
 }
@@ -87,6 +119,7 @@ async function callVisionModel(args: {
   growthStage: string;
   satelliteContext: unknown;
   knowledge: string;
+  language: "en" | "hi" | "mr";
 }): Promise<{ model: string; diagnosis: DiagnosisPayload }> {
   const apiKey = Deno.env.get("VLM_API_KEY") ??
     Deno.env.get("QWEN_VL_API_KEY") ??
@@ -103,6 +136,9 @@ async function callVisionModel(args: {
   const prompt = [
     "You are a conservative crop disease image triage assistant.",
     "Return only JSON. Do not claim lab confirmation. If the image is unclear, say visual review needed.",
+    `Answer user-visible JSON string fields in ${languageName(args.language)} only.`,
+    "Keep only the severity enum as low, medium, or high because the mobile app localizes that value.",
+    "Do not leave English headings, labels, cautions, or action text unless it is an unavoidable crop, disease, unit, or technical index name.",
     "Use the satellite context only as supporting context, not proof.",
     "Use the reference knowledge below to match visible symptoms to the most likely disease and to ground the scout_action in cultural/IDM mitigation (resistant varieties, seed treatment, scouting, drainage). Do not invent diseases not supported by the image. Do not give pesticide brands or chemical doses; if chemical control seems needed, advise consulting a KVK/agronomist for the dose.",
     "",
@@ -161,7 +197,7 @@ async function callVisionModel(args: {
   const parsed = safeJsonParse(text);
   if (!parsed) throw new Error("VLM returned invalid JSON");
 
-  return { model, diagnosis: normalizeDiagnosis(parsed) };
+  return { model, diagnosis: normalizeDiagnosis(parsed, args.language) };
 }
 
 Deno.serve(async (req) => {
@@ -172,6 +208,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const supabase = createSupabaseClient(req);
+    const language = normalizeLanguage(body.language);
 
     let submissionId = String(body.submission_id ?? body.id ?? "");
     // deno-lint-ignore no-explicit-any
@@ -255,6 +292,7 @@ Deno.serve(async (req) => {
       growthStage,
       satelliteContext: submission.satellite_context ?? null,
       knowledge: formatKnowledge(knowledge),
+      language,
     });
 
     const { error: updateError } = await supabase

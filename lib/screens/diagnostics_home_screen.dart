@@ -4,8 +4,10 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../config/satellite_config.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/diagnostics_home_controller.dart';
 import '../models/satellite/diagnostics_model.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/satellite/problem_card.dart';
 import '../widgets/satellite/satellite_map_view.dart';
 
@@ -37,7 +39,12 @@ class _DiagnosticsHomeScreenState extends State<DiagnosticsHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Farm Diagnostics')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('farm_diagnostics')),
+      ),
       body: Obx(() {
         if (controller.isLoading.value) {
           return const Center(
@@ -65,7 +72,7 @@ class _DiagnosticsHomeScreenState extends State<DiagnosticsHomeScreen> {
                   ElevatedButton.icon(
                     onPressed: controller.load,
                     icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Try again'),
+                    label: Text(UiStrings.t('try_again')),
                   ),
                 ],
               ),

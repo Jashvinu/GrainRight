@@ -252,8 +252,16 @@ Deno.serve(async (req) => {
       growthStage: String(body.growth_stage ?? ""),
       diseaseCandidates: extractDiseaseCandidates(body),
       queryText: body.focus_cell != null
-        ? "scouting one field hotspot: symptoms to check, photo evidence, mitigation actions"
-        : "disease and weather alerts with mitigation actions",
+        ? [
+          "scouting one field hotspot: symptoms to check, photo evidence, mitigation actions",
+          String(body.variety ?? ""),
+          String(body.district ?? ""),
+        ].filter(Boolean).join(" ")
+        : [
+          "disease and weather alerts with mitigation actions",
+          String(body.variety ?? ""),
+          String(body.district ?? ""),
+        ].filter(Boolean).join(" "),
     });
     const advice = await callQwen(buildPrompt(body, formatKnowledge(knowledge)));
     return successResponse({ advice });

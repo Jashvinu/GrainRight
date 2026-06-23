@@ -3,10 +3,13 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../services/local_app_database.dart';
 import '../services/offline_map_download_manager.dart';
 import '../services/offline_map_service.dart';
+import '../widgets/app_back_button.dart';
 
 class OfflineMapsScreen extends StatefulWidget {
   const OfflineMapsScreen({super.key});
@@ -34,7 +37,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
   bool _tileConfigLoaded = false;
   bool _hasOfflineTileSource = false;
   int _searchGeneration = 0;
-  String _sourceLabel = 'offline tile source';
+  String _sourceLabel = UiStrings.t('offline_tile_source');
   String? _searchError;
   String? _downloadError;
 
@@ -137,7 +140,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
       final place = await _service.resolvePrediction(prediction);
       if (!mounted) return;
       if (place == null) {
-        setState(() => _searchError = 'Could not load that place.');
+        setState(() => _searchError = UiStrings.t('could_not_load_place'));
         return;
       }
       FocusScope.of(context).unfocus();
@@ -163,7 +166,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     final place = OfflinePlaceResult(
       placeId: region.regionId,
       title: region.label,
-      address: 'Stored offline region',
+      address: UiStrings.t('stored_offline_region'),
       latitude: region.centerLat,
       longitude: region.centerLng,
     );
@@ -216,7 +219,11 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     await _loadRegions();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Deleted ${region.label} offline map')),
+      SnackBar(
+        content: Text(
+          UiStrings.f('offline_map_deleted', {'region': region.label}),
+        ),
+      ),
     );
   }
 
@@ -229,7 +236,12 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
     final warningMessage = _offlineWarningMessage();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Offline Field Maps')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('offline_field_maps')),
+      ),
       body: RefreshIndicator(
         color: AppTheme.green,
         onRefresh: _loadRegions,
@@ -257,10 +269,10 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
             const SizedBox(height: 18),
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Stored Field Maps',
-                    style: TextStyle(
+                    UiStrings.t('stored_field_maps'),
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: AppTheme.greenDark,
@@ -268,7 +280,7 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
                   ),
                 ),
                 Text(
-                  '${_regions.length}',
+                  LocaleText.number(_regions.length),
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontWeight: FontWeight.w700,
@@ -296,25 +308,25 @@ class _OfflineMapsScreenState extends State<OfflineMapsScreen> {
   String _friendlyError(Object error) {
     final text = error.toString();
     if (text.contains('MAPTILER_API_KEY')) {
-      return 'Set MAPTILER_API_KEY to use MapTiler field imagery and place search.';
+      return UiStrings.t('maptiler_key_required');
     }
     if (text.contains('OFFLINE_TILE_URL_TEMPLATE')) {
-      return 'Set OFFLINE_TILE_URL_TEMPLATE to your licensed custom tile endpoint if you are not using MapTiler.';
+      return UiStrings.t('offline_tile_template_required');
     }
     if (text.contains('This region still needs')) {
-      return text.replaceFirst('Bad state: ', '');
+      return LocaleText.digits(text.replaceFirst('Bad state: ', ''));
     }
-    if (text.length <= 160) return text;
-    return '${text.substring(0, 160)}...';
+    if (text.length <= 160) return LocaleText.digits(text);
+    return LocaleText.digits('${text.substring(0, 160)}...');
   }
 
   String? _offlineWarningMessage() {
     if (!_tileConfigLoaded) return null;
     if (!_service.supportsOfflineDownloads) {
-      return 'Offline map downloads are not available in this build because local tile storage is disabled here. Use the Android/iOS app build for field offline downloads.';
+      return UiStrings.t('offline_downloads_unavailable');
     }
     if (!_hasOfflineTileSource) {
-      return 'Offline field imagery is not configured. Set MAPTILER_API_KEY or OFFLINE_TILE_URL_TEMPLATE in .env, android/local.properties, environment variables, or --dart-define.';
+      return UiStrings.t('offline_imagery_not_configured');
     }
     return null;
   }
@@ -376,7 +388,7 @@ class _SearchPanel extends StatelessWidget {
               textInputAction: TextInputAction.search,
               onChanged: onChanged,
               decoration: InputDecoration(
-                labelText: 'Search village or field area',
+                labelText: UiStrings.t('search_village_field_area'),
                 prefixIcon: const Icon(Icons.search_rounded),
                 suffixIcon: searching || resolving
                     ? const Padding(
@@ -438,10 +450,12 @@ class _SearchPanel extends StatelessWidget {
                       controller: radiusController,
                       enabled: !downloading,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Radius km',
-                        helperText: 'Best detail: 1-3 km',
-                        prefixIcon: Icon(Icons.radio_button_unchecked_rounded),
+                      decoration: InputDecoration(
+                        labelText: UiStrings.t('radius_km'),
+                        helperText: UiStrings.t('best_detail_km'),
+                        prefixIcon: const Icon(
+                          Icons.radio_button_unchecked_rounded,
+                        ),
                       ),
                     ),
                   ),
@@ -462,7 +476,11 @@ class _SearchPanel extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: canDownload && !downloading ? onDownload : null,
                 icon: const Icon(Icons.download_for_offline_outlined),
-                label: Text(downloading ? 'Downloading' : 'Download Field Map'),
+                label: Text(
+                  UiStrings.t(
+                    downloading ? 'downloading' : 'download_field_map',
+                  ),
+                ),
               ),
             ],
             if (progress != null) ...[
@@ -474,7 +492,11 @@ class _SearchPanel extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${progress!.downloadedTiles}/${progress!.totalTiles} tiles from $sourceLabel',
+                UiStrings.f('offline_tiles_progress', {
+                  'downloaded': progress!.downloadedTiles,
+                  'total': progress!.totalTiles,
+                  'source': sourceLabel,
+                }),
                 style: const TextStyle(
                   color: AppTheme.textMuted,
                   fontSize: 12,
@@ -500,7 +522,7 @@ class _SearchPanel extends StatelessWidget {
   }
 
   String get _downloadHint {
-    return 'Downloads the same field-detail area you will use for marking. Keep radius at 1-3 km for faster offline loading and sharper boundaries.';
+    return UiStrings.t('offline_map_download_hint');
   }
 }
 
@@ -535,7 +557,16 @@ class _SelectedPlaceCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${place.latitude.toStringAsFixed(5)}, ${place.longitude.toStringAsFixed(5)}',
+                    UiStrings.f('lat_lng_value', {
+                      'lat': LocaleText.number(
+                        place.latitude,
+                        fractionDigits: 5,
+                      ),
+                      'lng': LocaleText.number(
+                        place.longitude,
+                        fractionDigits: 5,
+                      ),
+                    }),
                     style: const TextStyle(
                       color: AppTheme.textMuted,
                       fontSize: 12,
@@ -593,7 +624,7 @@ class _RegionTile extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  region.status.toUpperCase(),
+                  UiStrings.option(region.status),
                   style: TextStyle(
                     color: statusColor,
                     fontSize: 11,
@@ -610,7 +641,14 @@ class _RegionTile extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '${region.radiusKm.toStringAsFixed(0)} km radius, field-detail center zoom ${region.minZoom}-${region.maxZoom}, ${region.downloadedTileCount}/${region.tileCount} tiles, ${sizeMb.toStringAsFixed(1)} MB',
+              UiStrings.f('offline_region_detail', {
+                'radius': region.radiusKm,
+                'minZoom': region.minZoom,
+                'maxZoom': region.maxZoom,
+                'downloaded': region.downloadedTileCount,
+                'total': region.tileCount,
+                'size': LocaleText.number(sizeMb, fractionDigits: 1),
+              }),
               style: const TextStyle(
                 color: AppTheme.textMuted,
                 fontSize: 12,
@@ -633,13 +671,15 @@ class _RegionTile extends StatelessWidget {
                 TextButton.icon(
                   onPressed: downloading ? null : onUpdate,
                   icon: const Icon(Icons.update_rounded),
-                  label: Text(region.status == 'paused' ? 'Resume' : 'Update'),
+                  label: Text(
+                    UiStrings.t(region.status == 'paused' ? 'resume' : 'update'),
+                  ),
                 ),
                 const SizedBox(width: 6),
                 TextButton.icon(
                   onPressed: downloading ? null : onDelete,
                   icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Delete'),
+                  label: Text(UiStrings.t('delete')),
                 ),
               ],
             ),
@@ -698,22 +738,22 @@ class _EmptyRegions extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE1E7DF)),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.map_outlined, size: 42, color: AppTheme.textMuted),
-          SizedBox(height: 10),
+          const Icon(Icons.map_outlined, size: 42, color: AppTheme.textMuted),
+          const SizedBox(height: 10),
           Text(
-            'No downloaded field maps yet',
-            style: TextStyle(
+            UiStrings.t('no_downloaded_field_maps'),
+            style: const TextStyle(
               color: AppTheme.greenDark,
               fontWeight: FontWeight.w800,
             ),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
-            'Search a village or field area while online, then download a small field-detail map and use that same download while marking offline.',
+            UiStrings.t('no_downloaded_field_maps_detail'),
             textAlign: TextAlign.center,
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
           ),
         ],
       ),

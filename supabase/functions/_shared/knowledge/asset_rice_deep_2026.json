@@ -1,0 +1,196 @@
+{
+  "doc_source": "asset_rice_details_lifecycle_doc_2026",
+  "crop": "rice",
+  "source_title": "Rice Indrayani Basmati Kolam Details Lifecycle Doc, Maharashtra Edition 2026",
+  "source_asset": "assets/Crop type and variety based doc/Rice_Details_LifeCycle_Doc.pdf",
+  "records": [
+    {
+      "chunk_type": "variety",
+      "content": "Rice variety fit in Maharashtra: Indrayani is a short to medium aromatic, soft-cooking regional premium rice for Pune, Satara, Kolhapur and nearby Ghats. Basmati is an extra-long slender aromatic specialty crop for contract or clear buyer specification, not a universal fit. Kolam is a fine to medium slender everyday rice with strong Vidarbha, Konkan and western Maharashtra retail demand.",
+      "metadata": {
+        "source_section": "2. Varieties Overview and Comparison Matrix",
+        "varieties": ["Indrayani", "Basmati", "Kolam"]
+      }
+    },
+    {
+      "chunk_type": "variety",
+      "content": "Rice quality risks by variety: Indrayani needs aroma identity and isolation from non-aromatic paddy. Basmati needs varietal purity, grain length, elongation after cooking, gentle milling and often ageing. Kolam grade depends on whiteness, polish consistency, broken percentage and clean storage.",
+      "metadata": {
+        "source_section": "5. Yield, Aroma and Grain Quality Comparison"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Pune-Satara-Kolhapur",
+      "content": "Rice district fit: Pune has Western Ghats, Maval and irrigated valleys with strong Indrayani identity. Satara has Ghats, valleys and irrigated command pockets suitable for Indrayani and Kolam. Kolhapur has high rainfall and irrigation-supported paddy fields suitable for Indrayani-style aromatic rice, Kolam and local rice.",
+      "metadata": {
+        "source_section": "14.1 to 14.3 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Nagpur-Chandrapur-Gondia-Bhandara",
+      "content": "Rice in eastern Maharashtra: Nagpur, Chandrapur, Gondia and Bhandara are Vidarbha or lowland paddy belts where Kolam, fine rice and local paddy fit well. Main priorities are lowland water management, blast and bacterial leaf blight monitoring, grain brightness, low broken rice, moisture-safe drying and mill integration.",
+      "metadata": {
+        "source_section": "14.6 to 14.9 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "district",
+      "district": "Raigad-Ratnagiri-Sindhudurg",
+      "content": "Rice in Konkan districts Raigad, Ratnagiri and Sindhudurg: high rainfall, bunded fields and coastal or Ghats paddy ecology support Kolam, local fine rice and selected aromatic lots. Main management priorities are bund integrity, drainage after heavy rain, disease care in humid periods and safe drying/storage.",
+      "metadata": {
+        "source_section": "14.10 to 14.12 District Profiles"
+      }
+    },
+    {
+      "chunk_type": "soil",
+      "content": "Rice prefers clay loam or lowland clay for transplanted paddy because it holds water and puddles well. Medium black soil is good where drainage and water control exist. Lateritic Konkan soils work under bunded monsoon fields. Sandy loam is limited and needs frequent irrigation, nutrient splits and strong weed control.",
+      "metadata": {
+        "source_section": "6. Soil Requirements"
+      }
+    },
+    {
+      "chunk_type": "climate",
+      "content": "Rice climate reference: 20-35 C is suitable, but flowering is sensitive to extremes. High rainfall Konkan and eastern lowlands are naturally suited, while irrigated pockets need assured water. High humidity supports rice growth but also increases blast and bacterial disease risk. Bright weather during grain filling improves yield and milling quality.",
+      "metadata": {
+        "source_section": "7.1 Ideal Climate"
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "nursery-establishment",
+      "content": "Rice water management in nursery and establishment: keep nursery moist but not flooded immediately after sowing. After transplanting, keep shallow water and avoid seedling submergence. Repair bunds and level fields so water depth, fertilizer and maturity are uniform.",
+      "metadata": {
+        "source_section": "7.3 Irrigation Management",
+        "das_start": 0,
+        "das_end": 35
+      }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "tillering-flowering",
+      "content": "Rice tillering can use shallow standing water or alternate wetting and drying where field control is good. Panicle initiation and flowering are very high priority water stages; avoid water stress because it reduces panicle formation and causes sterility. Drain 7-10 days before harvest during ripening.",
+      "metadata": {
+        "source_section": "7.3 Irrigation Management",
+        "das_start": 25,
+        "das_end": 115
+      }
+    },
+    {
+      "chunk_type": "sowing",
+      "content": "Rice establishment methods: transplanted rice uses clean seed, seed treatment, raised nursery beds in high-rainfall areas, puddled field and shallow water after transplanting. Direct seeded rice reduces labour and puddling but needs level fields, precise sowing, early weed control and reliable water management. Conventional spacing is often 20 x 15 cm or 20 x 20 cm; SRI-style spacing is around 25 x 25 cm with younger seedlings.",
+      "metadata": {
+        "source_section": "8. Sowing and Transplanting Management"
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "pre-season-nursery",
+      "content": "Rice pre-season and nursery cycle: in May-June repair bunds, soil test, procure certified seed and plan nursery. From 0-25 days, do seed treatment, nursery sowing, water and disease care. Quality objective is verified field readiness and vigorous seedlings.",
+      "metadata": {
+        "source_section": "10. Complete Crop Cycle",
+        "das_start": -30,
+        "das_end": 25
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "transplanting-tillering",
+      "content": "Rice transplanting or sowing and tillering: at about 20-35 days from nursery, puddle, level and transplant or direct seed for a uniform stand. At 25-50 DAT, weed, apply nitrogen split and manage shallow water. Quality objective is high productive tillers.",
+      "metadata": {
+        "source_section": "10. Complete Crop Cycle",
+        "das_start": 20,
+        "das_end": 50
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "panicle-initiation-flowering",
+      "content": "Rice panicle initiation at 45-65 DAT and flowering at 70-90 DAT: secure water and nutrients, monitor pests, avoid water stress, and scout blast, bacterial leaf blight and stem borer. Quality objective is strong panicle formation, low sterility and healthy grain set.",
+      "metadata": {
+        "source_section": "10. Complete Crop Cycle",
+        "das_start": 45,
+        "das_end": 90
+      }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-harvest",
+      "content": "Rice grain filling and harvest: at 90-115 DAT drain gradually and protect from lodging and birds. Harvest around 110-140 days when 80-85 percent grains in panicles are mature and straw begins yellowing. Dry safely to reduce fissuring and broken rice.",
+      "metadata": {
+        "source_section": "10 and 15 Complete Crop Cycle and Harvesting",
+        "das_start": 90,
+        "das_end": 140
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "blast",
+      "growth_stage": "nursery-flowering",
+      "content": "Rice blast affects leaves, nodes and necks, especially under high humidity, susceptible varieties and excessive nitrogen. Neck blast directly reduces grain filling and quality. Management focus is resistant variety, balanced nitrogen, seed treatment and advisory-based action.",
+      "metadata": {
+        "severity": "high",
+        "source_section": "11. Disease and Pest Management"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "bacterial_leaf_blight",
+      "growth_stage": "tillering-grain-filling",
+      "content": "Rice bacterial leaf blight causes yellowing and drying from leaf tips and margins. It spreads through rain splash, wounds, floodwater and susceptible varieties. Management focus is clean seed, avoiding seedling clipping, field drainage and resistant varieties.",
+      "metadata": {
+        "severity": "high",
+        "source_section": "11. Disease and Pest Management"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "brown_spot",
+      "growth_stage": "nursery-maturity",
+      "content": "Rice brown spot is associated with nutrient stress, poor soil fertility and seed-borne infection. Symptoms are brown oval spots that reduce leaf area and can stain grain. Management focus is seed treatment, balanced nutrition and improved soil health.",
+      "metadata": {
+        "severity": "medium",
+        "source_section": "11. Disease and Pest Management"
+      }
+    },
+    {
+      "chunk_type": "symptom",
+      "disease": "stem_borer_leaf_folder",
+      "growth_stage": "tillering-booting",
+      "content": "Rice stem borer causes dead hearts during vegetative growth and white earheads during reproductive stage. Leaf folder larvae fold leaves and scrape green tissue, reducing photosynthesis. Scout from tillering; use light traps, egg mass removal, natural enemy conservation and need-based local advisory control.",
+      "metadata": {
+        "severity": "medium",
+        "source_section": "11. Disease and Pest Management"
+      }
+    },
+    {
+      "chunk_type": "nutrition",
+      "content": "Rice fertilizer reference: rainfed lowland rice uses about 60-80 kg N, 30-40 kg P2O5 and 30-40 kg K2O per hectare. Irrigated transplanted rice uses about 100-120 kg N, 50-60 kg P2O5 and 40-60 kg K2O per hectare. Premium aromatic rice should use moderate nitrogen because excess nitrogen can reduce aroma and increase lodging and disease.",
+      "metadata": {
+        "source_section": "12. NPK Recommendations"
+      }
+    },
+    {
+      "chunk_type": "grading",
+      "content": "Rice Grade A focuses on safe low moisture, low broken grain, low damaged or discoloured grain, low chalkiness, varietal purity, no odour and no live insects. Basmati requires long slender kernels and elongation after cooking. Indrayani and Kolam require uniform grain type and low broken percentage for premium retail packs.",
+      "metadata": {
+        "source_section": "13. Grain Grading System"
+      }
+    },
+    {
+      "chunk_type": "post_harvest",
+      "content": "Rice harvest and storage: harvest when 80-85 percent grains are mature and straw turns yellowing; avoid late harvest that increases shattering, lodging, fissuring and pest damage. Thresh on clean surface, remove straw and immature grains, dry paddy gradually to about 14 percent for safe storage or lower as buyer requires, and avoid high-temperature drying that fissures kernels.",
+      "metadata": {
+        "source_section": "15. Harvesting, Threshing and Storage"
+      }
+    },
+    {
+      "chunk_type": "traceability",
+      "content": "Rice traceability should record farmer and plot geo-tag, seed lot, nursery date, transplanting or direct seeding date, crop-stage inputs, irrigation, pest and disease monitoring, harvest, threshing, drying, paddy storage, milling batch, grade, packing, QR code and buyer dispatch. This protects Indrayani aroma identity, Basmati purity and Kolam grade consistency.",
+      "metadata": {
+        "source_section": "17. Digital Traceability Platform"
+      }
+    }
+  ]
+}

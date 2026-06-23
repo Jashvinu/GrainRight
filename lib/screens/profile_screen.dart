@@ -6,6 +6,7 @@ import '../config/brand_assets.dart';
 import '../config/theme.dart';
 import '../config/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
+import '../widgets/app_back_button.dart';
 
 class FarmerProfileScreen extends StatelessWidget {
   final dynamic profile; // Using dynamic for now to match the local _FarmerProfile
@@ -41,7 +42,7 @@ class FarmerProfileScreen extends StatelessWidget {
       'fpcRating': 'Not rated',
       'lastYield': 'Pending',
       'lastGrade': 'Pending',
-      'detail': 'Farmer profile verified for FPC procurement and grading.',
+      'detail': UiStrings.t('profile_verified_for_fpc_procurement'),
       'currentCrop': {
         'season': 'Current',
         'crop': farm.crop,
@@ -56,13 +57,13 @@ class FarmerProfileScreen extends StatelessWidget {
           'crop': farm.crop,
           'yield': 'Pending',
           'grade': 'Pending',
-          'detail': 'Update after FPC grading or procurement.',
+          'detail': UiStrings.t('update_after_fpc_grading'),
         },
       ],
       'sellingHistory': [
         {
           'date': 'Pending',
-          'buyer': 'FPC procurement',
+          'buyer': UiStrings.t('fpc_procurement'),
           'quantity': 'Pending',
           'rate': 'Pending',
           'rating': 'Pending',
@@ -73,6 +74,9 @@ class FarmerProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
         title: Text(UiStrings.t('detailed_profile')),
         elevation: 0,
       ),
@@ -493,11 +497,12 @@ class _MenuCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        side: const BorderSide(color: Color(0xFFE5E7EB)),
       ),
       child: Column(children: children),
     );

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
 import '../widgets/brand_text.dart';
 
@@ -16,15 +19,12 @@ class FpoHomeScreen extends StatelessWidget {
       extendBody: true,
       bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.home),
       appBar: AppBar(
-        title: const Text('FPO Dashboard'),
-        leading: IconButton(
-          tooltip: 'Change role',
-          onPressed: auth.logout,
-          icon: const Icon(Icons.arrow_back_rounded),
-        ),
+        title: Text(UiStrings.t('fpo_dashboard')),
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context, onPressed: auth.logout),
         actions: [
           IconButton(
-            tooltip: 'Admin login',
+            tooltip: UiStrings.t('admin_login'),
             onPressed: () => Get.toNamed('/satellite/login'),
             icon: const Icon(Icons.admin_panel_settings_outlined),
           ),
@@ -35,9 +35,9 @@ class FpoHomeScreen extends StatelessWidget {
         children: [
           const _FpoHeader(),
           const SizedBox(height: 22),
-          const Text(
-            'Management',
-            style: TextStyle(
+          Text(
+            UiStrings.t('management'),
+            style: const TextStyle(
               color: Colors.black,
               fontSize: 22,
               fontWeight: FontWeight.w900,
@@ -48,24 +48,24 @@ class FpoHomeScreen extends StatelessWidget {
             items: [
               _FpoAction(
                 icon: Icons.groups_2_outlined,
-                title: 'Farmers',
-                subtitle: 'Scan QR and manage members',
+                title: UiStrings.t('farmers'),
+                subtitle: UiStrings.t('fpo_farmers_subtitle'),
                 color: AppTheme.green,
                 tint: AppTheme.greenPale,
                 onTap: () => Get.toNamed('/fpo/scan-farmer'),
               ),
               _FpoAction(
                 icon: Icons.inventory_2_outlined,
-                title: 'Procurement',
-                subtitle: 'Review grain grading jobs',
+                title: UiStrings.t('procurement'),
+                subtitle: UiStrings.t('fpo_procurement_subtitle'),
                 color: const Color(0xFF1976D2),
                 tint: const Color(0xFFEAF4FF),
                 onTap: () => Get.toNamed('/fpo/grading-review'),
               ),
               _FpoAction(
                 icon: Icons.grain_rounded,
-                title: 'Grain Grading',
-                subtitle: 'Grade FPC customer lots',
+                title: UiStrings.t('grain_grading'),
+                subtitle: UiStrings.t('fpo_grain_grading_subtitle'),
                 color: const Color(0xFF795548),
                 tint: const Color(0xFFF2E8E3),
                 onTap: () => Get.toNamed(
@@ -75,24 +75,24 @@ class FpoHomeScreen extends StatelessWidget {
               ),
               _FpoAction(
                 icon: Icons.assignment_turned_in_outlined,
-                title: 'Receiver',
-                subtitle: 'Scan harvest QR and save purchases',
+                title: UiStrings.t('receiver'),
+                subtitle: UiStrings.t('fpo_receiver_subtitle'),
                 color: const Color(0xFF00897B),
                 tint: const Color(0xFFE0F2F1),
                 onTap: () => Get.toNamed('/fpo/receiver'),
               ),
               _FpoAction(
                 icon: Icons.map_outlined,
-                title: 'Field Maps',
-                subtitle: 'Offline map areas',
+                title: UiStrings.t('field_maps'),
+                subtitle: UiStrings.t('offline_map_areas'),
                 color: const Color(0xFF673AB7),
                 tint: const Color(0xFFF0EAFE),
                 onTap: () => Get.toNamed('/offline-maps'),
               ),
               _FpoAction(
                 icon: Icons.biotech_outlined,
-                title: 'Diagnostics',
-                subtitle: 'Farm health reports',
+                title: UiStrings.t('diagnostics'),
+                subtitle: UiStrings.t('farm_health_reports'),
                 color: const Color(0xFFE07800),
                 tint: const Color(0xFFFFF4E5),
                 onTap: () => Get.toNamed('/diagnostics'),
@@ -104,14 +104,14 @@ class FpoHomeScreen extends StatelessWidget {
           const SizedBox(height: 18),
           _FpoListTile(
             icon: Icons.satellite_alt_outlined,
-            title: 'Satellite Monitoring',
-            subtitle: 'Use admin credentials for farm satellite tools',
+            title: UiStrings.t('satellite_monitoring'),
+            subtitle: UiStrings.t('satellite_monitoring_subtitle'),
             onTap: () => Get.toNamed('/satellite/login'),
           ),
           _FpoListTile(
             icon: Icons.logout_rounded,
-            title: 'Change Role',
-            subtitle: 'Return to role selection',
+            title: UiStrings.t('change_role'),
+            subtitle: UiStrings.t('return_to_role_selection'),
             onTap: auth.logout,
           ),
         ],
@@ -149,15 +149,15 @@ class _FpoHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                BrandText(fontSize: 22),
-                SizedBox(height: 6),
+                const BrandText(fontSize: 22),
+                const SizedBox(height: 6),
                 Text(
-                  'FPO / FPC workspace',
-                  style: TextStyle(
+                  UiStrings.t('fpo_workspace'),
+                  style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontWeight: FontWeight.w600,
                   ),
@@ -277,11 +277,20 @@ class _FpoSummary extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          _SummaryMetric(label: 'Farmers', value: '0'),
-          _SummaryMetric(label: 'Lots', value: '0'),
-          _SummaryMetric(label: 'Alerts', value: '0'),
+          _SummaryMetric(
+            label: UiStrings.t('farmers'),
+            value: LocaleText.number(0),
+          ),
+          _SummaryMetric(
+            label: UiStrings.t('lots'),
+            value: LocaleText.number(0),
+          ),
+          _SummaryMetric(
+            label: UiStrings.t('alerts'),
+            value: LocaleText.number(0),
+          ),
         ],
       ),
     );

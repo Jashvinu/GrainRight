@@ -9,14 +9,34 @@ import '../models/satellite/timeline_entry_model.dart';
 import '../models/satellite/diagnostics_model.dart';
 import '../models/satellite/advanced_monitoring_model.dart';
 import '../models/satellite/farm_alert_model.dart';
+import '../models/satellite/farm_assistant_model.dart';
+import '../models/satellite/farm_timeline_event_model.dart';
+import '../models/satellite/farm_summary_model.dart';
+import '../models/satellite/farm_weather_model.dart';
 
 class SatelliteApiException implements Exception {
   final String message;
   final int? statusCode;
-  SatelliteApiException(this.message, {this.statusCode});
+  final String? code;
+  final String? details;
+  SatelliteApiException(
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.details,
+  });
 
   @override
-  String toString() => 'SatelliteApiException: $message';
+  String toString() {
+    final parts = [
+      'SatelliteApiException',
+      if (statusCode != null) '$statusCode',
+      if (code != null && code!.isNotEmpty) code!,
+      message,
+      if (details != null && details!.isNotEmpty) details!,
+    ];
+    return parts.join(': ');
+  }
 }
 
 class AuthResult {
@@ -33,7 +53,17 @@ class AuthResult {
   });
 }
 
+class FarmerDiseaseData {
+  final List<Map<String, dynamic>> scoutZones;
+  final List<Map<String, dynamic>> riskCells;
+
+  const FarmerDiseaseData({required this.scoutZones, required this.riskCells});
+}
+
 class SatelliteService {
+  static const _farmSelect =
+      '*';
+
   Map<String, String> _headers(String? jwt) {
     final bearer = jwt == null || jwt.trim().isEmpty
         ? SatelliteConfig.anonKey
@@ -68,8 +98,10 @@ class SatelliteService {
   Future<Map<String, dynamic>> _post(
     String url,
     Map<String, dynamic> body,
-    String? jwt,
-  ) async {
+    String? jwt, {
+    bool retryHttpErrors = true,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
     Exception? last;
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
@@ -79,10 +111,23 @@ class SatelliteService {
               headers: _headers(jwt),
               body: jsonEncode(body),
             )
-            .timeout(const Duration(seconds: 60));
+            .timeout(timeout);
         return _parse(response);
+      } on SatelliteApiException catch (e) {
+        last = e;
+        final permanentHttpFailure =
+            e.statusCode != null && e.statusCode! < 500;
+        if (!retryHttpErrors || permanentHttpFailure) {
+          rethrow;
+        }
+        if (attempt < 2) {
+          await Future.delayed(Duration(seconds: 1 << attempt));
+        }
       } on Exception catch (e) {
         last = e;
+        if (!retryHttpErrors) {
+          rethrow;
+        }
         if (attempt < 2) {
           await Future.delayed(Duration(seconds: 1 << attempt));
         }
@@ -92,25 +137,39 @@ class SatelliteService {
   }
 
   Map<String, dynamic> _parse(http.Response response) {
-    final body = jsonDecode(response.body);
+    final bodyText = response.body.trim();
+    dynamic body;
+    try {
+      body = bodyText.isEmpty ? null : jsonDecode(bodyText);
+    } catch (_) {
+      body = bodyText;
+    }
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (body is Map<String, dynamic>) {
         if (body['success'] == false) {
           throw SatelliteApiException(
             body['error'] as String? ?? 'Unknown error',
             statusCode: response.statusCode,
+            code: body['code']?.toString(),
+            details: body['details']?.toString(),
           );
         }
         return body;
       }
       return {'data': body};
     }
+    final code = body is Map ? body['code']?.toString() : null;
+    final details = body is Map ? body['details']?.toString() : null;
     final msg = body is Map
         ? (body['error'] ?? body['message'] ?? 'HTTP ${response.statusCode}')
+        : body is String && body.isNotEmpty
+        ? body
         : 'HTTP ${response.statusCode}';
     throw SatelliteApiException(
       msg.toString(),
       statusCode: response.statusCode,
+      code: code,
+      details: details,
     );
   }
 
@@ -263,9 +322,13 @@ class SatelliteService {
 
   // ─── Farms ─────────────────────────────────────────────────────────────────
 
-  Future<List<Farm>> getFarms(String jwt) async {
+  Future<List<Farm>> getFarms(String jwt, {String? ownerUserId}) async {
+    final owner = ownerUserId?.trim();
+    final ownerFilter = owner == null || owner.isEmpty
+        ? ''
+        : '&user_id=eq.${Uri.encodeQueryComponent(owner)}';
     final url =
-        '${SatelliteConfig.restBase}/farms?select=id,name,geometry,bounds,area_hectares,area_acres,user_id,created_at,crop,variety,previous_crop,season,irrigation,soil_type,ownership_type,seed_source,harvest_intent&order=created_at.desc';
+        '${SatelliteConfig.restBase}/farms?select=$_farmSelect&order=created_at.desc$ownerFilter';
     final response = await http
         .get(
           Uri.parse(url),
@@ -283,7 +346,106 @@ class SatelliteService {
     return list.map((e) => Farm.fromJson(e as Map<String, dynamic>)).toList();
   }
 
-  Future<Farm> insertFarm(Map<String, dynamic> farmJson, String jwt) async {
+  Future<List<Farm>> getFarmsForFarmerPhone({
+    required String phone,
+    String? farmerId,
+    String? preferredFarmId,
+    required String jwt,
+    bool retryHttpErrors = true,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    if (phone.trim().isEmpty || jwt.trim().isEmpty) return const [];
+    final body = <String, dynamic>{'phone': phone};
+    final farmerIdValue = farmerId?.trim();
+    if (farmerIdValue != null && farmerIdValue.isNotEmpty) {
+      body['farmerId'] = farmerIdValue;
+    }
+    final preferredFarmIdValue = preferredFarmId?.trim();
+    if (preferredFarmIdValue != null && preferredFarmIdValue.isNotEmpty) {
+      body['farmId'] = preferredFarmIdValue;
+    }
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farmer-phone-farms',
+      body,
+      jwt,
+      retryHttpErrors: retryHttpErrors,
+      timeout: timeout,
+    );
+    final list = data['farms'] as List? ?? const [];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(Farm.fromJson)
+        .toList(growable: false);
+  }
+
+  bool _looksLikeColumnSchemaError(SatelliteApiException error) {
+    final raw = [
+      error.code,
+      error.message,
+      error.details,
+    ].whereType<String>().join(' ').toLowerCase();
+    return raw.contains('column') ||
+        raw.contains('schema cache') ||
+        raw.contains('pgrst204') ||
+        raw.contains('42703');
+  }
+
+  Map<String, dynamic> _pickFarmJson(
+    Map<String, dynamic> source,
+    List<String> keys,
+  ) {
+    final picked = <String, dynamic>{};
+    for (final key in keys) {
+      if (source.containsKey(key)) {
+        picked[key] = source[key];
+      }
+    }
+    return picked;
+  }
+
+  List<Map<String, dynamic>> _farmInsertAttempts(
+    Map<String, dynamic> farmJson,
+  ) {
+    return [
+      Map<String, dynamic>.from(farmJson),
+      _pickFarmJson(farmJson, const [
+        'name',
+        'geometry',
+        'bounds',
+        'area_hectares',
+        'area_acres',
+        'user_id',
+        'crop',
+        'variety',
+        'previous_crop',
+        'season',
+        'irrigation',
+        'soil_type',
+        'ownership_type',
+        'seed_source',
+        'harvest_intent',
+      ]),
+      _pickFarmJson(farmJson, const [
+        'name',
+        'geometry',
+        'bounds',
+        'area_hectares',
+        'area_acres',
+        'user_id',
+      ]),
+      _pickFarmJson(farmJson, const [
+        'name',
+        'geometry',
+        'area_hectares',
+        'user_id',
+      ]),
+    ];
+  }
+
+  Future<Farm> _insertFarmOnce(
+    Map<String, dynamic> farmJson,
+    String jwt,
+  ) async {
     final url = '${SatelliteConfig.restBase}/farms';
     final response = await http
         .post(
@@ -294,19 +456,296 @@ class SatelliteService {
         .timeout(const Duration(seconds: 20));
 
     if (response.statusCode != 201 && response.statusCode != 200) {
+      final body = response.body.trim();
+      dynamic parsed;
+      try {
+        parsed = body.isEmpty ? null : jsonDecode(body);
+      } catch (_) {
+        parsed = body;
+      }
+      final message = parsed is Map
+          ? '${parsed['message'] ?? parsed['error'] ?? 'Failed to save farm'}'
+          : body.isEmpty
+          ? 'Failed to save farm'
+          : body;
       throw SatelliteApiException(
-        'Failed to save farm',
+        message,
         statusCode: response.statusCode,
+        code: parsed is Map ? parsed['code']?.toString() : null,
+        details: parsed is Map ? parsed['details']?.toString() : null,
       );
     }
     final list = jsonDecode(response.body) as List;
     return Farm.fromJson(list.first as Map<String, dynamic>);
   }
 
+  Future<Farm> insertFarm(Map<String, dynamic> farmJson, String jwt) async {
+    SatelliteApiException? lastError;
+    for (final attempt in _farmInsertAttempts(farmJson)) {
+      try {
+        return await _insertFarmOnce(attempt, jwt);
+      } on SatelliteApiException catch (error) {
+        lastError = error;
+        if (!_looksLikeColumnSchemaError(error)) rethrow;
+      }
+    }
+    throw lastError ?? SatelliteApiException('Failed to save farm');
+  }
+
+  Future<Farm> insertFarmerLinkedFarm({
+    required Map<String, dynamic> farmJson,
+    required String farmerPhone,
+    required String jwt,
+    String? farmerId,
+  }) async {
+    final body = <String, dynamic>{
+      'phone': farmerPhone,
+      if (farmerId != null && farmerId.trim().isNotEmpty)
+        'farmerId': farmerId.trim(),
+      'farm': farmJson,
+    };
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farmer-farm-save',
+      body,
+      jwt,
+      retryHttpErrors: false,
+    );
+    final farm = data['farm'];
+    if (farm is! Map) {
+      throw SatelliteApiException('Saved farm response was invalid');
+    }
+    return Farm.fromJson(Map<String, dynamic>.from(farm));
+  }
+
+  Future<FarmWeatherSnapshot> getLiveWeather({
+    required double latitude,
+    required double longitude,
+    String? crop,
+    String? growthStage,
+    int? daysAfterSowing,
+    double? satelliteMoisture,
+    String language = 'en',
+    String? jwt,
+  }) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final startDate = today
+        .subtract(const Duration(days: 7))
+        .toIso8601String()
+        .split('T')
+        .first;
+    final endDate = today.toIso8601String().split('T').first;
+    final query = <String, String>{
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+      'start_date': startDate,
+      'mode': 'forecast',
+      'start': startDate,
+      if (crop != null && crop.trim().isNotEmpty) 'crop': crop.trim(),
+      if (growthStage != null && growthStage.trim().isNotEmpty)
+        'growth_stage': growthStage.trim(),
+      if (daysAfterSowing != null) 'days_after_sowing': '$daysAfterSowing',
+      if (satelliteMoisture != null) 'satellite_moisture': '$satelliteMoisture',
+      'language': language,
+    };
+    final uri = Uri.parse(
+      '${SatelliteConfig.edgeFunctionsBase}/weather',
+    ).replace(queryParameters: query);
+    Map<String, dynamic> data;
+    try {
+      data = await _get(uri.toString(), jwt);
+    } on SatelliteApiException catch (error) {
+      final message = error.message.toLowerCase();
+      if (!message.contains('end_date') &&
+          !message.contains('date_range') &&
+          !message.contains('date range')) {
+        rethrow;
+      }
+      final retryUri = Uri.parse('${SatelliteConfig.edgeFunctionsBase}/weather')
+          .replace(
+            queryParameters: {...query, 'end_date': endDate, 'end': endDate},
+          );
+      data = await _get(retryUri.toString(), jwt);
+    }
+    return FarmWeatherSnapshot.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> saveFarmStatusUpdate({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    required String farmerName,
+    required String farmName,
+    required String crop,
+    required String variety,
+    required String stage,
+    required String stageQuestion,
+    required int daysAfterSowing,
+    required String statusText,
+    String? priorStatus,
+    String? source,
+  }) async {
+    final data =
+        await _post('${SatelliteConfig.edgeFunctionsBase}/farm-status-update', {
+          'farmId': farmId,
+          'phone': farmerPhone,
+          if (farmerId != null && farmerId.trim().isNotEmpty)
+            'farmerId': farmerId.trim(),
+          'farmerName': farmerName,
+          'farmName': farmName,
+          'crop': crop,
+          'variety': variety,
+          'stage': stage,
+          'stageQuestion': stageQuestion,
+          'daysAfterSowing': daysAfterSowing,
+          'statusText': statusText,
+          if (priorStatus != null) 'priorStatus': priorStatus,
+          'source': source ?? 'farmer_dashboard_status_chat',
+          'updatedAt': DateTime.now().toIso8601String(),
+        }, jwt);
+    return data;
+  }
+
+  Future<FarmTimelineEvent?> createFarmTimelineEvent({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    required String eventType,
+    required String title,
+    required String message,
+    String? stage,
+    String severity = 'info',
+    Map<String, dynamic> payload = const {},
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farm-timeline-events',
+      {
+        'action': 'create',
+        'farmId': farmId,
+        'phone': farmerPhone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+        'eventType': eventType,
+        'title': title,
+        'message': message,
+        if (stage != null && stage.trim().isNotEmpty) 'stage': stage.trim(),
+        'severity': severity,
+        'payload': payload,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      jwt,
+    );
+    final raw = data['event'];
+    if (raw is Map) {
+      return FarmTimelineEvent.fromJson(Map<String, dynamic>.from(raw));
+    }
+    return null;
+  }
+
+  Future<void> saveFarmDataSnapshot({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    required String source,
+    required Map<String, dynamic> snapshot,
+  }) async {
+    await _post('${SatelliteConfig.edgeFunctionsBase}/farm-data-snapshots', {
+      'action': 'record',
+      'farmId': farmId,
+      'phone': farmerPhone,
+      if (farmerId != null && farmerId.trim().isNotEmpty)
+        'farmerId': farmerId.trim(),
+      'source': source,
+      'snapshot': snapshot,
+      'collectedAt': DateTime.now().toIso8601String(),
+    }, jwt);
+  }
+
+  Future<List<FarmTimelineEvent>> listFarmTimelineEvents({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    int limit = 80,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farm-timeline-events',
+      {
+        'action': 'list',
+        'farmId': farmId,
+        'phone': farmerPhone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+        'limit': limit,
+      },
+      jwt,
+    );
+    final raw = data['events'];
+    return (raw as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (row) => FarmTimelineEvent.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .toList(growable: false);
+  }
+
+  Future<CropLifecycleAdvice> getCropLifecycleAdvice({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    required String crop,
+    required String growthStage,
+    required int daysAfterSowing,
+    String? variety,
+    String? district,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/crop-lifecycle-advice',
+      {
+        'farmId': farmId,
+        'phone': farmerPhone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+        'crop': crop,
+        'growthStage': growthStage,
+        'daysAfterSowing': daysAfterSowing,
+        if (variety != null && variety.trim().isNotEmpty)
+          'variety': variety.trim(),
+        if (district != null && district.trim().isNotEmpty)
+          'district': district.trim(),
+      },
+      jwt,
+    );
+    return CropLifecycleAdvice.fromJson(data);
+  }
+
   Future<List<Map<String, dynamic>>> getDiseaseScoutZones({
     required String farmId,
     required String? jwt,
+    String? farmerPhone,
+    String? farmerId,
   }) async {
+    final phone = farmerPhone?.trim();
+    if (phone != null && phone.isNotEmpty) {
+      final data =
+          await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
+            'action': 'disease_data',
+            'farmId': farmId,
+            'phone': phone,
+            if (farmerId != null && farmerId.trim().isNotEmpty)
+              'farmerId': farmerId.trim(),
+          }, jwt);
+      final list = data['scout_zones'] as List? ?? const [];
+      return list
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+    }
+
     final url =
         '${SatelliteConfig.restBase}/disease_scout_zones'
         '?select=*&farm_id=eq.$farmId&order=scan_date.desc,zone_rank.asc';
@@ -323,10 +762,84 @@ class SatelliteService {
     return list.whereType<Map<String, dynamic>>().toList(growable: false);
   }
 
+  Future<FarmerDiseaseData> getFarmerDiseaseData({
+    required String farmId,
+    required String? jwt,
+    required String farmerPhone,
+    String? farmerId,
+  }) async {
+    final phone = farmerPhone.trim();
+    if (phone.isEmpty) {
+      throw SatelliteApiException('Farmer phone is required');
+    }
+    final data =
+        await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
+          'action': 'disease_data',
+          'farmId': farmId,
+          'phone': phone,
+          if (farmerId != null && farmerId.trim().isNotEmpty)
+            'farmerId': farmerId.trim(),
+        }, jwt);
+    List<Map<String, dynamic>> rows(String key) {
+      final list = data[key] as List? ?? const [];
+      return list
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+    }
+
+    return FarmerDiseaseData(
+      scoutZones: rows('scout_zones'),
+      riskCells: rows('risk_cells'),
+    );
+  }
+
+  Future<FarmerFarmSummary> getFarmerFarmSummary({
+    required String farmId,
+    required String? jwt,
+    required String farmerPhone,
+    String? farmerId,
+  }) async {
+    final phone = farmerPhone.trim();
+    if (phone.isEmpty) {
+      throw SatelliteApiException('Farmer phone is required');
+    }
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farmer-farm-summary',
+      {
+        'farmId': farmId,
+        'phone': phone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+      },
+      jwt,
+    );
+    return FarmerFarmSummary.fromJson(data);
+  }
+
   Future<List<Map<String, dynamic>>> getDiseaseRiskCells({
     required String farmId,
     required String? jwt,
+    String? farmerPhone,
+    String? farmerId,
   }) async {
+    final phone = farmerPhone?.trim();
+    if (phone != null && phone.isNotEmpty) {
+      final data =
+          await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
+            'action': 'disease_data',
+            'farmId': farmId,
+            'phone': phone,
+            if (farmerId != null && farmerId.trim().isNotEmpty)
+              'farmerId': farmerId.trim(),
+          }, jwt);
+      final list = data['risk_cells'] as List? ?? const [];
+      return list
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList(growable: false);
+    }
+
     final url =
         '${SatelliteConfig.restBase}/disease_risk_cells'
         '?select=*&farm_id=eq.$farmId&order=scan_date.desc,composite_risk.desc&limit=60';
@@ -346,7 +859,23 @@ class SatelliteService {
   Future<void> insertDiseaseScoutZone({
     required Map<String, dynamic> payload,
     required String? jwt,
+    String? farmerPhone,
+    String? farmerId,
   }) async {
+    final phone = farmerPhone?.trim();
+    final farmId = '${payload['farm_id'] ?? ''}'.trim();
+    if (phone != null && phone.isNotEmpty) {
+      await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
+        'action': 'insert_scout_zone',
+        'farmId': farmId,
+        'phone': phone,
+        'payload': payload,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+      }, jwt);
+      return;
+    }
+
     final url = '${SatelliteConfig.restBase}/disease_scout_zones';
     final response = await http
         .post(
@@ -363,6 +892,40 @@ class SatelliteService {
     }
   }
 
+  Future<void> insertFarmIssueAction({
+    required Map<String, dynamic> payload,
+    required String? jwt,
+    String? farmerPhone,
+    String? farmerId,
+  }) async {
+    final body = <String, dynamic>{
+      ...payload,
+      if (farmerPhone != null && farmerPhone.trim().isNotEmpty)
+        'farmer_phone': farmerPhone.trim(),
+      if (farmerId != null && farmerId.trim().isNotEmpty)
+        'farmer_id': farmerId.trim(),
+    };
+    final response = await http
+        .post(
+          Uri.parse('${SatelliteConfig.restBase}/farm_issue_actions'),
+          headers: {
+            ..._headers(jwt),
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 20));
+    if (response.statusCode != 201 &&
+        response.statusCode != 200 &&
+        response.statusCode != 204) {
+      throw SatelliteApiException(
+        'Failed to save farm issue action',
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   Future<DiseaseScreenResult> runDiseaseScreen({
     required String farmId,
     required String crop,
@@ -370,7 +933,10 @@ class SatelliteService {
     required String season,
     Map<String, dynamic>? geometry,
     required String? jwt,
+    String? farmerPhone,
+    String? farmerId,
   }) async {
+    final phone = farmerPhone?.trim();
     final data = await _post(
       '${SatelliteConfig.edgeFunctionsBase}/disease-risk-screen',
       {
@@ -378,7 +944,13 @@ class SatelliteService {
         'crop': crop,
         'growth_stage': growthStage,
         'season': season,
-        'geometry': ?geometry,
+        if (geometry != null) 'geometry': geometry,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+        if (phone != null &&
+            phone.isNotEmpty &&
+            farmerId != null &&
+            farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
       },
       jwt,
     );
@@ -397,6 +969,45 @@ class SatelliteService {
     return FarmAlertAdvice.fromJson(data);
   }
 
+  Future<FarmAssistantAnswer> askFarmAssistant({
+    required String farmId,
+    required String farmerPhone,
+    String? farmerId,
+    required String question,
+    required String? jwt,
+    String language = 'en',
+    String? farmName,
+    String? crop,
+    String? variety,
+    String? location,
+    String? growthStage,
+    int? daysAfterSowing,
+  }) async {
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farm-assistant-chat',
+      {
+        'farmId': farmId,
+        'phone': farmerPhone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+        'question': question,
+        'language': language,
+        if (farmName != null && farmName.trim().isNotEmpty)
+          'farmName': farmName.trim(),
+        if (crop != null && crop.trim().isNotEmpty) 'crop': crop.trim(),
+        if (variety != null && variety.trim().isNotEmpty)
+          'variety': variety.trim(),
+        if (location != null && location.trim().isNotEmpty)
+          'location': location.trim(),
+        if (growthStage != null && growthStage.trim().isNotEmpty)
+          'growthStage': growthStage.trim(),
+        if (daysAfterSowing != null) 'daysAfterSowing': daysAfterSowing,
+      },
+      jwt,
+    );
+    return FarmAssistantAnswer.fromJson(data);
+  }
+
   /// Uploads a field photo to the private disease-photos bucket and returns
   /// the storage path used by disease-image-diagnose.
   Future<String> uploadDiseasePhoto({
@@ -404,8 +1015,7 @@ class SatelliteService {
     required String farmId,
     required String? jwt,
   }) async {
-    final path =
-        '$farmId/${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final path = '$farmId/${DateTime.now().millisecondsSinceEpoch}.jpg';
     final url = '${SatelliteConfig.url}/storage/v1/object/disease-photos/$path';
     final response = await http
         .post(

@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../config/locale_text.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
 import '../services/fpc_procurement_service.dart';
+import '../widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoReceiverScreen extends StatefulWidget {
@@ -65,7 +68,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not load received product records.';
+        _error = UiStrings.t('could_not_load_received_products');
         _loadingRecords = false;
       });
     }
@@ -97,7 +100,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
     } catch (_) {
       setState(() {
         _trace = null;
-        _error = 'Could not read this harvest QR.';
+      _error = UiStrings.t('could_not_read_harvest_qr');
         _scanLocked = false;
       });
     }
@@ -135,7 +138,11 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
         ];
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Received lot ${saved.batchId} saved.')),
+        SnackBar(
+          content: Text(
+            UiStrings.f('received_lot_saved', {'batch': saved.batchId}),
+          ),
+        ),
       );
     } on FpcProcurementException catch (e) {
       if (!mounted) return;
@@ -147,7 +154,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _error = 'Could not save received product in remote database.';
+        _error = UiStrings.t('could_not_save_received_product');
       });
     }
   }
@@ -158,7 +165,12 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
       backgroundColor: AppTheme.surface,
       extendBody: true,
       bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.receiver),
-      appBar: AppBar(title: const Text('FPC Receiver')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('fpc_receiver')),
+      ),
       body: RefreshIndicator(
         onRefresh: _loadRecords,
         child: ListView(
@@ -219,20 +231,20 @@ class _ReceiverScannerCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Receive Harvest Lot',
+          Text(
+            UiStrings.t('receive_harvest_lot'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.black,
               fontSize: 21,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Scan a public harvest QR sticker. The received product is saved to the FPC remote ledger.',
+          Text(
+            UiStrings.t('receive_harvest_lot_desc'),
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppTheme.textMuted,
               fontWeight: FontWeight.w600,
               height: 1.4,
@@ -263,7 +275,7 @@ class _ReceiverScannerCard extends StatelessWidget {
                     key: const ValueKey('receiver-restart'),
                     onPressed: onRestart,
                     icon: const Icon(Icons.photo_camera_outlined),
-                    label: const Text('Scan another harvest QR'),
+                    label: Text(UiStrings.t('scan_another_harvest_qr')),
                   ),
           ),
         ],
@@ -311,7 +323,7 @@ class _TraceReceiveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final batch = _text(trace, 'batchId', 'Harvest lot');
+    final batch = _text(trace, 'batchId', UiStrings.t('harvest_lot'));
     final grade = _text(trace, 'grade');
     final score = _scoreLabel(trace);
     final quantity = _quantityLabel(trace);
@@ -360,7 +372,10 @@ class _TraceReceiveCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${_text(trace, 'crop')} - ${_text(trace, 'variety')}',
+                      UiStrings.f('crop_variety_value', {
+                        'crop': _text(trace, 'crop'),
+                        'variety': _text(trace, 'variety'),
+                      }),
                       style: const TextStyle(
                         color: AppTheme.textMuted,
                         fontWeight: FontWeight.w700,
@@ -374,9 +389,9 @@ class _TraceReceiveCard extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _ReceiveMetric(label: 'Grade', value: grade),
-              _ReceiveMetric(label: 'Score', value: score),
-              _ReceiveMetric(label: 'Quantity', value: quantity),
+              _ReceiveMetric(label: UiStrings.t('grade'), value: grade),
+              _ReceiveMetric(label: UiStrings.t('score'), value: score),
+              _ReceiveMetric(label: UiStrings.t('quantity'), value: quantity),
             ],
           ),
           const SizedBox(height: 14),
@@ -388,28 +403,61 @@ class _TraceReceiveCard extends StatelessWidget {
             ),
             child: Column(
               children: [
-                _ReceiveRow(label: 'Batch ID', value: batch),
-                _ReceiveRow(label: 'Analysis ID', value: _text(trace, 'analysisId')),
-                _ReceiveRow(label: 'Farmer', value: _text(trace, 'farmerName')),
-                _ReceiveRow(label: 'Farmer ID', value: _text(trace, 'farmerId')),
-                _ReceiveRow(label: 'Farm', value: _text(trace, 'farm')),
-                _ReceiveRow(label: 'Farm ID', value: _text(trace, 'farmId')),
-                _ReceiveRow(label: 'Village', value: _text(trace, 'village')),
-                _ReceiveRow(label: 'Crop', value: _text(trace, 'crop')),
-                _ReceiveRow(label: 'Product', value: _text(trace, 'product')),
-                _ReceiveRow(label: 'Variety', value: _text(trace, 'variety')),
-                _ReceiveRow(label: 'Bags', value: _bagLabel(trace)),
-                _ReceiveRow(label: 'Quantity', value: quantity),
-                _ReceiveRow(label: 'Moisture', value: moisture),
+                _ReceiveRow(label: UiStrings.t('batch_id'), value: batch),
                 _ReceiveRow(
-                  label: 'Moisture source',
+                  label: UiStrings.t('analysis_id'),
+                  value: _text(trace, 'analysisId'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('role_farmer'),
+                  value: _text(trace, 'farmerName'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('farmer_id_label'),
+                  value: _text(trace, 'farmerId'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('farm_label'),
+                  value: _text(trace, 'farm'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('farm_id_label'),
+                  value: _text(trace, 'farmId'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('village'),
+                  value: _text(trace, 'village'),
+                ),
+                _ReceiveRow(label: UiStrings.t('crop'), value: _text(trace, 'crop')),
+                _ReceiveRow(
+                  label: UiStrings.t('product'),
+                  value: _text(trace, 'product'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('variety'),
+                  value: _text(trace, 'variety'),
+                ),
+                _ReceiveRow(label: UiStrings.t('bags'), value: _bagLabel(trace)),
+                _ReceiveRow(label: UiStrings.t('quantity'), value: quantity),
+                _ReceiveRow(label: UiStrings.t('moisture'), value: moisture),
+                _ReceiveRow(
+                  label: UiStrings.t('moisture_source'),
                   value: _text(trace, 'moistureSource'),
                 ),
-                _ReceiveRow(label: 'Standards', value: _text(trace, 'standards')),
-                _ReceiveRow(label: 'Grader', value: _text(trace, 'grader')),
-                _ReceiveRow(label: 'Review', value: _text(trace, 'reviewStatus')),
                 _ReceiveRow(
-                  label: 'Trace generated',
+                  label: UiStrings.t('standards'),
+                  value: _text(trace, 'standards'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('grader'),
+                  value: _text(trace, 'grader'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('review'),
+                  value: _text(trace, 'reviewStatus'),
+                ),
+                _ReceiveRow(
+                  label: UiStrings.t('trace_generated'),
                   value: _dateTimeLabel(trace),
                 ),
               ],
@@ -422,9 +470,9 @@ class _TraceReceiveCard extends StatelessWidget {
                 child: TextField(
                   controller: priceController,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Price/kg',
-                    prefixIcon: Icon(Icons.currency_rupee),
+                  decoration: InputDecoration(
+                    labelText: UiStrings.t('price_per_kg'),
+                    prefixIcon: const Icon(Icons.currency_rupee),
                   ),
                 ),
               ),
@@ -433,9 +481,9 @@ class _TraceReceiveCard extends StatelessWidget {
                 child: TextField(
                   controller: ratingController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Rating 1-5',
-                    prefixIcon: Icon(Icons.star_border_rounded),
+                  decoration: InputDecoration(
+                    labelText: UiStrings.t('rating_1_5'),
+                    prefixIcon: const Icon(Icons.star_border_rounded),
                   ),
                 ),
               ),
@@ -446,9 +494,9 @@ class _TraceReceiveCard extends StatelessWidget {
             controller: notesController,
             minLines: 2,
             maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Receiver notes',
-              prefixIcon: Icon(Icons.notes_outlined),
+            decoration: InputDecoration(
+              labelText: UiStrings.t('receiver_notes'),
+              prefixIcon: const Icon(Icons.notes_outlined),
             ),
           ),
           const SizedBox(height: 14),
@@ -461,7 +509,11 @@ class _TraceReceiveCard extends StatelessWidget {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.save_rounded),
-            label: Text(saving ? 'Saving' : 'Save received product'),
+            label: Text(
+              saving
+                  ? UiStrings.t('saving')
+                  : UiStrings.t('save_received_product'),
+            ),
           ),
         ],
       ),
@@ -498,7 +550,7 @@ class _ReceiveMetric extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              value,
+              UiStrings.label(value),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -532,9 +584,9 @@ class _ReceiverLedger extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Received Products Ledger',
-            style: TextStyle(
+          Text(
+            UiStrings.t('received_products_ledger'),
+            style: const TextStyle(
               color: Colors.black,
               fontSize: 19,
               fontWeight: FontWeight.w900,
@@ -544,9 +596,9 @@ class _ReceiverLedger extends StatelessWidget {
           if (loading)
             const Center(child: CircularProgressIndicator())
           else if (records.isEmpty)
-            const Text(
-              'No purchased product received yet. Scan harvest QR stickers to create accountability records.',
-              style: TextStyle(color: AppTheme.textMuted, height: 1.4),
+            Text(
+              UiStrings.t('no_received_products'),
+              style: const TextStyle(color: AppTheme.textMuted, height: 1.4),
             )
           else
             ...records.map((record) => _LedgerTile(record: record)),
@@ -565,10 +617,14 @@ class _LedgerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = record.totalValue == null
         ? '--'
-        : 'Rs ${record.totalValue!.toStringAsFixed(0)}';
+        : UiStrings.f('rs_value', {
+            'value': LocaleText.number(record.totalValue!, fractionDigits: 0),
+          });
     final quantity = record.quantityKg == null
         ? '--'
-        : '${record.quantityKg!.toStringAsFixed(1)} kg';
+        : UiStrings.f('kg_value_plain', {
+            'value': LocaleText.number(record.quantityKg!, fractionDigits: 1),
+          });
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
@@ -600,12 +656,18 @@ class _LedgerTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  record.batchId.isEmpty ? 'Received lot' : record.batchId,
+                  record.batchId.isEmpty
+                      ? UiStrings.t('received_lot')
+                      : record.batchId,
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${record.cropType} - $quantity - $total',
+                  UiStrings.f('crop_quantity_total', {
+                    'crop': record.cropType,
+                    'quantity': quantity,
+                    'total': total,
+                  }),
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,
@@ -656,7 +718,7 @@ class _ReceiveRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value,
+              UiStrings.label(value),
               style: const TextStyle(
                 color: Colors.black,
                 fontWeight: FontWeight.w800,
@@ -719,29 +781,35 @@ double? _toDouble(String value) {
 String _scoreLabel(Map<String, dynamic> source) {
   final score = _text(source, 'score');
   if (score == '--') return score;
-  return score.contains('/') ? score : '$score/100';
+  return score.contains('/')
+      ? LocaleText.digits(score)
+      : UiStrings.f('score_out_of_100', {'score': score});
 }
 
 String _quantityLabel(Map<String, dynamic> source) {
   final quantity = _text(source, 'totalKg');
   if (quantity == '--') return quantity;
   final lower = quantity.toLowerCase();
-  return lower.contains('kg') ? quantity : '$quantity kg';
+  return lower.contains('kg')
+      ? LocaleText.digits(quantity)
+      : UiStrings.f('kg_value_plain', {'value': quantity});
 }
 
 String _bagLabel(Map<String, dynamic> source) {
   final bagCount = _text(source, 'bagCount');
   final bagSize = _text(source, 'bagSizeKg');
   if (bagCount == '--' && bagSize == '--') return '--';
-  if (bagCount == '--') return '$bagSize kg bags';
+  if (bagCount == '--') {
+    return UiStrings.f('kg_bags_value', {'value': bagSize});
+  }
   if (bagSize == '--') return bagCount;
-  return '$bagCount bags x $bagSize kg';
+  return UiStrings.f('bags_x_kg_value', {'count': bagCount, 'size': bagSize});
 }
 
 String _percentLabel(Map<String, dynamic> source, String key) {
   final value = _text(source, key);
   if (value == '--') return value;
-  return value.endsWith('%') ? value : '$value%';
+  return value.endsWith('%') ? LocaleText.digits(value) : '${LocaleText.digits(value)}%';
 }
 
 String _dateTimeLabel(Map<String, dynamic> source) {
@@ -750,8 +818,5 @@ String _dateTimeLabel(Map<String, dynamic> source) {
   final parsed = DateTime.tryParse(raw);
   if (parsed == null) return raw;
   final local = parsed.toLocal();
-  return '${local.day}/${local.month}/${local.year} '
-      '${_two(local.hour)}:${_two(local.minute)}';
+  return '${LocaleText.date(local, pattern: 'dd/MM/yyyy')} ${LocaleText.time(local)}';
 }
-
-String _two(int value) => value.toString().padLeft(2, '0');

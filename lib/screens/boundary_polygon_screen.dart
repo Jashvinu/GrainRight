@@ -5,14 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/locale_text.dart';
 import '../config/satellite_config.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
+import '../services/local_app_database.dart';
 import '../services/location_service.dart';
 import '../services/map_tile_provider.dart';
 import '../services/network_status_service.dart';
 import '../services/offline_map_service.dart';
 import '../utils/polygon_geometry.dart';
+import '../widgets/app_back_button.dart';
 
 class BoundaryPolygonScreen extends StatefulWidget {
   final List<List<double>>? initialPolygon;
@@ -24,6 +29,7 @@ class BoundaryPolygonScreen extends StatefulWidget {
 }
 
 class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
+  static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
   final _mapController = MapController();
   final _locationService = LocationService();
@@ -34,6 +40,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
 
   bool _mapReady = false;
   bool _loadingLocation = true;
+  bool _loadingDownloadedMaps = false;
+  OfflineMapRegionRecord? _selectedOfflineRegion;
   LatLng _center = LatLng(
     SatelliteConfig.defaultCenter.latitude,
     SatelliteConfig.defaultCenter.longitude,
@@ -63,10 +71,18 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
 
   Future<void> _loadInitialTarget() async {
     try {
+      final regions = await _refreshDownloadedRegions();
+      if (!mounted) return;
+
       final hasNetwork = await _networkStatusService.hasNetworkInterface();
       if (!mounted) return;
       if (!hasNetwork) {
-        // Still try location; if it fails we fall back to the default center.
+        final preferred = await _preferredOfflineRegion(regions);
+        if (!mounted) return;
+        if (preferred != null) {
+          _focusOfflineRegion(preferred, showSnack: false);
+          return;
+        }
       }
 
       final quickLocation = await _locationService.getLastKnownLocation();
@@ -90,6 +106,144 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       if (mounted) {
         setState(() => _loadingLocation = false);
       }
+    }
+  }
+
+  Future<List<OfflineMapRegionRecord>> _refreshDownloadedRegions() async {
+    try {
+      final regions = await _offlineMapService.listRegions();
+      final readyRegions = regions.where(_canUseOfflineRegion).toList();
+      return readyRegions;
+    } catch (e) {
+      debugPrint('[BoundaryPolygonScreen._refreshDownloadedRegions] $e');
+      return const [];
+    }
+  }
+
+  bool _canUseOfflineRegion(OfflineMapRegionRecord region) {
+    if (region.tileCount <= 0 || region.downloadedTileCount <= 0) {
+      return false;
+    }
+    return region.status == 'ready' ||
+        region.downloadedTileCount >= region.tileCount;
+  }
+
+  Future<OfflineMapRegionRecord?> _preferredOfflineRegion(
+    List<OfflineMapRegionRecord> regions,
+  ) async {
+    if (regions.isEmpty) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final preferredId = prefs.getString(_preferredRegionKey);
+    if (preferredId == null || preferredId.isEmpty) return regions.first;
+    for (final region in regions) {
+      if (region.regionId == preferredId) return region;
+    }
+    return regions.first;
+  }
+
+  Future<void> _savePreferredOfflineRegion(String regionId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_preferredRegionKey, regionId);
+  }
+
+  Future<void> _selectDownloadedMap() async {
+    if (_loadingDownloadedMaps) return;
+    setState(() => _loadingDownloadedMaps = true);
+    final regions = await _refreshDownloadedRegions();
+    if (mounted) setState(() => _loadingDownloadedMaps = false);
+    if (!mounted) return;
+
+    if (regions.isEmpty) {
+      Get.snackbar(
+        UiStrings.t('downloaded_maps'),
+        UiStrings.t('no_downloaded_field_maps_available'),
+      );
+      return;
+    }
+
+    final selected = await showModalBottomSheet<OfflineMapRegionRecord>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    UiStrings.t('select_downloaded_field_map'),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                );
+              }
+
+              final region = regions[index - 1];
+              final isSelected =
+                  _selectedOfflineRegion?.regionId == region.regionId;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  isSelected ? Icons.offline_pin_rounded : Icons.map_outlined,
+                  color: isSelected ? AppTheme.green : AppTheme.textMuted,
+                ),
+                title: Text(
+                  region.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                subtitle: Text(
+                  UiStrings.f('downloaded_region_summary', {
+                    'radius': region.radiusKm,
+                    'minZoom': region.minZoom,
+                    'maxZoom': region.maxZoom,
+                    'downloaded': region.downloadedTileCount,
+                    'total': region.tileCount,
+                  }),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: isSelected
+                    ? const Icon(Icons.check_circle, color: AppTheme.green)
+                    : const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).pop(region),
+              );
+            },
+            separatorBuilder: (_, index) =>
+                index == 0 ? const SizedBox(height: 6) : const Divider(),
+            itemCount: regions.length + 1,
+          ),
+        );
+      },
+    );
+
+    if (selected != null) _focusOfflineRegion(selected);
+  }
+
+  void _focusOfflineRegion(
+    OfflineMapRegionRecord region, {
+    bool showSnack = true,
+  }) {
+    final center = LatLng(region.centerLat, region.centerLng);
+    final zoom = region.maxZoom.clamp(10, mapTileMaxZoom.toInt()).toDouble();
+    setState(() {
+      _center = center;
+      _zoom = zoom;
+      _selectedOfflineRegion = region;
+    });
+    unawaited(_savePreferredOfflineRegion(region.regionId));
+    _moveMap(center, zoom);
+    if (showSnack) {
+      Get.snackbar(
+        UiStrings.t('downloaded_map_selected'),
+        UiStrings.f('loaded_offline_boundary_map', {'region': region.label}),
+      );
     }
   }
 
@@ -156,23 +310,37 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   Widget build(BuildContext context) {
     final areaHectares = PolygonGeometry.areaHectares(_points);
     final instruction = _points.isEmpty
-        ? 'Tap corners to build the farm boundary.'
+        ? UiStrings.t('tap_corners_boundary')
         : _points.length == 1
-            ? 'Add a second point to create the first edge.'
+            ? UiStrings.t('add_second_boundary_point')
             : _points.length == 2
-                ? 'Add a third point to close the polygon.'
-                : 'Drag points to refine the boundary, then confirm.';
+                ? UiStrings.t('add_third_boundary_point')
+                : UiStrings.t('drag_points_confirm_boundary');
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Draw farm boundary'),
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('draw_farm_boundary')),
         actions: [
           IconButton(
-            tooltip: 'Re-center',
+            tooltip: UiStrings.t('re_center'),
             onPressed: _loadingLocation
                 ? null
                 : () => _moveMap(_center, _zoom),
             icon: const Icon(Icons.my_location_rounded),
+          ),
+          IconButton(
+            tooltip: UiStrings.t('downloaded_maps'),
+            onPressed: _loadingDownloadedMaps ? null : _selectDownloadedMap,
+            icon: _loadingDownloadedMaps
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.offline_pin_outlined),
           ),
         ],
       ),
@@ -201,10 +369,14 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               },
             ),
             children: [
-              const OfflineMapBackground(
-                message: 'Offline map\nTap points to mark boundary',
+              OfflineMapBackground(
+                message: UiStrings.t('offline_map_tap_boundary'),
               ),
-              OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
+              OfflineAwareTileLayer(
+                urlTemplate: fieldImageryTileUrl,
+                offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
+                maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
+              ),
               if (_points.length >= 2)
                 PolylineLayer(
                   polylines: [
@@ -276,7 +448,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
           Positioned(
             left: 16,
             right: 16,
-            top: 16,
+            top: _selectedOfflineRegion == null ? 16 : 64,
             child: SafeArea(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -316,6 +488,59 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               ),
             ),
           ),
+          if (_selectedOfflineRegion != null)
+            Positioned(
+              left: 16,
+              right: 16,
+              top: 16,
+              child: SafeArea(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppTheme.greenDark.withValues(alpha: 0.94),
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.offline_pin_rounded,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _selectedOfflineRegion!.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             left: 16,
             right: 16,
@@ -340,8 +565,16 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                       Expanded(
                         child: Text(
                           _points.length >= 3
-                              ? '${areaHectares.toStringAsFixed(2)} ha'
-                              : 'Add ${3 - _points.length} more point${3 - _points.length == 1 ? '' : 's'} to confirm',
+                              ? UiStrings.f('hectare_value', {
+                                  'value': LocaleText.number(
+                                    areaHectares,
+                                    fractionDigits: 2,
+                                  ),
+                                })
+                              : UiStrings.f('points_more_to_confirm', {
+                                  'count': 3 - _points.length,
+                                  'plural': 3 - _points.length == 1 ? '' : 's',
+                                }),
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             color: AppTheme.textDark,
@@ -350,17 +583,17 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                       ),
                       TextButton(
                         onPressed: _points.isEmpty ? null : _removeLastPoint,
-                        child: const Text('Undo'),
+                        child: Text(UiStrings.t('undo')),
                       ),
                       TextButton(
                         onPressed: _points.isEmpty ? null : _clearPoints,
-                        child: const Text('Redraw'),
+                        child: Text(UiStrings.t('redraw')),
                       ),
                       const SizedBox(width: 8),
                       ElevatedButton.icon(
                         onPressed: _confirm,
                         icon: const Icon(Icons.check_rounded),
-                        label: const Text('Confirm'),
+                        label: Text(UiStrings.t('confirm')),
                       ),
                     ],
                   ),

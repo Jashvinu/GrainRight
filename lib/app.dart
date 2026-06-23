@@ -12,6 +12,7 @@ import 'controllers/satellite_controller.dart';
 import 'screens/splash_screen.dart';
 import 'screens/farmer_home_screen.dart';
 import 'screens/farmer_login_screen.dart';
+import 'screens/farmer_signup_screen.dart';
 import 'screens/fpc_login_screen.dart';
 import 'screens/fpo_farmer_qr_scan_screen.dart';
 import 'screens/fpo_grading_review_screen.dart';
@@ -103,6 +104,7 @@ class KalsubaiFarmsApp extends StatelessWidget {
         GetPage(name: '/', page: () => const SplashScreen()),
         GetPage(name: '/login', page: () => const MainLoginScreen()),
         GetPage(name: '/farmer/login', page: () => const FarmerLoginScreen()),
+        GetPage(name: '/farmer/signup', page: () => const FarmerSignupScreen()),
         GetPage(name: '/fpc/login', page: () => const FpcLoginScreen()),
         GetPage(
           name: '/farmer',
@@ -112,6 +114,7 @@ class KalsubaiFarmsApp extends StatelessWidget {
         GetPage(
           name: '/farmer/ai-chat',
           page: () => const FarmerAiChatScreen(),
+          binding: BindingsBuilder(_bindSatelliteFarmFlow),
         ),
         GetPage(
           name: '/farmer/ai-grading',

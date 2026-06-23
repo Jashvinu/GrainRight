@@ -1,0 +1,43 @@
+{
+  "doc_source": "crop_lifecycle_pearl_millet_local_2026",
+  "crop": "pearl_millet",
+  "source_title": "Bajara Details Lifecycle Doc",
+  "records": [
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "germination-seedling",
+      "content": "Pearl millet or bajra at 0-15 DAS needs uniform emergence, shallow sowing, and quick gap filling. Avoid waterlogging, crusting, and seedling pests; early moisture stress can permanently reduce plant population.",
+      "metadata": { "das_start": 0, "das_end": 15, "aliases": ["bajra", "bajari"] }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "vegetative-tillering",
+      "content": "Pearl millet vegetative growth and tillering usually spans 16-35 DAS. Weed control and balanced nutrition are the main tasks. Scout for downy mildew, leaf spots, shoot fly, and dry patches after hot windy days.",
+      "metadata": { "das_start": 16, "das_end": 35 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "booting-flowering",
+      "content": "Pearl millet booting and flowering around 36-60 DAS is sensitive to heat and moisture stress. Prioritize irrigation if ET0 is high and rain is low, check panicle emergence, and monitor ergot, smut, and downy mildew symptoms.",
+      "metadata": { "das_start": 36, "das_end": 60 }
+    },
+    {
+      "chunk_type": "crop_cycle",
+      "growth_stage": "grain-filling-maturity",
+      "content": "Pearl millet grain filling and maturity from about 61 DAS onward needs stress-free grain fill followed by dry harvest conditions. Watch for bird damage, lodging, smut, and late leaf diseases, and plan harvest when grains are hard and heads dry.",
+      "metadata": { "das_start": 61, "das_end": 95 }
+    },
+    {
+      "chunk_type": "water",
+      "growth_stage": "booting-flowering",
+      "content": "Pearl millet tolerates drought better than rice but loses yield quickly if stress occurs during booting, flowering, or early grain filling. Combine forecast rain, ET0, heat, and satellite moisture before irrigation decisions.",
+      "metadata": { "priority": "high" }
+    },
+    {
+      "chunk_type": "scout_task",
+      "growth_stage": "vegetative-flowering",
+      "content": "Pearl millet scout task: check field edges and low patches for downy mildew, inspect leaf whorls and panicles, mark smut or ergot-like heads, and compare dry patches with irrigation coverage.",
+      "metadata": { "frequency_days": 5 }
+    }
+  ]
+}

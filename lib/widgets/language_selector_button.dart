@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../config/ui_strings.dart';
 import '../config/theme.dart';
 
 class LanguageOption {
@@ -18,18 +19,20 @@ class LanguageSelectorButton extends StatelessWidget {
 
   final String code;
   final ValueChanged<String> onChanged;
+  final bool compact;
 
   const LanguageSelectorButton({
     super.key,
     required this.code,
     required this.onChanged,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
       initialValue: code,
-      tooltip: 'Change language',
+      tooltip: UiStrings.t('change_language'),
       position: PopupMenuPosition.under,
       offset: const Offset(0, 8),
       elevation: 10,
@@ -64,6 +67,7 @@ class LanguageSelectorButton extends StatelessWidget {
         child: _LanguageButtonFace(
           key: ValueKey(code),
           label: labelFor(code),
+          compact: compact,
         ),
       ),
     );
@@ -80,17 +84,21 @@ class LanguageSelectorButton extends StatelessWidget {
 
 class _LanguageButtonFace extends StatelessWidget {
   final String label;
+  final bool compact;
 
   const _LanguageButtonFace({
     super.key,
     required this.label,
+    required this.compact,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(minHeight: 44, maxWidth: 170),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+      padding: compact
+          ? const EdgeInsets.all(10)
+          : const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
@@ -111,23 +119,25 @@ class _LanguageButtonFace extends StatelessWidget {
             color: AppTheme.green,
             size: 20,
           ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.greenDark,
-                fontWeight: FontWeight.w800,
+          if (!compact) ...[
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.greenDark,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 4),
-          const Icon(
-            Icons.keyboard_arrow_down_rounded,
-            color: AppTheme.textMuted,
-            size: 20,
-          ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: AppTheme.textMuted,
+              size: 20,
+            ),
+          ],
         ],
       ),
     );

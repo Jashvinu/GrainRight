@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../config/theme.dart';
+import '../../config/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
+import '../../widgets/app_back_button.dart';
 import 'dashboard_screen.dart';
 import 'yield_screen.dart';
 import 'advanced_screen.dart';
@@ -35,11 +37,11 @@ class _SatelliteShellState extends State<SatelliteShell> {
     DiagnosticsScreen(),
   ];
 
-  static const _titles = [
-    'Dashboard',
-    'Yield Prediction',
-    'Advanced Monitoring',
-    'Field Diagnostics',
+  static const _titleKeys = [
+    'dashboard',
+    'yield_prediction',
+    'advanced_monitoring',
+    'field_diagnostics',
   ];
 
   void _showProfileDialog() {
@@ -47,13 +49,15 @@ class _SatelliteShellState extends State<SatelliteShell> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Profile'),
+        title: Text(UiStrings.t('profile')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Signed in as',
-                style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+            Text(
+              UiStrings.t('signed_in_as'),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+            ),
             const SizedBox(height: 4),
             Text(
               auth.currentUser.value?.email ?? '',
@@ -65,7 +69,7 @@ class _SatelliteShellState extends State<SatelliteShell> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(UiStrings.t('close')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -73,7 +77,7 @@ class _SatelliteShellState extends State<SatelliteShell> {
               auth.logout();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Logout'),
+            child: Text(UiStrings.t('logout')),
           ),
         ],
       ),
@@ -84,9 +88,10 @@ class _SatelliteShellState extends State<SatelliteShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_index]),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
+        title: Text(UiStrings.t(_titleKeys[_index])),
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(
+          context,
           onPressed: () => Get.offAllNamed('/login'),
         ),
         actions: [
@@ -102,26 +107,27 @@ class _SatelliteShellState extends State<SatelliteShell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         backgroundColor: Colors.white,
         indicatorColor: AppTheme.greenPale,
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard, color: AppTheme.greenDark),
-            label: 'Dashboard',
+            icon: const Icon(Icons.dashboard_outlined),
+            selectedIcon: const Icon(Icons.dashboard, color: AppTheme.greenDark),
+            label: UiStrings.t('dashboard'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.bar_chart_outlined),
-            selectedIcon: Icon(Icons.bar_chart, color: AppTheme.greenDark),
-            label: 'Yield',
+            icon: const Icon(Icons.bar_chart_outlined),
+            selectedIcon: const Icon(Icons.bar_chart, color: AppTheme.greenDark),
+            label: UiStrings.t('yield'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics, color: AppTheme.greenDark),
-            label: 'Advanced',
+            icon: const Icon(Icons.analytics_outlined),
+            selectedIcon:
+                const Icon(Icons.analytics, color: AppTheme.greenDark),
+            label: UiStrings.t('advanced'),
           ),
           NavigationDestination(
-            icon: Icon(Icons.biotech_outlined),
-            selectedIcon: Icon(Icons.biotech, color: AppTheme.greenDark),
-            label: 'Diagnostics',
+            icon: const Icon(Icons.biotech_outlined),
+            selectedIcon: const Icon(Icons.biotech, color: AppTheme.greenDark),
+            label: UiStrings.t('diagnostics'),
           ),
         ],
       ),

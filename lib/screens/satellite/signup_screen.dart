@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../config/theme.dart';
+import '../../config/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
+import '../../widgets/app_back_button.dart';
 import '../../widgets/farm_hills_background.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -70,26 +72,20 @@ class _SignupScreenState extends State<SignupScreen> {
                       children: [
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: IconButton(
-                            onPressed: _goBack,
-                            icon: const Icon(Icons.arrow_back_rounded),
-                            color: AppTheme.greenDark,
-                            iconSize: 30,
-                            tooltip: 'Back',
-                          ),
+                          child: AppBackButton(onPressed: _goBack),
                         ),
                         const SizedBox(height: 20),
-                        const _AuthHeader(
+                        _AuthHeader(
                           icon: Icons.satellite_alt_outlined,
-                          title: 'Create Account',
-                          subtitle: 'Set up satellite monitoring access',
+                          title: UiStrings.t('create_account'),
+                          subtitle: UiStrings.t('setup_satellite_monitoring'),
                         ),
                         const SizedBox(height: 34),
                         _FormCard(
                           children: [
-                            const Text(
-                              'Email Address',
-                              style: TextStyle(
+                            Text(
+                              UiStrings.t('email_address'),
+                              style: const TextStyle(
                                 color: AppTheme.green,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
@@ -100,18 +96,18 @@ class _SignupScreenState extends State<SignupScreen> {
                               controller: _emailCtrl,
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
-                              decoration: const InputDecoration(
-                                hintText: 'Enter email address',
-                                prefixIcon: Icon(Icons.email_outlined),
+                              decoration: InputDecoration(
+                                hintText: UiStrings.t('enter_email_address'),
+                                prefixIcon: const Icon(Icons.email_outlined),
                               ),
                               validator: (v) => (v?.contains('@') ?? false)
                                   ? null
-                                  : 'Enter a valid email',
+                                  : UiStrings.t('enter_valid_email'),
                             ),
                             const SizedBox(height: 18),
-                            const Text(
-                              'Password',
-                              style: TextStyle(
+                            Text(
+                              UiStrings.t('password'),
+                              style: const TextStyle(
                                 color: AppTheme.green,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
@@ -123,7 +119,7 @@ class _SignupScreenState extends State<SignupScreen> {
                               obscureText: _obscure,
                               textInputAction: TextInputAction.next,
                               decoration: InputDecoration(
-                                hintText: 'Create password',
+                                hintText: UiStrings.t('create_password'),
                                 prefixIcon: const Icon(Icons.lock_outlined),
                                 suffixIcon: IconButton(
                                   icon: Icon(
@@ -137,12 +133,12 @@ class _SignupScreenState extends State<SignupScreen> {
                               ),
                               validator: (v) => (v?.length ?? 0) >= 6
                                   ? null
-                                  : 'At least 6 characters',
+                                  : UiStrings.t('at_least_six_chars'),
                             ),
                             const SizedBox(height: 18),
-                            const Text(
-                              'Confirm Password',
-                              style: TextStyle(
+                            Text(
+                              UiStrings.t('confirm_password'),
+                              style: const TextStyle(
                                 color: AppTheme.green,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
@@ -154,13 +150,13 @@ class _SignupScreenState extends State<SignupScreen> {
                               obscureText: _obscure,
                               textInputAction: TextInputAction.done,
                               onFieldSubmitted: (_) => _submit(),
-                              decoration: const InputDecoration(
-                                hintText: 'Confirm password',
-                                prefixIcon: Icon(Icons.lock_outlined),
+                              decoration: InputDecoration(
+                                hintText: UiStrings.t('confirm_password'),
+                                prefixIcon: const Icon(Icons.lock_outlined),
                               ),
                               validator: (v) => v == _passCtrl.text
                                   ? null
-                                  : 'Passwords do not match',
+                                  : UiStrings.t('passwords_do_not_match'),
                             ),
                             Obx(
                               () => auth.errorMessage.isEmpty
@@ -201,19 +197,19 @@ class _SignupScreenState extends State<SignupScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Row(
+                                  : Row(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
                                         Text(
-                                          'Create Account',
-                                          style: TextStyle(
+                                          UiStrings.t('create_account'),
+                                          style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
-                                        SizedBox(width: 12),
-                                        Icon(Icons.arrow_forward_rounded),
+                                        const SizedBox(width: 12),
+                                        const Icon(Icons.arrow_forward_rounded),
                                       ],
                                     ),
                             ),
@@ -223,8 +219,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         const _SecureLabel(),
                         const SizedBox(height: 18),
                         _HelpCard(
-                          title: 'Already registered?',
-                          subtitle: 'Sign in to your account',
+                          title: UiStrings.t('already_registered'),
+                          subtitle: UiStrings.t('sign_in_to_account'),
                           icon: Icons.login_outlined,
                           onTap: () => Get.back(),
                         ),
@@ -327,18 +323,18 @@ class _SecureLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Row(
+    return Row(
       children: [
-        Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              Icon(Icons.verified_user_outlined, color: AppTheme.green),
-              SizedBox(width: 8),
+              const Icon(Icons.verified_user_outlined, color: AppTheme.green),
+              const SizedBox(width: 8),
               Text(
-                'Secure & Private',
-                style: TextStyle(
+                UiStrings.t('secure_private'),
+                style: const TextStyle(
                   color: AppTheme.green,
                   fontSize: 15,
                   fontWeight: FontWeight.w800,
@@ -347,7 +343,7 @@ class _SecureLabel extends StatelessWidget {
             ],
           ),
         ),
-        Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
       ],
     );
   }

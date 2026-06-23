@@ -5,6 +5,8 @@ import 'package:get/get.dart';
 
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
+import '../config/ui_strings.dart';
+import '../widgets/app_back_button.dart';
 
 class PublicTraceScreen extends StatelessWidget {
   const PublicTraceScreen({super.key});
@@ -34,7 +36,12 @@ class PublicTraceScreen extends StatelessWidget {
     final trace = _trace();
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      appBar: AppBar(title: const Text('Harvest Trace')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: Text(UiStrings.t('harvest_trace')),
+      ),
       body: trace == null
           ? const _TraceError()
           : ListView(
@@ -43,39 +50,39 @@ class PublicTraceScreen extends StatelessWidget {
                 _TraceHero(trace: trace),
                 const SizedBox(height: 14),
                 _TraceSection(
-                  title: 'Lot Details',
+                  title: UiStrings.t('lot_details'),
                   rows: [
-                    _TraceRow('Batch', _text(trace, 'batchId')),
-                    _TraceRow('Analysis ID', _text(trace, 'analysisId')),
-                    _TraceRow('Crop', _text(trace, 'crop')),
-                    _TraceRow('Variety', _text(trace, 'variety')),
-                    _TraceRow('Product', _text(trace, 'product')),
-                    _TraceRow('Quantity', _quantity(trace)),
+                    _TraceRow(UiStrings.t('batch'), _text(trace, 'batchId')),
+                    _TraceRow(UiStrings.t('analysis_id'), _text(trace, 'analysisId')),
+                    _TraceRow(UiStrings.t('crop'), _text(trace, 'crop')),
+                    _TraceRow(UiStrings.t('variety'), _text(trace, 'variety')),
+                    _TraceRow(UiStrings.t('product'), _text(trace, 'product')),
+                    _TraceRow(UiStrings.t('quantity'), _quantity(trace)),
                   ],
                 ),
                 const SizedBox(height: 12),
                 _TraceSection(
-                  title: 'Farm Source',
+                  title: UiStrings.t('farm_source'),
                   rows: [
-                    _TraceRow('Farm', _text(trace, 'farm')),
-                    _TraceRow('Farm ID', _text(trace, 'farmId')),
-                    _TraceRow('Village', _text(trace, 'village')),
-                    _TraceRow('Farmer', _text(trace, 'farmerName')),
-                    _TraceRow('Farmer ID', _text(trace, 'farmerId')),
-                    _TraceRow('Location', _location(trace)),
+                    _TraceRow(UiStrings.t('farm_label'), _text(trace, 'farm')),
+                    _TraceRow(UiStrings.t('farm_id_label'), _text(trace, 'farmId')),
+                    _TraceRow(UiStrings.t('village'), _text(trace, 'village')),
+                    _TraceRow(UiStrings.t('role_farmer'), _text(trace, 'farmerName')),
+                    _TraceRow(UiStrings.t('farmer_id_label'), _text(trace, 'farmerId')),
+                    _TraceRow(UiStrings.t('location'), _location(trace)),
                   ],
                 ),
                 const SizedBox(height: 12),
                 _TraceSection(
-                  title: 'Quality',
+                  title: UiStrings.t('quality'),
                   rows: [
-                    _TraceRow('Grade', _text(trace, 'grade')),
-                    _TraceRow('Score', _score(trace)),
-                    _TraceRow('Moisture', _percent(trace, 'moisture')),
-                    _TraceRow('Moisture Source', _text(trace, 'moistureSource')),
-                    _TraceRow('Standards', _text(trace, 'standards')),
-                    _TraceRow('Grader', _text(trace, 'grader')),
-                    _TraceRow('Review', _text(trace, 'reviewStatus')),
+                    _TraceRow(UiStrings.t('grade'), _text(trace, 'grade')),
+                    _TraceRow(UiStrings.t('score'), _score(trace)),
+                    _TraceRow(UiStrings.t('moisture'), _percent(trace, 'moisture')),
+                    _TraceRow(UiStrings.t('moisture_source'), _text(trace, 'moistureSource')),
+                    _TraceRow(UiStrings.t('standards'), _text(trace, 'standards')),
+                    _TraceRow(UiStrings.t('grader'), _text(trace, 'grader')),
+                    _TraceRow(UiStrings.t('review'), _text(trace, 'reviewStatus')),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -96,26 +103,34 @@ class PublicTraceScreen extends StatelessWidget {
     final bags = _text(trace, 'bagCount');
     final bagSize = _text(trace, 'bagSizeKg');
     if (total == '--') return '--';
-    return '$total kg ($bags bags x $bagSize kg)';
+    return UiStrings.f('trace_quantity_bags', {
+      'total': total,
+      'bags': bags,
+      'bagSize': bagSize,
+    });
   }
 
   static String _score(Map<String, dynamic> trace) {
     final score = _text(trace, 'score');
     if (score == '--') return score;
-    return score.contains('/') ? score : '$score/100';
+    return score.contains('/')
+        ? UiStrings.label(score)
+        : UiStrings.f('score_out_of_100', {'score': score});
   }
 
   static String _location(Map<String, dynamic> trace) {
     final lat = _text(trace, 'farmLatitude');
     final lng = _text(trace, 'farmLongitude');
     if (lat == '--' || lng == '--') return '--';
-    return '$lat, $lng';
+    return UiStrings.f('lat_lng_value', {'lat': lat, 'lng': lng});
   }
 
   static String _percent(Map<String, dynamic> trace, String key) {
     final value = _text(trace, key);
     if (value == '--') return value;
-    return value.endsWith('%') ? value : '$value%';
+    return value.endsWith('%')
+        ? UiStrings.label(value)
+        : UiStrings.f('percent_value', {'value': value});
   }
 
   static String _verifiedAt(Map<String, dynamic> trace) {
@@ -141,7 +156,12 @@ class _TraceHero extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Image.asset(BrandAssets.logo, width: 52, height: 52),
+          Image.asset(
+            BrandAssets.logo,
+            width: 52,
+            height: 52,
+            cacheWidth: 156,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -248,7 +268,7 @@ class _TraceRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value,
+              UiStrings.label(value),
               style: const TextStyle(
                 color: Colors.black,
                 fontWeight: FontWeight.w800,
@@ -282,7 +302,7 @@ class _VerifiedBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Trace verified at $verifiedAt',
+              UiStrings.f('trace_verified_at', {'value': verifiedAt}),
               style: const TextStyle(
                 color: AppTheme.greenDark,
                 fontWeight: FontWeight.w800,
@@ -305,18 +325,18 @@ class _TraceError extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            Icon(Icons.qr_code_2_rounded, size: 72, color: AppTheme.textMuted),
-            SizedBox(height: 16),
+          children: [
+            const Icon(Icons.qr_code_2_rounded, size: 72, color: AppTheme.textMuted),
+            const SizedBox(height: 16),
             Text(
-              'Invalid trace code',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              UiStrings.t('invalid_trace_code'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
-              'Scan a valid Kalsubai Farms harvest QR sticker.',
+              UiStrings.t('scan_valid_harvest_qr'),
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppTheme.textMuted, height: 1.4),
+              style: const TextStyle(color: AppTheme.textMuted, height: 1.4),
             ),
           ],
         ),

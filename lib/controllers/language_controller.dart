@@ -20,6 +20,7 @@ class LanguageController extends GetxController {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     language.value = prefs.getString(_key) ?? 'en';
+    Get.updateLocale(Locale(language.value));
   }
 
   Future<void> toggle() async {
@@ -39,7 +40,7 @@ class LanguageController extends GetxController {
 
   /// Translate a key using the provided map. Falls back to English value.
   String tr(String englishText, Map<String, String> translations) {
-    if (!isMarathi) return englishText;
+    if (language.value == 'en') return englishText;
     return translations[englishText] ?? englishText;
   }
 }
