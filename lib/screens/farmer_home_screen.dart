@@ -61,6 +61,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   static const _harvestTabIndex = 2;
   static const _inventoryTabIndex = 3;
   static const _aiChatTabIndex = 4;
+  static const _farmPageRefreshMinimumDuration = Duration(seconds: 3);
   static const _farmSummaryFreshFor = Duration(minutes: 2);
   static const _liveWeatherFreshFor = Duration(minutes: 2);
   static const _diseaseRemoteFreshFor = Duration(minutes: 3);
@@ -4833,6 +4834,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     }
     var activeIndex = index;
     final farm = _farms[index];
+    final minimumLoadingVisible = Future<void>.delayed(
+      _farmPageRefreshMinimumDuration,
+    );
+    String? refreshErrorMessage;
     setState(() {
       _farmPageRefreshLoading.add(index);
       _farmAlertErrorByFarmIndex.remove(index);
@@ -4887,13 +4892,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         _saveFarmDataSnapshotForFarm(activeIndex, source: 'farm_page_refresh'),
       );
     } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _farmAlertErrorByFarmIndex[activeIndex] = _alertRefreshMessage(e);
-      });
+      refreshErrorMessage = _alertRefreshMessage(e);
     } finally {
+      await minimumLoadingVisible;
       if (mounted) {
-        setState(() => _farmPageRefreshLoading.remove(index));
+        setState(() {
+          if (refreshErrorMessage != null) {
+            _farmAlertErrorByFarmIndex[activeIndex] = refreshErrorMessage;
+          }
+          _farmPageRefreshLoading.remove(index);
+        });
       }
     }
   }
@@ -10811,8 +10819,8 @@ class _FarmPage extends StatelessWidget {
                     const SizedBox(height: 8),
                     _InfoStrip(
                       icon: Icons.sync_rounded,
-                      label: UiStrings.t('refresh_risk'),
-                      value: UiStrings.t('refreshing'),
+                      label: UiStrings.t('initial_farm_sync_title'),
+                      value: UiStrings.t('farm_page_sync_message'),
                     ),
                   ],
                   const SizedBox(height: 14),

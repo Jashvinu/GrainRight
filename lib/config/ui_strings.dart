@@ -621,6 +621,14 @@ class UiStrings {
       'mr':
           'उघडण्यापूर्वी शेत, हवामान, धोका सेल, स्काउट झोन आणि इतिहास लोड होत आहेत.',
     },
+    'farm_page_sync_message': {
+      'en':
+          'Refreshing weather, risk cells, scout zones, advice and history for this farm.',
+      'hi':
+          'इस खेत के लिए मौसम, जोखिम सेल, स्काउट जोन, सलाह और इतिहास रीफ्रेश हो रहे हैं।',
+      'mr':
+          'या शेतासाठी हवामान, धोका सेल, स्काउट झोन, सल्ला आणि इतिहास रीफ्रेश होत आहेत.',
+    },
     'first_farm_loading_title': {
       'en': 'Setting up your farm',
       'hi': 'आपका खेत सेट हो रहा है',
