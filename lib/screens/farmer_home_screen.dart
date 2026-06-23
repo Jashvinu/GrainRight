@@ -61,7 +61,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   static const _harvestTabIndex = 2;
   static const _inventoryTabIndex = 3;
   static const _aiChatTabIndex = 4;
-  static const _farmPageRefreshMinimumDuration = Duration(seconds: 3);
+  static const _farmPageRefreshMinimumDuration = Duration(seconds: 2);
   static const _farmSummaryFreshFor = Duration(minutes: 2);
   static const _liveWeatherFreshFor = Duration(minutes: 2);
   static const _diseaseRemoteFreshFor = Duration(minutes: 3);
