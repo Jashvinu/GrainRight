@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:latlong2/latlong.dart';
 
 import '../config/theme.dart';
 import '../config/ui_strings.dart';
@@ -65,8 +64,7 @@ class FarmerFarmSetupChatScreen extends StatefulWidget {
       _FarmerFarmSetupChatScreenState();
 }
 
-class _FarmerFarmSetupChatScreenState
-    extends State<FarmerFarmSetupChatScreen> {
+class _FarmerFarmSetupChatScreenState extends State<FarmerFarmSetupChatScreen> {
   static const Map<String, List<String>> _cropVarieties = {
     'Finger Millet': ['Gira', 'Phule Nachni'],
     'Foxtail Millet': ['Pragati', 'SiPS-1', 'BHU-8', 'Kalyan'],
@@ -145,8 +143,8 @@ class _FarmerFarmSetupChatScreenState
         final date = _sowingDate == null
             ? '-'
             : '${_sowingDate!.day.toString().padLeft(2, '0')}/'
-                '${_sowingDate!.month.toString().padLeft(2, '0')}/'
-                '${_sowingDate!.year}';
+                  '${_sowingDate!.month.toString().padLeft(2, '0')}/'
+                  '${_sowingDate!.year}';
         return '${UiStrings.t('review_and_continue')}:\n'
             '${UiStrings.t('farm_label')}: ${_displayValue(_farmName)}\n'
             '${UiStrings.t('land_marked_label')}: $_acresText\n'
@@ -328,10 +326,7 @@ class _FarmerFarmSetupChatScreenState
   Future<void> _openPolygonMap() async {
     final polygon = await openBoundaryDrawingMap(initialPolygon: _polygon);
     if (polygon == null || polygon.length < 3) {
-      _appendMessage(
-        UiStrings.t('boundary_not_captured'),
-        isUser: false,
-      );
+      _appendMessage(UiStrings.t('boundary_not_captured'), isUser: false);
       return;
     }
 
@@ -547,7 +542,9 @@ class _FarmerFarmSetupChatScreenState
 
   void _showToast(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _onQuickSelect(String suggestion) async {
@@ -586,7 +583,7 @@ class _FarmerFarmSetupChatScreenState
                 controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
                 itemCount: _messages.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final item = _messages[index];
                   return Align(
@@ -595,7 +592,10 @@ class _FarmerFarmSetupChatScreenState
                         : Alignment.centerLeft,
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 340),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: item.isUser ? AppTheme.greenPale : Colors.white,
                         borderRadius: BorderRadius.circular(16),

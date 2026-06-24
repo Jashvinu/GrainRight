@@ -49,7 +49,7 @@ class AppTheme {
     ),
     navigationBarTheme: NavigationBarThemeData(
       height: 64,
-      iconTheme: MaterialStateProperty.resolveWith(
+      iconTheme: WidgetStateProperty.resolveWith(
         (states) => const IconThemeData(size: 22),
       ),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -159,10 +159,7 @@ class AppTheme {
       // Explicit colors: without them M3 falls back to labelLarge (white),
       // which renders invisibly on the pale chip background (e.g. the add-farm
       // answer chips). Unselected = dark text; selected (green fill) = white.
-      labelStyle: const TextStyle(
-        color: textDark,
-        fontWeight: FontWeight.w600,
-      ),
+      labelStyle: const TextStyle(color: textDark, fontWeight: FontWeight.w600),
       secondaryLabelStyle: const TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w600,
@@ -174,9 +171,7 @@ class AppTheme {
       showCheckmark: false,
     ),
     menuTheme: const MenuThemeData(
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(Colors.white),
-      ),
+      style: MenuStyle(backgroundColor: WidgetStatePropertyAll(Colors.white)),
     ),
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(
@@ -195,16 +190,10 @@ class AppTheme {
         fontWeight: FontWeight.w800,
         letterSpacing: 0,
       ),
-      titleLarge: TextStyle(
-        color: textDark,
-        fontWeight: FontWeight.w700,
-      ),
+      titleLarge: TextStyle(color: textDark, fontWeight: FontWeight.w700),
       bodyLarge: TextStyle(color: textDark, fontSize: 16),
       bodyMedium: TextStyle(color: textDark),
-      labelLarge: TextStyle(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-      ),
+      labelLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
       labelMedium: TextStyle(color: textDark, fontWeight: FontWeight.w600),
     ),
   );

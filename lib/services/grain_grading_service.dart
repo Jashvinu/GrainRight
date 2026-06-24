@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -120,7 +119,8 @@ double? _toNullableDouble(dynamic raw) {
 /// runs Qwen-VL + the ragi rule engine, and returns the result inline.
 /// See docs/11_grain_grading_integration.md.
 class GrainGradingService {
-  GrainGradingService({http.Client? client}) : _client = client ?? http.Client();
+  GrainGradingService({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -135,17 +135,14 @@ class GrainGradingService {
   bool get isConfigured => _uid != null && (_jwt?.isNotEmpty ?? false);
 
   Map<String, String> _functionHeaders() => {
-        'Content-Type': 'application/json',
-        'apikey': SupabaseConfig.anonKey,
-        'Authorization': 'Bearer ${_jwt ?? SupabaseConfig.anonKey}',
-      };
+    'Content-Type': 'application/json',
+    'apikey': SupabaseConfig.anonKey,
+    'Authorization': 'Bearer ${_jwt ?? SupabaseConfig.anonKey}',
+  };
 
   void _ensureConfigured() {
     if (_uid == null) {
-      throw GradingException(
-        'Sign in to grade grain.',
-        notConfigured: true,
-      );
+      throw GradingException('Sign in to grade grain.', notConfigured: true);
     }
     if (_jwt == null || _jwt!.isEmpty) {
       throw GradingException('Your session expired. Please login again.');
@@ -171,7 +168,9 @@ class GrainGradingService {
   }) async {
     _ensureConfigured();
     if (moistureImageBytes == null && manualMoisturePercent == null) {
-      throw GradingException('Provide a moisture-meter photo or a moisture reading.');
+      throw GradingException(
+        'Provide a moisture-meter photo or a moisture reading.',
+      );
     }
 
     if (moistureImageBytes == null) {
@@ -187,11 +186,15 @@ class GrainGradingService {
       moistureImageBytes,
       fileName: moistureImageName,
     );
-    final body = await _invoke('grain-moisture-ocr', payload: {
-      'moisture_image_path': path,
-      if (manualMoisturePercent != null)
-        'manual_moisture_percent': manualMoisturePercent,
-    });
+    final body = await _invoke(
+      'grain-moisture-ocr',
+      payload: {
+        'moisture_image_path': path,
+        // ignore: use_null_aware_elements
+        if (manualMoisturePercent != null)
+          'manual_moisture_percent': manualMoisturePercent,
+      },
+    );
     return MoistureOcrResult.fromJson(body, imagePath: path);
   }
 
@@ -220,7 +223,9 @@ class GrainGradingService {
     if (moistureImageBytes == null &&
         moistureImagePath == null &&
         manualMoisturePercent == null) {
-      throw GradingException('Provide a moisture-meter photo or a moisture reading.');
+      throw GradingException(
+        'Provide a moisture-meter photo or a moisture reading.',
+      );
     }
 
     final grainPath = await _uploadImage(
@@ -254,7 +259,9 @@ class GrainGradingService {
         'fpc_customer_name': fpcCustomerName.trim(),
       if (batchId != null && batchId.trim().isNotEmpty)
         'batch_id': batchId.trim(),
+      // ignore: use_null_aware_elements
       if (bagSizeKg != null) 'bag_size_kg': bagSizeKg,
+      // ignore: use_null_aware_elements
       if (bagCount != null) 'bag_count': bagCount,
     };
     if (moisturePath != null) {
@@ -276,13 +283,16 @@ class GrainGradingService {
     String notes = '',
   }) async {
     _ensureConfigured();
-    await _invoke('grain-grade-feedback', payload: {
-      'analysis_id': analysisId,
-      'true_grade': trueGrade,
-      'true_moisture_risk': trueMoistureRisk.apiValue,
-      'notes': notes,
-      'operator_id': _uid,
-    });
+    await _invoke(
+      'grain-grade-feedback',
+      payload: {
+        'analysis_id': analysisId,
+        'true_grade': trueGrade,
+        'true_moisture_risk': trueMoistureRisk.apiValue,
+        'notes': notes,
+        'operator_id': _uid,
+      },
+    );
   }
 
   // ─── internals ─────────────────────────────────────────────────────────────
@@ -300,7 +310,9 @@ class GrainGradingService {
     final kind = _detectImageKind(bytes, fileName);
     final path =
         '${_uid!}/${DateTime.now().microsecondsSinceEpoch}-${_safeFileStem(fileName)}.${kind.extension}';
-    final uri = Uri.parse('${SupabaseConfig.url}/storage/v1/object/$bucket/$path');
+    final uri = Uri.parse(
+      '${SupabaseConfig.url}/storage/v1/object/$bucket/$path',
+    );
     try {
       final response = await _client
           .post(
@@ -502,11 +514,15 @@ class GrainGradingService {
     try {
       final response = method == 'GET'
           ? await _client
-              .get(uri, headers: _functionHeaders())
-              .timeout(const Duration(seconds: 30))
+                .get(uri, headers: _functionHeaders())
+                .timeout(const Duration(seconds: 30))
           : await _client
-              .post(uri, headers: _functionHeaders(), body: jsonEncode(payload ?? {}))
-              .timeout(const Duration(seconds: 90));
+                .post(
+                  uri,
+                  headers: _functionHeaders(),
+                  body: jsonEncode(payload ?? {}),
+                )
+                .timeout(const Duration(seconds: 90));
       return _decode(response);
     } on GradingException {
       rethrow;
@@ -518,7 +534,9 @@ class GrainGradingService {
   Map<String, dynamic> _decode(http.Response response) {
     dynamic body;
     try {
-      body = response.body.isEmpty ? <String, dynamic>{} : jsonDecode(response.body);
+      body = response.body.isEmpty
+          ? <String, dynamic>{}
+          : jsonDecode(response.body);
     } catch (_) {
       body = <String, dynamic>{};
     }

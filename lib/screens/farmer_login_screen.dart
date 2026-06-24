@@ -19,8 +19,6 @@ class FarmerLoginScreen extends StatefulWidget {
 }
 
 class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
-  static const _supportPhoneDigits = '919876543210';
-
   final _phoneController = TextEditingController();
   String? _phoneError;
 
@@ -429,6 +427,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
   }
 }
 
+// ignore: unused_element
 class _LoginSyncStatus extends StatelessWidget {
   final bool visible;
   final String phone;
@@ -590,6 +589,7 @@ class _LoginSyncStatus extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _LoginHealthCheckCard extends StatelessWidget {
   final bool visible;
   final bool farmerVerified;
@@ -776,6 +776,7 @@ class _LoginHealthRow extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _InlineLanguageSelector extends StatelessWidget {
   final String code;
   final ValueChanged<String> onChanged;

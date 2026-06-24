@@ -51,8 +51,10 @@ class FarmerFarmSummary {
       'high_risk_cells': disease['high_risk_cells'] ?? 0,
       'scout_zones': scoutRows,
       'risk_cells': riskRows,
+      // ignore: use_null_aware_elements
       if (weather != null) 'weather_context': weather,
       'top_disease_risks': topRisks,
+      // ignore: use_null_aware_elements
       if (disease['message'] != null) 'message': disease['message'],
     });
 

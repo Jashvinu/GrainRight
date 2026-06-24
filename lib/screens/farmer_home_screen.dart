@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:get/get.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -6001,8 +6000,8 @@ class _FarmerFarm {
       currentStatusStage: currentStatusStage ?? this.currentStatusStage,
       currentStatusUpdatedAt:
           currentStatusUpdatedAt ?? this.currentStatusUpdatedAt,
-      sowingDate: this.sowingDate,
-      createdAt: this.createdAt,
+      sowingDate: sowingDate,
+      createdAt: createdAt,
       polygon: polygon,
       latitude: latitude,
       longitude: longitude,
@@ -6273,7 +6272,7 @@ class _InventoryPageState extends State<_InventoryPage> {
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
                         itemCount: _farmOptions.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
                         itemBuilder: (context, index) {
                           final farm = _farmOptions[index];
                           return ChoiceChip(
@@ -7706,99 +7705,6 @@ class _WelcomeHero extends StatelessWidget {
                   ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FarmSatelliteOverviewSection extends StatelessWidget {
-  final _FarmSatelliteOverview? overview;
-  final bool isLoading;
-
-  const _FarmSatelliteOverviewSection({
-    required this.overview,
-    required this.isLoading,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tiles = overview?.tiles ?? const [];
-    if (tiles.isEmpty && isLoading) {
-      return const _Panel(
-        child: Padding(
-          padding: EdgeInsets.all(18),
-          child: SizedBox(
-            height: 118,
-            child: Center(child: CircularProgressIndicator()),
-          ),
-        ),
-      );
-    }
-
-    if (tiles.isEmpty) {
-      return _Panel(
-        child: Padding(
-          padding: const EdgeInsets.all(18),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                UiStrings.t('satellite_overview'),
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                UiStrings.t('no_satellite_data'),
-                style: const TextStyle(color: AppTheme.textMuted),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return _Panel(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (overview?.note != null) ...[
-              Text(
-                overview!.note!,
-                style: const TextStyle(
-                  color: AppTheme.textMuted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth >= 860 ? 4 : 2;
-                return Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    for (final tile in tiles)
-                      SizedBox(
-                        width:
-                            (constraints.maxWidth -
-                                ((crossAxisCount - 1) * 10)) /
-                            crossAxisCount,
-                        child: _FarmSatelliteMetricCard(tile: tile),
-                      ),
-                  ],
-                );
-              },
             ),
           ],
         ),
@@ -10290,7 +10196,7 @@ class _FarmPage extends StatelessWidget {
       return null;
     }
     if (value is Map) {
-      final map = Map<String, dynamic>.from(value as Map);
+      final map = Map<String, dynamic>.from(value);
       final directLat = _readCoordinate(
         map['lat'] ?? map['latitude'] ?? map['y'],
       );
@@ -10422,21 +10328,6 @@ class _FarmPage extends StatelessWidget {
     if (issue.likelyAbiotic) return true;
     final weatherRisk = issue.weatherRisk;
     return weatherRisk != null && weatherRisk > 0.0;
-  }
-
-  List<Map<String, dynamic>> _normalizeIssueRowsForMap(
-    List<Map<String, dynamic>> rows,
-  ) {
-    return rows
-        .map((row) {
-          final normalized = Map<String, dynamic>.from(row);
-          final point = _readIssuePoint(normalized);
-          if (point == null) return normalized;
-          normalized['lat'] = point.latitude;
-          normalized['lng'] = point.longitude;
-          return normalized;
-        })
-        .toList(growable: false);
   }
 
   List<Map<String, dynamic>> _riskRowsForMap(
@@ -11118,6 +11009,8 @@ class _FarmPage extends StatelessWidget {
             _FarmTimelineEventPanel(
               events: timelineEvents,
               loading: isTimelineLoading,
+              maxItems: 5,
+              showEmptyState: false,
             ),
             const SizedBox(height: 16),
           ],
@@ -13137,6 +13030,7 @@ class _FarmMapInsightPage extends StatelessWidget {
                     _SelectedFarmHeader(farm: farm),
                     const SizedBox(height: 10),
                     _FarmMetricWrap(
+                      minItemWidth: 118,
                       children: [
                         _FarmMetric(
                           label: UiStrings.t('area'),
@@ -13175,6 +13069,7 @@ class _FarmMapInsightPage extends StatelessWidget {
                     if (lifecycleAdvice != null)
                       _CropLifecycleAdviceCard(
                         advice: lifecycleAdvice!,
+                        compact: false,
                         crop: farm.crop,
                         variety: farm.variety,
                         currentStage: currentStage,
@@ -14434,6 +14329,7 @@ class _HistoryPage extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     _FarmMetricWrap(
+                      minItemWidth: 118,
                       children: [
                         _FarmMetric(
                           label: UiStrings.t('stage'),
@@ -14847,6 +14743,7 @@ class MarketPage extends StatefulWidget {
   final Map<String, String>? initialSelectedLot;
 
   const MarketPage({
+    super.key,
     required this.inventoryLots,
     this.farmName,
     this.initialSelectedLot,
@@ -15141,7 +15038,7 @@ class _MarketPageState extends State<MarketPage> {
                       children: [
                         Expanded(
                           child: DropdownButtonFormField<String>(
-                            value: _sortBy,
+                            initialValue: _sortBy,
                             decoration: InputDecoration(
                               labelText: UiStrings.t('sort_by'),
                               contentPadding: const EdgeInsets.symmetric(
@@ -15179,7 +15076,7 @@ class _MarketPageState extends State<MarketPage> {
                         child: ListView.separated(
                           scrollDirection: Axis.horizontal,
                           itemCount: _farmOptions.length,
-                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          separatorBuilder: (_, _) => const SizedBox(width: 8),
                           itemBuilder: (context, index) {
                             final farm = _farmOptions[index];
                             final selected = farm == _selectedFarm;
@@ -15504,7 +15401,7 @@ class NewsPage extends StatelessWidget {
   final String? farmName;
   final String? farmLocation;
 
-  const NewsPage({this.farmName, this.farmLocation});
+  const NewsPage({super.key, this.farmName, this.farmLocation});
 
   static const List<Map<String, String>> _newsFeed = [
     {
@@ -15733,7 +15630,7 @@ class SchemesPage extends StatelessWidget {
   final String? farmName;
   final String? farmLocation;
 
-  const SchemesPage({this.farmName, this.farmLocation});
+  const SchemesPage({super.key, this.farmName, this.farmLocation});
 
   static const List<Map<String, String>> _schemes = [
     {
@@ -16973,7 +16870,7 @@ class _SettingsSwitchRow extends StatelessWidget {
         alignment: Alignment.center,
         child: Icon(icon, color: AppTheme.green),
       ),
-      activeColor: AppTheme.green,
+      activeThumbColor: AppTheme.green,
       title: Text(
         title,
         style: const TextStyle(
@@ -16990,295 +16887,6 @@ class _SettingsSwitchRow extends StatelessWidget {
           fontWeight: FontWeight.w600,
         ),
       ),
-    );
-  }
-}
-
-class _ProfilePage extends StatelessWidget {
-  final _FarmerProfile profile;
-  final _FarmerFarm farm;
-
-  const _ProfilePage({required this.profile, required this.farm});
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = Get.find<MainAuthController>();
-    final farmerQrData = jsonEncode({
-      'type': 'farmer_profile',
-      'allowedRole': 'fpo_fpc',
-      'brand': 'Kalsubai Farms',
-      'farmerId': profile.farmerId,
-      'farmerName': profile.name,
-      'phone': profile.phone,
-      'village': profile.location,
-      'location': profile.location,
-      'primaryFarm': farm.name,
-      'crop': farm.crop,
-      'product': farm.product,
-      'area': farm.area,
-      'lotGrade': farm.health,
-      'source': 'remote_supabase',
-      'verified': true,
-      'fpcRating': 'Not rated',
-      'lastYield': 'Pending',
-      'lastGrade': 'Pending',
-      'detail': UiStrings.t('profile_verified_for_fpc_procurement'),
-      'currentCrop': {
-        'season': farm.season.isEmpty ? 'Current' : farm.season,
-        'crop': farm.crop,
-        'variety': farm.variety,
-        'expectedYield': 'Pending',
-        'grade': 'Pending',
-        'detail': '${farm.name} - ${farm.area} - ${farm.health}',
-      },
-      'productionHistory': [
-        {
-          'season': 'Last season',
-          'crop': farm.previousCrop.isEmpty ? farm.crop : farm.previousCrop,
-          'yield': 'Pending',
-          'grade': 'Pending',
-          'detail': UiStrings.t('update_after_fpc_grading'),
-        },
-      ],
-      'sellingHistory': [
-        {
-          'date': 'Pending',
-          'buyer': UiStrings.t('fpc_procurement'),
-          'quantity': 'Pending',
-          'rate': 'Pending',
-          'rating': 'Pending',
-        },
-      ],
-    });
-    return _PageScaffold(
-      title: UiStrings.t('profile'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Row(
-                children: [
-                  Container(
-                    width: 86,
-                    height: 86,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFE8F5E9),
-                      shape: BoxShape.circle,
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: Image.asset(
-                      BrandAssets.farmerAvatar,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          profile.name,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 23,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        _StatusPill(
-                          icon: Icons.verified_user_rounded,
-                          label: UiStrings.t('identity_verified'),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '${UiStrings.t('profile_id_label')}: ${LocaleText.digits(profile.farmerId)}',
-                          style: const TextStyle(
-                            color: AppTheme.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          profile.phone,
-                          style: const TextStyle(
-                            color: AppTheme.textMuted,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    UiStrings.t('farmer_qr'),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    UiStrings.t('fpo_scan_farmer_qr_note'),
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      fontWeight: FontWeight.w600,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
-                      ),
-                      child: QrImageView(
-                        data: farmerQrData,
-                        version: QrVersions.auto,
-                        size: 188,
-                        backgroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.lock_outline_rounded,
-                        color: AppTheme.green,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          '${profile.farmerId} • ${profile.name}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppTheme.greenDark,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    UiStrings.t('primary_farm'),
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _SelectedFarmHeader(farm: farm),
-                  const SizedBox(height: 16),
-                  _StatusPill(
-                    icon: Icons.verified_rounded,
-                    label: UiStrings.t('farm_profile_active'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _Panel(
-            child: Column(
-              children: [
-                _ProfileMenuRow(
-                  icon: Icons.grass_outlined,
-                  title: UiStrings.t('farm_details'),
-                  subtitle: UiStrings.t('review_farm_crop_health'),
-                  onTap: () => Get.snackbar(
-                    UiStrings.t('farm_details'),
-                    UiStrings.t('open_farm_tab_switch'),
-                    snackPosition: SnackPosition.BOTTOM,
-                  ),
-                ),
-                const Divider(height: 1),
-                _ProfileMenuRow(
-                  icon: Icons.support_agent_rounded,
-                  title: UiStrings.t('support_title'),
-                  subtitle: UiStrings.t('help_support_center'),
-                  onTap: () => Get.snackbar(
-                    UiStrings.t('support_title'),
-                    UiStrings.t('contact_field_coordinator_help'),
-                    snackPosition: SnackPosition.BOTTOM,
-                  ),
-                ),
-                const Divider(height: 1),
-                _ProfileMenuRow(
-                  icon: Icons.logout_rounded,
-                  title: UiStrings.t('logout'),
-                  subtitle: UiStrings.t('return_to_role_selection'),
-                  onTap: auth.logout,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-        ],
-      ),
-    );
-  }
-}
-
-class _ProfileMenuRow extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  const _ProfileMenuRow({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppTheme.greenPale.withValues(alpha: 0.7),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        alignment: Alignment.center,
-        child: Icon(icon, color: AppTheme.green),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
-      subtitle: Text(subtitle),
-      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 }
@@ -17796,86 +17404,6 @@ class _SideAvatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.asset(asset, fit: BoxFit.cover),
-    );
-  }
-}
-
-class _SideAvatarStack extends StatelessWidget {
-  final String primaryAsset;
-  final bool compact;
-
-  const _SideAvatarStack({required this.primaryAsset, this.compact = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final size = compact ? 50.0 : 58.0;
-    final supporting = BrandAssets.farmerAvatars
-        .where((asset) => asset != primaryAsset)
-        .take(2)
-        .toList(growable: false);
-
-    return SizedBox(
-      width: compact ? 50 : 68,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          for (var i = 0; i < supporting.length; i++)
-            TweenAnimationBuilder<double>(
-              tween: Tween(begin: 0, end: 1),
-              duration: Duration(milliseconds: 320 + (i * 90)),
-              curve: Curves.easeOutBack,
-              builder: (context, value, child) {
-                return Positioned(
-                  left: compact ? 0 : 24 + (i * 9),
-                  top: compact ? 0 : 3 + (i * 18),
-                  child: Opacity(
-                    opacity: 0.58 * value,
-                    child: Transform.translate(
-                      offset: Offset((1 - value) * 10, 0),
-                      child: child,
-                    ),
-                  ),
-                );
-              },
-              child: _SideAvatar(asset: supporting[i], size: compact ? 28 : 30),
-            ),
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.9, end: 1),
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeOutBack,
-            builder: (context, value, child) {
-              return Transform.scale(scale: value, child: child);
-            },
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.20),
-                    blurRadius: 14,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: _SideAvatar(asset: primaryAsset, size: compact ? 46 : 50),
-            ),
-          ),
-          Positioned(
-            right: compact ? -2 : 9,
-            bottom: compact ? 0 : 2,
-            child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: const Color(0xFF9CCC65),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

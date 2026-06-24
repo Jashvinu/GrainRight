@@ -98,7 +98,8 @@ class _WeatherPageState extends State<WeatherPage> {
       final lowerMessage = message.toLowerCase();
       setState(() {
         _snapshot = null;
-        _error = lowerMessage.contains('start_date') ||
+        _error =
+            lowerMessage.contains('start_date') ||
                 lowerMessage.contains('end_date') ||
                 lowerMessage.contains('date_range')
             ? UiStrings.t('live_weather_refreshing')
@@ -273,9 +274,7 @@ class _WeatherContextCard extends StatelessWidget {
                   _ChipText(label: UiStrings.option(growthStage!)),
                 if (daysAfterSowing != null)
                   _ChipText(
-                    label: UiStrings.f('day_value', {
-                      'day': daysAfterSowing!,
-                    }),
+                    label: UiStrings.f('day_value', {'day': daysAfterSowing!}),
                   ),
               ],
             ),
@@ -408,7 +407,7 @@ class _HourlyWeatherCard extends StatelessWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: rows.take(24).length,
-                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
                 itemBuilder: (context, index) {
                   final row = rows[index];
                   return Container(
@@ -604,9 +603,7 @@ class _WeatherErrorCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              hasFallback
-                  ? UiStrings.t('live_weather_failed_fallback')
-                  : error,
+              hasFallback ? UiStrings.t('live_weather_failed_fallback') : error,
               style: const TextStyle(
                 color: AppTheme.textMuted,
                 fontWeight: FontWeight.w700,
@@ -623,7 +620,7 @@ class _WeatherErrorCard extends StatelessWidget {
                     .map(
                       (entry) => _ChipText(
                         label:
-                            '${UiStrings.option('${entry.key}'.replaceAll('_', ' '))}: ${LocaleText.localizedValue(entry.value)}',
+                            '${UiStrings.option(entry.key.replaceAll('_', ' '))}: ${LocaleText.localizedValue(entry.value)}',
                       ),
                     )
                     .toList(growable: false),
@@ -908,7 +905,8 @@ String _weatherSentence(dynamic value) {
       'weather_rec_low_observation',
     'weather is supportive for current crop growth.' =>
       'weather_summary_supportive',
-    'weather needs scouting attention this week.' => 'weather_summary_attention',
+    'weather needs scouting attention this week.' =>
+      'weather_summary_attention',
     'weather stress is elevated; prioritize field inspection.' =>
       'weather_summary_stress_elevated',
     'wet weather can raise disease risk. scout leaves and panicles.' =>

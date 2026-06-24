@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -9,10 +11,7 @@ class HarvestMachineCaptureResult {
   final Uint8List bytes;
   final String name;
 
-  const HarvestMachineCaptureResult({
-    required this.bytes,
-    required this.name,
-  });
+  const HarvestMachineCaptureResult({required this.bytes, required this.name});
 }
 
 Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
@@ -41,10 +40,6 @@ Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
     }
 
     final file = files[0];
-    if (file == null) {
-      finishNull();
-      return;
-    }
     final reader = html.FileReader();
 
     reader.onLoadEnd.listen((_) {
@@ -73,12 +68,12 @@ Future<HarvestMachineCaptureResult?> pickHarvestMachineImage({
           completer.complete(null);
           return;
         }
-            completer.complete(
-              HarvestMachineCaptureResult(
-                bytes: bytes,
-                name: file.name.isNotEmpty ? file.name : 'moisture-meter.jpg',
-              ),
-            );
+        completer.complete(
+          HarvestMachineCaptureResult(
+            bytes: bytes,
+            name: file.name.isNotEmpty ? file.name : 'moisture-meter.jpg',
+          ),
+        );
       }
     });
 

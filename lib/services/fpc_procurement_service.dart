@@ -61,7 +61,9 @@ class FpcProcurementRecord {
       totalValue: _toDouble(json['total_value']),
       deliveryStatus: '${json['delivery_status'] ?? 'received'}',
       fpcRating: _toInt(json['fpc_rating']),
-      receivedAt: DateTime.tryParse('${json['received_at'] ?? json['created_at'] ?? ''}'),
+      receivedAt: DateTime.tryParse(
+        '${json['received_at'] ?? json['created_at'] ?? ''}',
+      ),
       tracePayload: _toMap(json['trace_payload']),
     );
   }
@@ -122,7 +124,9 @@ class FpcProcurementService {
   String get _uid {
     final id = _client.auth.currentUser?.id;
     if (id == null || id.isEmpty) {
-      throw const FpcProcurementException('Login as FPC before receiving product.');
+      throw const FpcProcurementException(
+        'Login as FPC before receiving product.',
+      );
     }
     return id;
   }
@@ -134,10 +138,12 @@ class FpcProcurementService {
         .eq('fpc_id', _uid)
         .order('received_at', ascending: false)
         .limit(100);
-    if (rows is! List) return const [];
     return rows
         .whereType<Map>()
-        .map((row) => FpcProcurementRecord.fromJson(Map<String, dynamic>.from(row)))
+        .map(
+          (row) =>
+              FpcProcurementRecord.fromJson(Map<String, dynamic>.from(row)),
+        )
         .toList(growable: false);
   }
 
@@ -155,7 +161,9 @@ class FpcProcurementService {
       );
     }
     final quantity = _toDouble(trace['totalKg']);
-    final totalValue = quantity != null && pricePerKg != null ? quantity * pricePerKg : null;
+    final totalValue = quantity != null && pricePerKg != null
+        ? quantity * pricePerKg
+        : null;
     final analysisId = _uuidOrNull(_text(trace, 'analysisId'));
     final payload = {
       'fpc_id': userId,
@@ -163,7 +171,11 @@ class FpcProcurementService {
       'farm_id': _text(trace, 'farmId'),
       'analysis_id': analysisId,
       'batch_id': batchId,
-      'customer_name': _text(trace, 'farmerName', _text(trace, 'fpcCustomerName')),
+      'customer_name': _text(
+        trace,
+        'farmerName',
+        _text(trace, 'fpcCustomerName'),
+      ),
       'crop_type': _text(trace, 'crop'),
       'variety': _text(trace, 'variety'),
       'quantity_kg': quantity,
@@ -179,14 +191,20 @@ class FpcProcurementService {
 
     final existing = await _existingRecord(userId, batchId);
     final saved = existing == null
-        ? await _client.from('fpc_procurement_records').insert(payload).select().single()
+        ? await _client
+              .from('fpc_procurement_records')
+              .insert(payload)
+              .select()
+              .single()
         : await _client
-            .from('fpc_procurement_records')
-            .update(payload)
-            .eq('id', existing)
-            .select()
-            .single();
-    return FpcProcurementRecord.fromJson(Map<String, dynamic>.from(saved as Map));
+              .from('fpc_procurement_records')
+              .update(payload)
+              .eq('id', existing)
+              .select()
+              .single();
+    return FpcProcurementRecord.fromJson(
+      Map<String, dynamic>.from(saved as Map),
+    );
   }
 
   Future<String?> _existingRecord(String userId, String batchId) async {
@@ -197,7 +215,7 @@ class FpcProcurementService {
         .eq('fpc_id', userId)
         .eq('batch_id', batchId)
         .limit(1);
-    if (rows is! List || rows.isEmpty) return null;
+    if (rows.isEmpty) return null;
     final row = Map<String, dynamic>.from(rows.first as Map);
     return '${row['id'] ?? ''}'.trim().isEmpty ? null : '${row['id']}';
   }

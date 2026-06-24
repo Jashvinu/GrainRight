@@ -44,8 +44,7 @@ class FarmerProfileAlreadyExistsException extends FarmerVerificationException {
 }
 
 class FarmerServiceException extends FarmerVerificationException {
-  const FarmerServiceException(String message, String code)
-    : super(message, code: code);
+  const FarmerServiceException(super.message, String code) : super(code: code);
 
   @override
   String toString() => '$code: $message';

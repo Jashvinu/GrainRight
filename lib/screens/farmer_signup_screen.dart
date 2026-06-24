@@ -109,11 +109,12 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               shape: BoxShape.circle,
-                              border: Border.all(color: const Color(0xFFDDEBD7)),
+                              border: Border.all(
+                                color: const Color(0xFFDDEBD7),
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color:
-                                      AppTheme.green.withValues(alpha: 0.14),
+                                  color: AppTheme.green.withValues(alpha: 0.14),
                                   blurRadius: 26,
                                   offset: const Offset(0, 12),
                                 ),
@@ -125,7 +126,7 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                                 fit: BoxFit.cover,
                                 alignment: Alignment.topCenter,
                                 cacheWidth: 320,
-                                errorBuilder: (_, __, ___) => const Icon(
+                                errorBuilder: (_, _, _) => const Icon(
                                   Icons.person_rounded,
                                   color: AppTheme.green,
                                   size: 62,
@@ -162,10 +163,10 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
                             color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusMedium),
-                            border:
-                                Border.all(color: const Color(0xFFE5E7EB)),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusMedium,
+                            ),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.055),
@@ -215,8 +216,7 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                                 () => auth.errorMessage.isEmpty
                                     ? const SizedBox.shrink()
                                     : Padding(
-                                        padding:
-                                            const EdgeInsets.only(top: 14),
+                                        padding: const EdgeInsets.only(top: 14),
                                         child: Text(
                                           UiStrings.authError(
                                             auth.errorMessage.value,
@@ -250,8 +250,7 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                           () => SizedBox(
                             height: 56,
                             child: ElevatedButton.icon(
-                              onPressed:
-                                  auth.isLoading.value ? null : _submit,
+                              onPressed: auth.isLoading.value ? null : _submit,
                               icon: auth.isLoading.value
                                   ? const SizedBox(
                                       width: 20,
@@ -312,7 +311,9 @@ class _SignupSyncStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!visible) return const SizedBox.shrink();
-    final key = statusKey.trim().isEmpty ? 'creating_farmer_profile' : statusKey;
+    final key = statusKey.trim().isEmpty
+        ? 'creating_farmer_profile'
+        : statusKey;
     final message = UiStrings.t(key).replaceAll('{count}', '${farmCount ?? 0}');
     return Container(
       padding: const EdgeInsets.all(14),

@@ -61,8 +61,7 @@ class FarmerDiseaseData {
 }
 
 class SatelliteService {
-  static const _farmSelect =
-      '*';
+  static const _farmSelect = '*';
 
   Map<String, String> _headers(String? jwt) {
     final bearer = jwt == null || jwt.trim().isEmpty
@@ -586,24 +585,28 @@ class SatelliteService {
     String? priorStatus,
     String? source,
   }) async {
-    final data =
-        await _post('${SatelliteConfig.edgeFunctionsBase}/farm-status-update', {
-          'farmId': farmId,
-          'phone': farmerPhone,
-          if (farmerId != null && farmerId.trim().isNotEmpty)
-            'farmerId': farmerId.trim(),
-          'farmerName': farmerName,
-          'farmName': farmName,
-          'crop': crop,
-          'variety': variety,
-          'stage': stage,
-          'stageQuestion': stageQuestion,
-          'daysAfterSowing': daysAfterSowing,
-          'statusText': statusText,
-          if (priorStatus != null) 'priorStatus': priorStatus,
-          'source': source ?? 'farmer_dashboard_status_chat',
-          'updatedAt': DateTime.now().toIso8601String(),
-        }, jwt);
+    final data = await _post(
+      '${SatelliteConfig.edgeFunctionsBase}/farm-status-update',
+      {
+        'farmId': farmId,
+        'phone': farmerPhone,
+        if (farmerId != null && farmerId.trim().isNotEmpty)
+          'farmerId': farmerId.trim(),
+        'farmerName': farmerName,
+        'farmName': farmName,
+        'crop': crop,
+        'variety': variety,
+        'stage': stage,
+        'stageQuestion': stageQuestion,
+        'daysAfterSowing': daysAfterSowing,
+        'statusText': statusText,
+        // ignore: use_null_aware_elements
+        if (priorStatus != null) 'priorStatus': priorStatus,
+        'source': source ?? 'farmer_dashboard_status_chat',
+        'updatedAt': DateTime.now().toIso8601String(),
+      },
+      jwt,
+    );
     return data;
   }
 
@@ -908,6 +911,7 @@ class SatelliteService {
         'crop': crop,
         'growth_stage': growthStage,
         'season': season,
+        // ignore: use_null_aware_elements
         if (geometry != null) 'geometry': geometry,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (phone != null &&
@@ -965,6 +969,7 @@ class SatelliteService {
           'location': location.trim(),
         if (growthStage != null && growthStage.trim().isNotEmpty)
           'growthStage': growthStage.trim(),
+        // ignore: use_null_aware_elements
         if (daysAfterSowing != null) 'daysAfterSowing': daysAfterSowing,
       },
       jwt,
