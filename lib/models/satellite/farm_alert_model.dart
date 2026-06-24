@@ -106,11 +106,25 @@ class FarmIssueCell {
       final value = json[key];
       if (value is num) return value.toDouble();
       if (value is String) {
-        final parsed = double.tryParse(value);
+        final parsed = double.tryParse(value.trim());
         if (parsed != null) return parsed;
       }
     }
     return null;
+  }
+
+  static bool _bool(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value is bool) return value;
+      if (value is num) return value != 0;
+      if (value is String) {
+        final normalized = value.trim().toLowerCase();
+        if (normalized == 'true' || normalized == '1') return true;
+        if (normalized == 'false' || normalized == '0') return false;
+      }
+    }
+    return false;
   }
 
   /// Parses both the edge-function shape (`lat`/`lng`/`per_disease`) and the
@@ -120,7 +134,14 @@ class FarmIssueCell {
     final perDiseaseRaw = json['per_disease'];
     if (perDiseaseRaw is Map) {
       perDiseaseRaw.forEach((key, value) {
-        if (value is num) perDisease[key.toString()] = value.toDouble();
+        final parsed = switch (value) {
+          num number => number.toDouble(),
+          String text => double.tryParse(text.trim()),
+          _ => null,
+        };
+        if (parsed != null && parsed > 0) {
+          perDisease[key.toString()] = parsed;
+        }
       });
     } else {
       const columns = {
@@ -148,12 +169,14 @@ class FarmIssueCell {
               .map((entry) => entry.key)
               .toList(growable: false);
     final likelyAbioticRaw = json['likely_abiotic'];
-    final likelyAbiotic = switch (likelyAbioticRaw) {
-      bool value => value,
-      num value => value != 0,
-      String value => value.toLowerCase() == 'true' || value == '1',
-      _ => false,
-    };
+    final likelyAbiotic =
+        (switch (likelyAbioticRaw) {
+          bool value => value,
+          num value => value != 0,
+          String value => value.toLowerCase() == 'true' || value == '1',
+          _ => false,
+        }) ||
+        _bool(json, const ['is_abiotic', 'abiotic', 'water_stress_cell']);
 
     return FarmIssueCell(
       lat:
@@ -183,16 +206,45 @@ class FarmIssueCell {
             'composite_risk',
             'max_risk_score',
             'risk_score',
+            'max_risk',
             'risk',
+            'risk_probability',
+            'probability',
           ]) ??
           0,
       diseaseCandidates: candidates,
       likelyAbiotic: likelyAbiotic,
       perDisease: perDisease,
-      ndvi: _num(json, const ['ndvi']),
-      moisture: _num(json, const ['moisture']),
-      weatherRisk: _num(json, const ['weather_risk']),
-      isScoutZone: json.containsKey('centroid_lat'),
+      ndvi: _num(json, const [
+        'ndvi',
+        'ndvi_value',
+        'mean_ndvi',
+        'avg_ndvi',
+        'vegetation_index',
+        'vegetation_index_value',
+      ]),
+      moisture: _num(json, const [
+        'moisture',
+        'moisture_value',
+        'soil_moisture',
+        'soil_moisture_percent',
+        'moisture_percent',
+        'moisture_index',
+        'ndwi',
+        'water_index',
+        'water_signal',
+      ]),
+      weatherRisk: _num(json, const [
+        'weather_risk',
+        'weather_risk_score',
+        'weather_risk_max',
+        'weather_score',
+        'crop_weather_score',
+        'disease_weather_risk',
+      ]),
+      isScoutZone:
+          json.containsKey('centroid_lat') ||
+          _bool(json, const ['is_scout_zone', 'scout_zone']),
     );
   }
 

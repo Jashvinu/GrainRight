@@ -3427,23 +3427,108 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     return maxRisk;
   }
 
+  bool _hasRiskSignalData(FarmIssueCell issue) {
+    return issue.ndvi != null ||
+        issue.moisture != null ||
+        issue.weatherRisk != null ||
+        issue.perDisease.isNotEmpty;
+  }
+
+  double? _scoutZoneRadiusMetersForIssue(int index, FarmIssueCell issue) {
+    if (!issue.hasLocation) return null;
+    final origin = LatLng(issue.lat, issue.lng);
+    for (final row in _displayScoutZonesForFarm(index)) {
+      final point = _readIssuePoint(row);
+      if (point == null) continue;
+      final distance = const Distance().as(LengthUnit.Meter, origin, point);
+      if (distance > 8) continue;
+      return _snapshotDouble(row['radius_meters']) ??
+          _snapshotDouble(row['radius']) ??
+          _snapshotDouble(row['radius_m']);
+    }
+    return null;
+  }
+
+  FarmIssueCell? _nearestSignalCellForIssue(int index, FarmIssueCell issue) {
+    if (!issue.hasLocation) return null;
+    final candidates = <FarmIssueCell>[];
+
+    void addCandidate(FarmIssueCell cell) {
+      if (!cell.hasLocation || !_hasRiskSignalData(cell)) return;
+      candidates.add(cell);
+    }
+
+    for (final row in _displayRiskCellsForFarm(index)) {
+      addCandidate(FarmIssueCell.fromJson(row));
+    }
+    for (final cell
+        in _displayDiseaseScreenForFarm(index)?.riskCells ??
+            const <FarmIssueCell>[]) {
+      addCandidate(cell);
+    }
+    if (candidates.isEmpty) return null;
+
+    final origin = LatLng(issue.lat, issue.lng);
+    final maxDistance = issue.isScoutZone
+        ? (_scoutZoneRadiusMetersForIssue(index, issue) ?? 120) + 45
+        : 20.0;
+    FarmIssueCell? nearest;
+    var nearestDistance = double.infinity;
+    for (final candidate in candidates) {
+      final distance = const Distance().as(
+        LengthUnit.Meter,
+        origin,
+        LatLng(candidate.lat, candidate.lng),
+      );
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearest = candidate;
+      }
+    }
+    return nearestDistance <= maxDistance ? nearest : null;
+  }
+
+  FarmIssueCell _issueWithFarmSignalFallback(int index, FarmIssueCell issue) {
+    final fallback = _nearestSignalCellForIssue(index, issue);
+    if (fallback == null) return issue;
+    return FarmIssueCell(
+      lat: issue.lat,
+      lng: issue.lng,
+      compositeRisk: math.max(issue.compositeRisk, fallback.compositeRisk),
+      diseaseCandidates: issue.diseaseCandidates.isNotEmpty
+          ? issue.diseaseCandidates
+          : fallback.diseaseCandidates,
+      likelyAbiotic:
+          issue.likelyAbiotic ||
+          (issue.diseaseCandidates.isEmpty && fallback.likelyAbiotic),
+      perDisease: issue.perDisease.isNotEmpty
+          ? issue.perDisease
+          : fallback.perDisease,
+      ndvi: issue.ndvi ?? fallback.ndvi,
+      moisture: issue.moisture ?? fallback.moisture,
+      weatherRisk: issue.weatherRisk ?? fallback.weatherRisk,
+      isScoutZone: issue.isScoutZone,
+    );
+  }
+
   void _openFarmIssue(int index, FarmIssueCell issue) {
     if (index < 0 || index >= _farms.length) return;
     _initializeFarmState(index);
     _refreshFarmStage(index);
     final farm = _farms[index];
+    final displayIssue = _issueWithFarmSignalFallback(index, issue);
     _FarmIssueSheet issuePage({required bool fullScreen}) => _FarmIssueSheet(
       farmName: farm.name,
-      issue: issue,
+      issue: displayIssue,
       farmCenter: _farmCenter(farm),
       daysAfterSowing: _daysAfterSowing(index),
       growthStage: _farmGrowthStage[index] ?? _farmLifecycleStages.first,
       weatherContext:
           _farmSummaryByFarmIndex[index]?.weatherContext ??
           _displayDiseaseScreenForFarm(index)?.weatherContext,
-      fetchGuidance: () => _fetchIssueGuidance(index, issue),
+      fetchGuidance: () => _fetchIssueGuidance(index, displayIssue),
       captureAndDiagnose: (source) =>
-          _captureAndDiagnoseIssuePhoto(index, issue, source),
+          _captureAndDiagnoseIssuePhoto(index, displayIssue, source),
       recordAction:
           ({
             required FarmIssueCell issue,
@@ -3458,7 +3543,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       fullScreen: fullScreen,
     );
 
-    if (issue.compositeRisk >= 0.55) {
+    if (displayIssue.compositeRisk >= 0.55) {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           settings: const RouteSettings(name: '/FarmIssueDetailPage'),
@@ -3510,7 +3595,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     final farm = _farms[index];
     final farmId = await _resolveSatelliteFarmId(farm, index);
     if (farmId.isEmpty) {
-      throw SatelliteApiException('Farm is not synced to satellite yet');
+      throw SatelliteApiException(UiStrings.t('farm_not_synced_satellite'));
     }
     final diseaseSpotted = issue.diseaseCandidates.isEmpty
         ? UiStrings.t('suspected_disease')
@@ -3554,7 +3639,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     final farm = _farms[index];
     final farmId = await _resolveSatelliteFarmId(farm, index);
     if (farmId.isEmpty) {
-      throw SatelliteApiException('Farm is not synced to satellite yet');
+      throw SatelliteApiException(UiStrings.t('farm_not_synced_satellite'));
     }
     await _satelliteService.insertFarmIssueAction(
       jwt: _satelliteRequestToken(),
@@ -3602,7 +3687,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     }
     if (normalized.contains('farm geometry required') ||
         normalized.contains('geometry')) {
-      return 'Farm boundary is required before refreshing alerts. Add or sync this farm boundary and try again.';
+      return UiStrings.t('farm_boundary_required_refresh');
+    }
+    if (normalized.contains('remote farm id') ||
+        normalized.contains('farm_id')) {
+      return UiStrings.t('farm_sync_incomplete_retry');
     }
     if (normalized.contains('farm not found for this farmer') ||
         normalized.contains('not linked to that farmer number') ||
@@ -11840,7 +11929,14 @@ class _FarmIssueSheetState extends State<_FarmIssueSheet> {
   }
 
   String _cleanError(Object error) {
-    return error.toString().replaceFirst('SatelliteApiException: ', '');
+    final raw = error.toString().replaceFirst('SatelliteApiException: ', '');
+    final normalized = raw.toLowerCase();
+    if (normalized.contains('farm is not synced') ||
+        normalized.contains('remote farm id') ||
+        normalized.contains('farm_id')) {
+      return UiStrings.t('farm_not_synced_satellite');
+    }
+    return raw;
   }
 
   int get _distanceMeters {

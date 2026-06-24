@@ -90,6 +90,27 @@ void main() {
       expect(cell.isDisease, isTrue);
     });
 
+    test('parses backend signal aliases for risk details', () {
+      final cell = FarmIssueCell.fromJson({
+        'center_lat': '19.6105',
+        'center_lng': '73.7525',
+        'risk_probability': '0.64',
+        'per_disease': {'leaf_spot': '0.64'},
+        'ndvi_value': '0.37',
+        'soil_moisture_percent': '21.5',
+        'weather_risk_score': '0.52',
+      });
+
+      expect(cell.lat, 19.6105);
+      expect(cell.lng, 73.7525);
+      expect(cell.compositeRisk, 0.64);
+      expect(cell.perDisease['leaf_spot'], 0.64);
+      expect(cell.diseaseCandidates, ['leaf_spot']);
+      expect(cell.ndvi, 0.37);
+      expect(cell.moisture, 21.5);
+      expect(cell.weatherRisk, 0.52);
+    });
+
     test('classifies abiotic stress cells as non-disease', () {
       final cell = FarmIssueCell.fromJson({
         'lat': 19.6,
@@ -134,7 +155,10 @@ void main() {
       expect(diagnosis.confidence, 0.72);
       expect(diagnosis.severity, 'medium');
       expect(diagnosis.evidence.single, 'brown circular lesions');
-      expect(diagnosis.scoutAction, 'Check nearby plants for the same lesions.');
+      expect(
+        diagnosis.scoutAction,
+        'Check nearby plants for the same lesions.',
+      );
       expect(diagnosis.model, 'qwen-vl-max');
     });
   });

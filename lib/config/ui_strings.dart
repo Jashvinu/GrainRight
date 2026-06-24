@@ -5364,6 +5364,21 @@ class UiStrings {
       'mr':
           'या शेतकरी लॉगिनसाठी शेत सिंक अपूर्ण आहे. लॉगिननंतर शेते रीफ्रेश करा आणि पुन्हा प्रयत्न करा.',
     },
+    'farm_boundary_required_refresh': {
+      'en':
+          'Farm boundary is required before refreshing alerts. Add or sync this farm boundary and try again.',
+      'hi':
+          'अलर्ट रीफ्रेश करने से पहले खेत की सीमा जरूरी है। इस खेत की सीमा जोड़ें या सिंक करें और फिर कोशिश करें।',
+      'mr':
+          'अलर्ट रीफ्रेश करण्यापूर्वी शेताची सीमा आवश्यक आहे. या शेताची सीमा जोडा किंवा सिंक करा आणि पुन्हा प्रयत्न करा.',
+    },
+    'farm_not_synced_satellite': {
+      'en': 'This farm is not fully synced yet. Refresh farms and try again.',
+      'hi':
+          'यह खेत अभी पूरी तरह सिंक नहीं हुआ है। खेत रीफ्रेश करें और फिर कोशिश करें।',
+      'mr':
+          'हे शेत अजून पूर्णपणे सिंक झालेले नाही. शेते रीफ्रेश करा आणि पुन्हा प्रयत्न करा.',
+    },
     'farmer_session_expired_refresh': {
       'en':
           'Your farmer session expired. Please login again and refresh alerts.',
