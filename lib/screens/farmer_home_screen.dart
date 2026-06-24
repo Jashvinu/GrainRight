@@ -1884,7 +1884,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   Future<bool> _syncInitialFarmServicesForFarm(
     int index,
     String key, {
-    bool requireDiseaseScan = false,
+    bool requireDiseaseScan = true,
   }) async {
     if (index < 0 || index >= _farms.length) return false;
     if (_initialFarmServiceReadyKey == key) return true;
@@ -1894,21 +1894,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       _initialFarmServiceActiveKey = key;
     });
     try {
-      await _refreshSelectedFarmSnapshotForFarm(
+      final servicesReady = await _confirmFarmServicesReadyForFarm(
         index,
-        runRiskScreenIfEmpty: true,
+        requireDiseaseScan: requireDiseaseScan,
       );
-      if (!_hasDiseaseScanStateForFarm(index)) {
-        final scanReady = await _runDiseaseScreenForFarm(
-          index,
-          showFailureSnack: false,
-          showInlineError: true,
-          refreshSummaryAfter: false,
-        );
-        if (!scanReady || !_hasDiseaseScanStateForFarm(index)) {
-          if (requireDiseaseScan) return false;
-          Get.log('Initial farm service sync completed without disease scan.');
+      if (!servicesReady) {
+        if (mounted && _initialFarmServiceActiveKey == key) {
+          setState(() {
+            _initialFarmServiceSyncError = true;
+          });
         }
+        return false;
       }
       await _saveFarmDataSnapshotForFarm(
         index,
@@ -1923,13 +1919,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     } catch (error) {
       Get.log('Initial farm service sync failed: $error');
       if (!mounted || _initialFarmServiceActiveKey != key) return false;
-      if (!requireDiseaseScan) {
-        setState(() {
-          _initialFarmServiceReadyKey = key;
-          _initialFarmServiceSyncError = false;
-        });
-        return true;
-      }
       setState(() {
         _initialFarmServiceSyncError = true;
       });
@@ -1941,6 +1930,145 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         });
       }
     }
+  }
+
+  Future<bool> _confirmFarmServicesReadyForFarm(
+    int index, {
+    required bool requireDiseaseScan,
+  }) async {
+    if (index < 0 || index >= _farms.length) return false;
+    final farm = _farms[index];
+    final farmKey = _farmStateKey(farm);
+    final farmerPhone = _verifiedFarmerPhone();
+    if (farmerPhone == null || farmerPhone.isEmpty) return false;
+    if (!_farmerFarmHasMarkedBoundary(farm)) return false;
+    final farmId = await _resolveSatelliteFarmId(farm, index);
+    if (farmId.trim().isEmpty) return false;
+    final center = _selectedFarmWeatherCenter(farm);
+    if (center == null) return false;
+
+    final token = _satelliteRequestToken();
+    final farmerId = _verifiedFarmerId();
+    final summary = await _satelliteService.getFarmerFarmSummary(
+      farmId: farmId,
+      jwt: token,
+      farmerPhone: farmerPhone,
+      farmerId: farmerId,
+    );
+    if (!mounted || !_isSameFarmAtIndex(index, farmKey)) return false;
+    final summaryZones = _normalizeIssueRowsForMap(summary.scoutZoneRows);
+    final summaryCells = _normalizeIssueRowsForMap(summary.riskCellRows);
+    setState(() {
+      _farmSummaryByFarmIndex[index] = summary;
+      _satelliteOverviewByFarmIndex[index] = _overviewFromFarmSummary(summary);
+      _farmSummaryLoadedAt[index] = DateTime.now();
+      _diseaseScreenByFarmIndex[index] = summary.diseaseScreen;
+      _diseaseScoutZonesByFarmIndex[index] = summaryZones;
+      _diseaseRiskCellsByFarmIndex[index] = summaryCells;
+      _diseaseRemoteLoadedAt[index] = DateTime.now();
+      if (summary.advice != null) {
+        _farmAlertAdviceByFarmIndex[index] = summary.advice!;
+      }
+    });
+
+    final weather = await _satelliteService.getLiveWeather(
+      latitude: center.latitude,
+      longitude: center.longitude,
+      crop: farm.crop,
+      growthStage: _farmGrowthStage[index] ?? _growthStageForFarm(index),
+      daysAfterSowing: _daysAfterSowing(index),
+      satelliteMoisture: _satelliteOverviewByFarmIndex[index]?.moisture,
+      jwt: token,
+    );
+    if (!mounted || !_isSameFarmAtIndex(index, farmKey)) return false;
+    setState(() {
+      _liveWeatherByFarmIndex[index] = weather;
+      _liveWeatherLoadedAt[index] = DateTime.now();
+    });
+
+    if (!_hasDiseaseScanStateForFarm(index)) {
+      await _loadConfirmedDiseaseRowsForFarm(
+        index,
+        farmId: farmId,
+        farmKey: farmKey,
+        farmerPhone: farmerPhone,
+        farmerId: farmerId,
+        jwt: token,
+      );
+    }
+
+    if (!_hasDiseaseScanStateForFarm(index)) {
+      final scanReady = await _runDiseaseScreenForFarm(
+        index,
+        showFailureSnack: false,
+        showInlineError: true,
+        refreshSummaryAfter: false,
+      );
+      if (!scanReady && requireDiseaseScan) return false;
+      await _loadConfirmedDiseaseRowsForFarm(
+        index,
+        farmId: farmId,
+        farmKey: farmKey,
+        farmerPhone: farmerPhone,
+        farmerId: farmerId,
+        jwt: token,
+      );
+    }
+
+    if (requireDiseaseScan && !_hasDiseaseScanStateForFarm(index)) {
+      return false;
+    }
+
+    await Future.wait<void>([
+      _loadCropLifecycleAdviceForFarm(index, forceRefresh: true),
+      _loadFarmTimelineForFarm(index, forceRefresh: true),
+    ]);
+    return mounted && _isSameFarmAtIndex(index, farmKey);
+  }
+
+  Future<bool> _loadConfirmedDiseaseRowsForFarm(
+    int index, {
+    required String farmId,
+    required String farmKey,
+    required String farmerPhone,
+    required String? farmerId,
+    required String? jwt,
+  }) async {
+    for (final delay in const [
+      Duration.zero,
+      Duration(milliseconds: 350),
+      Duration(milliseconds: 900),
+      Duration(milliseconds: 1500),
+    ]) {
+      if (delay > Duration.zero) {
+        await Future<void>.delayed(delay);
+      }
+      if (!mounted || !_isSameFarmAtIndex(index, farmKey)) return false;
+      try {
+        final diseaseData = await _satelliteService.getFarmerDiseaseData(
+          farmId: farmId,
+          jwt: jwt,
+          farmerPhone: farmerPhone,
+          farmerId: farmerId,
+        );
+        final zones = _latestIssueRowsForMap(
+          _normalizeIssueRowsForMap(diseaseData.scoutZones),
+        );
+        final cells = _latestIssueRowsForMap(
+          _normalizeIssueRowsForMap(diseaseData.riskCells),
+        );
+        if (!mounted || !_isSameFarmAtIndex(index, farmKey)) return false;
+        setState(() {
+          _diseaseScoutZonesByFarmIndex[index] = zones;
+          _diseaseRiskCellsByFarmIndex[index] = cells;
+          _diseaseRemoteLoadedAt[index] = DateTime.now();
+        });
+        if (_hasDiseaseScanStateForFarm(index)) return true;
+      } catch (error) {
+        Get.log('Confirmed disease row load failed: $error');
+      }
+    }
+    return _hasDiseaseScanStateForFarm(index);
   }
 
   Map<String, dynamic>? _weatherContextForFarm(int index) {
@@ -3521,7 +3649,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         (screen.scanDate.trim().isNotEmpty ||
             screen.imagesAnalyzed > 0 ||
             screen.riskCellsCount > 0 ||
-            screen.message?.trim().isNotEmpty == true)) {
+            screen.riskCells.isNotEmpty ||
+            screen.scoutZones.isNotEmpty)) {
       return true;
     }
     return (_displayRiskCellsForFarm(index).isNotEmpty ||

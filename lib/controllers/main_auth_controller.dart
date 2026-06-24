@@ -306,6 +306,11 @@ class MainAuthController extends GetxController {
       isLoggedIn.value = true;
       _setFarmerLoginSyncStatus('syncing_farm_records');
       final farmCount = await _syncFarmerFarmDataForLogin();
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : null;
+      final usedCachedFarmFallback =
+          farmCtrl?.lastLoadUsedCachedFallback == true && farmCount > 0;
       farmerLoginSyncedFarmCount.value = farmCount;
       final syncedAt = DateTime.now().toUtc();
       farmerLoginLastSyncAt.value = syncedAt;
@@ -315,12 +320,21 @@ class MainAuthController extends GetxController {
         syncedAt: syncedAt,
       );
       _setFarmerLoginSyncStatus(
-        farmCount > 0 ? 'farm_records_synced' : 'no_farm_records_found',
-        code: farmCount > 0 ? 'farms_synced' : 'farms_not_found',
+        usedCachedFarmFallback
+            ? 'offline_cached_session'
+            : farmCount > 0
+            ? 'farm_records_synced'
+            : 'no_farm_records_found',
+        code: usedCachedFarmFallback
+            ? 'network_issue'
+            : farmCount > 0
+            ? 'farms_synced'
+            : 'farms_not_found',
       );
       _trackFarmerLoginEvent('farm_sync_success', {
         'phone': digits,
         'farmCount': farmCount,
+        'cachedFallback': usedCachedFarmFallback,
       });
       farmerLoginState.value = FarmerLoginState.farmsSynced;
       _setFarmerLoginSyncStatus('opening_farmer_dashboard');
@@ -444,6 +458,11 @@ class MainAuthController extends GetxController {
       );
       _setFarmerLoginSyncStatus('syncing_farm_records');
       final farmCount = await _syncFarmerFarmDataForLogin();
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : null;
+      final usedCachedFarmFallback =
+          farmCtrl?.lastLoadUsedCachedFallback == true && farmCount > 0;
       farmerLoginSyncedFarmCount.value = farmCount;
       final syncedAt = DateTime.now().toUtc();
       farmerLoginLastSyncAt.value = syncedAt;
@@ -453,13 +472,22 @@ class MainAuthController extends GetxController {
         syncedAt: syncedAt,
       );
       _setFarmerLoginSyncStatus(
-        farmCount > 0 ? 'farm_records_synced' : 'no_farm_records_found',
-        code: farmCount > 0 ? 'farms_synced' : 'farms_not_found',
+        usedCachedFarmFallback
+            ? 'offline_cached_session'
+            : farmCount > 0
+            ? 'farm_records_synced'
+            : 'no_farm_records_found',
+        code: usedCachedFarmFallback
+            ? 'network_issue'
+            : farmCount > 0
+            ? 'farms_synced'
+            : 'farms_not_found',
       );
       _trackFarmerLoginEvent('farm_sync_success', {
         'phone': digits,
         'farmCount': farmCount,
         'mode': 'signup',
+        'cachedFallback': usedCachedFarmFallback,
       });
       farmerLoginState.value = FarmerLoginState.farmsSynced;
       isLoggedIn.value = true;
@@ -530,9 +558,14 @@ class MainAuthController extends GetxController {
             syncedAt: syncedAt,
           );
         }
-        farmerLoginSyncStatusCode.value = farmCtrl.farms.isEmpty
-            ? 'farms_not_found'
-            : 'farms_synced';
+        if (farmCtrl.lastLoadUsedCachedFallback && farmCtrl.farms.isNotEmpty) {
+          _setFarmerLoginSyncStatus('offline_cached_session');
+          farmerLoginSyncStatusCode.value = 'network_issue';
+        } else {
+          farmerLoginSyncStatusCode.value = farmCtrl.farms.isEmpty
+              ? 'farms_not_found'
+              : 'farms_synced';
+        }
       }
     } finally {
       isLoading.value = false;
@@ -1167,9 +1200,15 @@ class MainAuthController extends GetxController {
             : 'farm_sync_failed',
       );
     }
-    farmerLoginSyncStatusCode.value = farmCtrl.farms.isEmpty
+    farmerLoginSyncStatusCode.value =
+        farmCtrl.lastLoadUsedCachedFallback && farmCtrl.farms.isNotEmpty
+        ? 'network_issue'
+        : farmCtrl.farms.isEmpty
         ? 'farms_not_found'
         : 'farms_synced';
+    if (farmCtrl.lastLoadUsedCachedFallback && farmCtrl.farms.isNotEmpty) {
+      _setFarmerLoginSyncStatus('offline_cached_session');
+    }
     return farmCtrl.farms.length;
   }
 

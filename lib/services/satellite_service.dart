@@ -731,19 +731,13 @@ class SatelliteService {
   }) async {
     final phone = farmerPhone?.trim();
     if (phone != null && phone.isNotEmpty) {
-      final data =
-          await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
-            'action': 'disease_data',
-            'farmId': farmId,
-            'phone': phone,
-            if (farmerId != null && farmerId.trim().isNotEmpty)
-              'farmerId': farmerId.trim(),
-          }, jwt);
-      final list = data['scout_zones'] as List? ?? const [];
-      return list
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
+      final summary = await getFarmerFarmSummary(
+        farmId: farmId,
+        jwt: jwt,
+        farmerPhone: phone,
+        farmerId: farmerId,
+      );
+      return summary.scoutZoneRows;
     }
 
     final url =
@@ -772,25 +766,15 @@ class SatelliteService {
     if (phone.isEmpty) {
       throw SatelliteApiException('Farmer phone is required');
     }
-    final data =
-        await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
-          'action': 'disease_data',
-          'farmId': farmId,
-          'phone': phone,
-          if (farmerId != null && farmerId.trim().isNotEmpty)
-            'farmerId': farmerId.trim(),
-        }, jwt);
-    List<Map<String, dynamic>> rows(String key) {
-      final list = data[key] as List? ?? const [];
-      return list
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
-    }
-
+    final summary = await getFarmerFarmSummary(
+      farmId: farmId,
+      jwt: jwt,
+      farmerPhone: phone,
+      farmerId: farmerId,
+    );
     return FarmerDiseaseData(
-      scoutZones: rows('scout_zones'),
-      riskCells: rows('risk_cells'),
+      scoutZones: summary.scoutZoneRows,
+      riskCells: summary.riskCellRows,
     );
   }
 
@@ -825,19 +809,13 @@ class SatelliteService {
   }) async {
     final phone = farmerPhone?.trim();
     if (phone != null && phone.isNotEmpty) {
-      final data =
-          await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
-            'action': 'disease_data',
-            'farmId': farmId,
-            'phone': phone,
-            if (farmerId != null && farmerId.trim().isNotEmpty)
-              'farmerId': farmerId.trim(),
-          }, jwt);
-      final list = data['risk_cells'] as List? ?? const [];
-      return list
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .toList(growable: false);
+      final summary = await getFarmerFarmSummary(
+        farmId: farmId,
+        jwt: jwt,
+        farmerPhone: phone,
+        farmerId: farmerId,
+      );
+      return summary.riskCellRows;
     }
 
     final url =
@@ -862,20 +840,6 @@ class SatelliteService {
     String? farmerPhone,
     String? farmerId,
   }) async {
-    final phone = farmerPhone?.trim();
-    final farmId = '${payload['farm_id'] ?? ''}'.trim();
-    if (phone != null && phone.isNotEmpty) {
-      await _post('${SatelliteConfig.edgeFunctionsBase}/farmer-farm-data', {
-        'action': 'insert_scout_zone',
-        'farmId': farmId,
-        'phone': phone,
-        'payload': payload,
-        if (farmerId != null && farmerId.trim().isNotEmpty)
-          'farmerId': farmerId.trim(),
-      }, jwt);
-      return;
-    }
-
     final url = '${SatelliteConfig.restBase}/disease_scout_zones';
     final response = await http
         .post(

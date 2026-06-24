@@ -22,11 +22,17 @@ class FarmController extends GetxController {
   String? _farmSessionCacheKey;
   List<Farm> _cachedSessionFarms = const [];
   bool _cacheLoadedForSession = false;
+  bool _cachedSessionRemoteConfirmed = false;
   String? _lastPhoneOwnerFallbackSessionKey;
   bool _phoneOwnerFallbackAttempted = false;
   String? _pendingSavedFarmSessionKey;
   final Map<String, Farm> _pendingSavedFarmsById = {};
   int _loadRequestId = 0;
+  bool _lastLoadUsedCachedFallback = false;
+  bool _lastLoadRemoteConfirmed = false;
+
+  bool get lastLoadUsedCachedFallback => _lastLoadUsedCachedFallback;
+  bool get lastLoadRemoteConfirmed => _lastLoadRemoteConfirmed;
 
   @override
   void onInit() {
@@ -171,6 +177,8 @@ class FarmController extends GetxController {
     String? preferredFarmId,
   }) async {
     final requestId = ++_loadRequestId;
+    _lastLoadUsedCachedFallback = false;
+    _lastLoadRemoteConfirmed = false;
     await _ensureSatelliteSessionFromMainAuth();
     if (!_isLatestFarmLoad(requestId)) return;
     isLoading.value = true;
@@ -186,6 +194,8 @@ class FarmController extends GetxController {
           _cacheLoadedForSession = true;
           _farmSessionCacheKey = _activeVerifiedSessionKey;
           _cachedSessionFarms = List<Farm>.from(cached, growable: false);
+          _cachedSessionRemoteConfirmed = false;
+          _lastLoadUsedCachedFallback = true;
           _markVerifiedFarmSyncReady();
         }
       }
@@ -214,6 +224,8 @@ class FarmController extends GetxController {
           _cachedSessionFarms.isNotEmpty) {
         farms.assignAll(_cachedSessionFarms);
         _selectFreshFarmFrom(farms, preferredFarmId: preferredFarmId);
+        _lastLoadUsedCachedFallback = !_cachedSessionRemoteConfirmed;
+        _lastLoadRemoteConfirmed = _cachedSessionRemoteConfirmed;
         _markVerifiedFarmSyncReady();
         if (_isLatestFarmLoad(requestId)) {
           isLoading.value = false;
@@ -223,6 +235,7 @@ class FarmController extends GetxController {
     } else if (!restrictToVerifiedFarmer) {
       _cacheLoadedForSession = false;
       _farmSessionCacheKey = null;
+      _cachedSessionRemoteConfirmed = false;
     }
 
     try {
@@ -243,6 +256,7 @@ class FarmController extends GetxController {
         result = _mergePendingSavedFarms(result);
         if (result.isEmpty && previousVisibleFarms.isNotEmpty) {
           result = previousVisibleFarms;
+          _lastLoadUsedCachedFallback = true;
           Get.log(
             'Preserved local farmer farms after empty remote response for $_activeVerifiedSessionKey',
           );
@@ -258,11 +272,15 @@ class FarmController extends GetxController {
         _cachedSessionFarms = result.isEmpty
             ? const []
             : List<Farm>.from(result, growable: false);
+        _lastLoadRemoteConfirmed = !_lastLoadUsedCachedFallback;
+        _cachedSessionRemoteConfirmed = _lastLoadRemoteConfirmed;
         _markVerifiedFarmSyncReady();
       } else {
         _cacheLoadedForSession = false;
         _farmSessionCacheKey = null;
+        _cachedSessionRemoteConfirmed = false;
         _cachedSessionFarms = const [];
+        _lastLoadRemoteConfirmed = true;
       }
       _selectFreshFarmFrom(farms, preferredFarmId: preferredFarmId);
       if (restrictToVerifiedFarmer) {
@@ -283,6 +301,9 @@ class FarmController extends GetxController {
           _cacheLoadedForSession = true;
           _farmSessionCacheKey = _activeVerifiedSessionKey;
           _cachedSessionFarms = List<Farm>.from(cached, growable: false);
+          _cachedSessionRemoteConfirmed = false;
+          _lastLoadUsedCachedFallback = true;
+          _lastLoadRemoteConfirmed = false;
           _markVerifiedFarmSyncReady();
         } else {
           _cacheLoadedForSession = false;
@@ -298,8 +319,11 @@ class FarmController extends GetxController {
   Future<void> repairEmptyFarmCache() async {
     _cacheLoadedForSession = false;
     _farmSessionCacheKey = null;
+    _cachedSessionRemoteConfirmed = false;
     _cachedSessionFarms = const [];
     _phoneOwnerFallbackAttempted = false;
+    _lastLoadUsedCachedFallback = false;
+    _lastLoadRemoteConfirmed = false;
     selectedFarm.value = null;
     await loadFarms(forceRefresh: true);
   }
@@ -355,6 +379,7 @@ class FarmController extends GetxController {
   void invalidateFarmCache() {
     _cacheLoadedForSession = false;
     _farmSessionCacheKey = null;
+    _cachedSessionRemoteConfirmed = false;
     _cachedSessionFarms = const [];
   }
 
@@ -390,6 +415,9 @@ class FarmController extends GetxController {
       _farmSessionCacheKey = _activeVerifiedSessionKey;
       _lastPhoneOwnerFallbackSessionKey = _farmSessionCacheKey;
       _cachedSessionFarms = List<Farm>.from(farms, growable: false);
+      _cachedSessionRemoteConfirmed = true;
+      _lastLoadUsedCachedFallback = false;
+      _lastLoadRemoteConfirmed = true;
       _markVerifiedFarmSyncReady();
     }
   }
@@ -406,6 +434,9 @@ class FarmController extends GetxController {
       _farmSessionCacheKey = _activeVerifiedSessionKey;
       _lastPhoneOwnerFallbackSessionKey = _farmSessionCacheKey;
       _cachedSessionFarms = List<Farm>.from(farms, growable: false);
+      _cachedSessionRemoteConfirmed = true;
+      _lastLoadUsedCachedFallback = false;
+      _lastLoadRemoteConfirmed = true;
       _markVerifiedFarmSyncReady();
     }
     unawaited(_cacheVerifiedFarmerFarms());
@@ -419,9 +450,14 @@ class FarmController extends GetxController {
     final auth = Get.find<MainAuthController>();
     auth.farmerLoginSyncedFarmCount.value = farms.length;
     auth.farmerLoginLastSyncAt.value = DateTime.now().toUtc();
-    auth.farmerLoginSyncStatusCode.value = farms.isEmpty
+    auth.farmerLoginSyncStatusCode.value = _lastLoadUsedCachedFallback
+        ? 'network_issue'
+        : farms.isEmpty
         ? 'farms_not_found'
         : 'farms_synced';
+    if (_lastLoadUsedCachedFallback && farms.isNotEmpty) {
+      auth.farmerLoginSyncStatusKey.value = 'offline_cached_session';
+    }
     auth.farmerLoginState.value = FarmerLoginState.ready;
   }
 
