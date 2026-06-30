@@ -1,6 +1,6 @@
 import 'package:get/get.dart';
 
-import 'locale_text.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
 
 /// Self-contained, locale-aware strings for the AI grain-grading flow.
 ///

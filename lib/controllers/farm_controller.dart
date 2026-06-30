@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/satellite/farm_model.dart';
@@ -383,6 +383,22 @@ class FarmController extends GetxController {
     _cachedSessionFarms = const [];
   }
 
+  void clearPendingSavedFarm(String farmId) {
+    final id = farmId.trim();
+    if (id.isEmpty) return;
+    _pendingSavedFarmsById.remove(id);
+    final existingIndex = farms.indexWhere((farm) => farm.id == id);
+    if (existingIndex >= 0) {
+      farms.removeAt(existingIndex);
+    }
+    if (selectedFarm.value?.id == id) {
+      selectedFarm.value = farms.isEmpty ? null : farms.first;
+    }
+    _cachedSessionFarms = _cachedSessionFarms
+        .where((farm) => farm.id != id)
+        .toList(growable: false);
+  }
+
   List<Farm> _mergePendingSavedFarms(List<Farm> remoteFarms) {
     if (_pendingSavedFarmsById.isEmpty) return remoteFarms;
     final remoteIds = remoteFarms.map((farm) => farm.id).toSet();
@@ -759,7 +775,7 @@ class FarmController extends GetxController {
           await _repairVerifiedFarmerProfileLink(jwt: jwt, userId: userId);
         } catch (repairError) {
           Get.log(
-            'Farmer link refresh before direct farm save failed: $repairError',
+            'Farmer link refresh before linked farm retry failed: $repairError',
           );
         }
       }
@@ -769,22 +785,14 @@ class FarmController extends GetxController {
         jwt: jwt,
       );
       if (linkedFarm != null) return linkedFarm;
-      final farm = await _service.insertFarm(farmJson, jwt);
-      try {
-        await _repairVerifiedFarmerProfileLink(jwt: jwt, userId: userId);
-      } catch (repairError) {
-        Get.log(
-          'Farmer link refresh after direct farm save failed: $repairError',
-        );
-      }
-      return farm;
+      throw lastError;
     } on Exception catch (error) {
-      Get.log('Farmer linked farm save unavailable, using direct save: $error');
+      Get.log('Farmer linked farm save unavailable: $error');
       try {
         await _repairVerifiedFarmerProfileLink(jwt: jwt, userId: userId);
       } catch (repairError) {
         Get.log(
-          'Farmer link refresh before direct farm save failed: $repairError',
+          'Farmer link refresh before linked farm retry failed: $repairError',
         );
       }
       final linkedFarm = await _retryVerifiedFarmerLinkedSave(
@@ -793,15 +801,7 @@ class FarmController extends GetxController {
         jwt: jwt,
       );
       if (linkedFarm != null) return linkedFarm;
-      final farm = await _service.insertFarm(farmJson, jwt);
-      try {
-        await _repairVerifiedFarmerProfileLink(jwt: jwt, userId: userId);
-      } catch (repairError) {
-        Get.log(
-          'Farmer link refresh after direct farm save failed: $repairError',
-        );
-      }
-      return farm;
+      rethrow;
     }
   }
 
@@ -929,7 +929,9 @@ class FarmController extends GetxController {
         );
       }
       _upsertSavedFarm(farm);
-      await _cacheVerifiedFarmerFarms();
+      if (farmerPhone == null) {
+        await _cacheVerifiedFarmerFarms();
+      }
       if (farmerPhone != null) {
         final confirmedFast = await _confirmSavedFarmVisibleForVerifiedFarmer(
           savedFarm: farm,
@@ -949,11 +951,11 @@ class FarmController extends GetxController {
               ? const Duration(seconds: 4)
               : const Duration(seconds: 1),
         );
+        if (confirmedFast) {
+          await _cacheVerifiedFarmerFarms();
+        }
         if (waitForRemoteConfirmation && !confirmedFast) {
-          throw SatelliteApiException(
-            'Saved farm did not appear in the synced farm list yet.',
-            code: 'farm_sync_pending',
-          );
+          Get.log('Saved farm sync is still pending for ${farm.id}');
         }
         if (!confirmedFast) {
           unawaited(

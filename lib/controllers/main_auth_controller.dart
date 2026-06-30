@@ -8,6 +8,7 @@ import '../services/network_status_service.dart';
 import '../services/secure_app_storage.dart';
 import 'auth_controller.dart';
 import 'farm_controller.dart';
+import 'farmer_inventory_controller.dart';
 import 'survey_controller.dart';
 
 enum FarmerLoginState {
@@ -258,6 +259,7 @@ class MainAuthController extends GetxController {
   Future<void> continueAsVerifiedFarmer(
     String phone, {
     String nextRoute = '/farmer',
+    bool requireAgriRecord = false,
   }) async {
     if (isLoading.value) return;
     final digits = _normalizePhone(phone);
@@ -285,10 +287,12 @@ class MainAuthController extends GetxController {
         final opened = await _openCachedFarmerSessionIfAvailable(
           digits,
           nextRoute,
+          requireAgriRecord: requireAgriRecord,
         );
         if (!opened) {
-          errorMessage.value =
-              'You are offline. Last saved farm data will open when available.';
+          errorMessage.value = requireAgriRecord
+              ? 'Network issue. Connect to internet so we can confirm stakeholder access.'
+              : 'You are offline. Last saved farm data will open when available.';
           farmerLoginState.value = null;
           _trackFarmerLoginEvent('farm_sync_failed', {
             'phone': digits,
@@ -299,7 +303,10 @@ class MainAuthController extends GetxController {
       }
       await _clearLocalGuest();
       await _clearFarmerRemoteSession();
-      final record = await _signInAndSyncRemoteFarmer(digits);
+      final record = await _signInAndSyncRemoteFarmer(
+        digits,
+        requireAgriRecord: requireAgriRecord,
+      );
       verifiedFarmer.value = record;
       await _rememberLocalFarmerProfile(record: record);
       isLoggedIn.value = true;
@@ -394,21 +401,53 @@ class MainAuthController extends GetxController {
     }
   }
 
+  Future<void> continueAsStakeholderFarmer(
+    String phone, {
+    String nextRoute = '/stakeholder',
+  }) {
+    return continueAsVerifiedFarmer(
+      phone,
+      nextRoute: nextRoute,
+      requireAgriRecord: true,
+    );
+  }
+
   Future<void> registerFarmerProfile({
     required String phone,
     required String farmerName,
     required String defaultLocation,
+    required String agriRecordId,
+    required String aadhaarMasked,
+    required String aadhaarLast4,
+    required String identityDocumentPath,
+    double? identityOcrConfidence,
     String nextRoute = '/farmer',
   }) async {
     final digits = _normalizePhone(phone);
     final name = farmerName.trim();
     final location = defaultLocation.trim();
+    final recordId = agriRecordId.trim();
+    final maskedAadhaar = aadhaarMasked.trim();
+    final aadhaarLastDigits = aadhaarLast4.replaceAll(RegExp(r'\D'), '');
+    final documentPath = identityDocumentPath.trim();
     if (digits.length != 10) {
       errorMessage.value = 'Enter a valid 10 digit mobile number';
       return;
     }
     if (name.isEmpty) {
       errorMessage.value = 'Enter farmer name';
+      return;
+    }
+    if (recordId.isEmpty) {
+      errorMessage.value = 'Enter farmer agri record ID';
+      return;
+    }
+    if (aadhaarLastDigits.length != 4 || maskedAadhaar.isEmpty) {
+      errorMessage.value = 'Enter a 12 digit Aadhaar number';
+      return;
+    }
+    if (documentPath.isEmpty) {
+      errorMessage.value = 'Upload agri record document';
       return;
     }
 
@@ -424,15 +463,21 @@ class MainAuthController extends GetxController {
     _farmerSessionLinkInProgress = true;
     try {
       await _clearLocalGuest();
-      await _clearFarmerRemoteSession();
-      await _auth.signInAnonymously(
-        data: {
-          'role': 'farmer',
-          'phone': digits,
-          'farmer_name': name,
-          'default_location': location,
-        },
-      );
+      final canReuseDocumentSession =
+          _auth.currentSession != null &&
+          _auth.currentUser != null &&
+          documentPath.split('/').first == _auth.currentUser!.id;
+      if (!canReuseDocumentSession) {
+        await _clearFarmerRemoteSession();
+        await _auth.signInAnonymously(
+          data: {
+            'role': 'farmer',
+            'phone': digits,
+            'farmer_name': name,
+            'default_location': location,
+          },
+        );
+      }
 
       final session = _auth.currentSession;
       final user = _auth.currentUser;
@@ -444,6 +489,11 @@ class MainAuthController extends GetxController {
         phone: digits,
         farmerName: name,
         defaultLocation: location.isEmpty ? 'Kalsubai Farms' : location,
+        agriRecordId: recordId,
+        aadhaarMasked: maskedAadhaar,
+        aadhaarLast4: aadhaarLastDigits,
+        identityDocumentPath: documentPath,
+        identityOcrConfidence: identityOcrConfidence,
       );
 
       verifiedFarmer.value = record;
@@ -565,6 +615,7 @@ class MainAuthController extends GetxController {
               ? 'farms_not_found'
               : 'farms_synced';
         }
+        await _syncFarmerInventoryForLogin();
       }
     } finally {
       isLoading.value = false;
@@ -588,6 +639,9 @@ class MainAuthController extends GetxController {
   Future<void> logout() async {
     await _auth.signOut();
     verifiedFarmer.value = null;
+    if (Get.isRegistered<FarmerInventoryController>()) {
+      Get.find<FarmerInventoryController>().clear();
+    }
     _clearFarmerLoginSyncStatus();
     await _clearLocalGuest();
     if (Get.isRegistered<AuthController>()) {
@@ -694,6 +748,32 @@ class MainAuthController extends GetxController {
     return digits.length <= 10 ? digits : digits.substring(digits.length - 10);
   }
 
+  Future<void> ensureFarmerSignupSession({required String phone}) async {
+    final digits = _normalizePhone(phone);
+    if (digits.length != 10) {
+      throw const FarmerVerificationException(
+        'Enter a valid 10 digit mobile number',
+        code: 'invalid_phone',
+      );
+    }
+    final currentUser = _auth.currentUser;
+    if (_auth.currentSession != null && currentUser != null) {
+      final metadata = currentUser.userMetadata ?? const <String, dynamic>{};
+      final sessionPhone = _normalizePhone('${metadata['phone'] ?? ''}');
+      if (sessionPhone == digits) {
+        return;
+      }
+    }
+    _farmerSessionLinkInProgress = true;
+    try {
+      await _clearLocalGuest();
+      await _clearFarmerRemoteSession();
+      await _auth.signInAnonymously(data: {'role': 'farmer', 'phone': digits});
+    } finally {
+      _farmerSessionLinkInProgress = false;
+    }
+  }
+
   LocalAppDatabase? get _localDb => LocalAppDatabase.maybeInstance;
 
   Future<void> _rememberLocalFarmerProfile({
@@ -714,6 +794,10 @@ class MainAuthController extends GetxController {
           userId: _auth.currentUser?.id ?? '',
           defaultLocation: record.defaultLocation,
           preferredLanguage: 'en',
+          agriRecordId: record.agriRecordId,
+          aadhaarMasked: record.aadhaarMasked,
+          aadhaarLast4: record.aadhaarLast4,
+          identityDocumentPath: record.identityDocumentPath,
           profileComplete: true,
           lastVerifiedAt: now.toIso8601String(),
           syncedAt: now.toIso8601String(),
@@ -788,6 +872,10 @@ class MainAuthController extends GetxController {
       'farmerName': record.farmerName,
       'farmerId': record.farmerId,
       'defaultLocation': record.defaultLocation,
+      'agriRecordId': record.agriRecordId,
+      'aadhaarMasked': record.aadhaarMasked,
+      'aadhaarLast4': record.aadhaarLast4,
+      'identityDocumentPath': record.identityDocumentPath,
       'farmCount': farmCount,
       'syncedAt': syncedAt.toIso8601String(),
     });
@@ -812,6 +900,10 @@ class MainAuthController extends GetxController {
             farmerId: cached.farmerId,
             farmerName: cached.farmerName,
             defaultLocation: cached.defaultLocation,
+            agriRecordId: cached.agriRecordId,
+            aadhaarMasked: cached.aadhaarMasked,
+            aadhaarLast4: cached.aadhaarLast4,
+            identityDocumentPath: cached.identityDocumentPath,
             lots: const [],
           );
         }
@@ -839,10 +931,14 @@ class MainAuthController extends GetxController {
 
   Future<bool> _openCachedFarmerSessionIfAvailable(
     String phone,
-    String nextRoute,
-  ) async {
+    String nextRoute, {
+    bool requireAgriRecord = false,
+  }) async {
     final record = await _cachedFarmerRecordForPhone(phone);
     if (record == null) return false;
+    if (requireAgriRecord && !_hasStakeholderAgriRecord(record)) {
+      return false;
+    }
 
     verifiedFarmer.value = record;
     isLoggedIn.value = true;
@@ -888,9 +984,21 @@ class MainAuthController extends GetxController {
     Get.log('[farmer_login] ${jsonEncode(entry)}');
   }
 
-  Future<VerifiedFarmerRecord> _signInAndSyncRemoteFarmer(String phone) async {
+  Future<VerifiedFarmerRecord> _signInAndSyncRemoteFarmer(
+    String phone, {
+    bool requireAgriRecord = false,
+  }) async {
     _setFarmerLoginSyncStatus('checking_farmer_number');
-    final verifiedRecord = await _verifyFarmerPhone(phone);
+    final verifiedRecord = await _verifyFarmerPhone(
+      phone,
+      requireAgriRecord: requireAgriRecord,
+    );
+    if (requireAgriRecord && !_hasStakeholderAgriRecord(verifiedRecord)) {
+      throw const FarmerVerificationException(
+        'Stakeholder login needs a government agri record. Complete farmer signup with your agri record card first.',
+        code: 'farmer_agri_record_required',
+      );
+    }
     verifiedFarmer.value = verifiedRecord;
     _setFarmerLoginSyncStatus('farmer_profile_found');
     _trackFarmerLoginEvent('farmer_found', {
@@ -1022,6 +1130,10 @@ class MainAuthController extends GetxController {
       'farmer_id': record.farmerId,
       'farmer_name': record.farmerName,
       'default_location': record.defaultLocation,
+      'agri_record_id': record.agriRecordId,
+      'aadhaar_masked': record.aadhaarMasked,
+      'aadhaar_last4': record.aadhaarLast4,
+      'identity_document_path': record.identityDocumentPath,
       'auth_method': 'anonymous_link',
       'status': 'active',
       'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
@@ -1108,6 +1220,8 @@ class MainAuthController extends GetxController {
     switch (e.code) {
       case 'farmer_not_found':
         return 'Create a new farmer account. Tap Sign up to continue.';
+      case 'farmer_agri_record_required':
+        return 'Stakeholder login needs a government agri record. Complete farmer signup with your agri record card first.';
       case 'network_issue':
         return 'Network issue. Check internet and try again.';
       case 'farm_sync_failed':
@@ -1126,6 +1240,11 @@ class MainAuthController extends GetxController {
       return e.message;
     }
     return 'Unable to complete farmer verification. Try again.';
+  }
+
+  bool _hasStakeholderAgriRecord(VerifiedFarmerRecord record) {
+    return record.agriRecordId.trim().isNotEmpty &&
+        record.identityDocumentPath.trim().isNotEmpty;
   }
 
   bool _looksLikeFarmerSignupRequired(Object? value) {
@@ -1208,7 +1327,25 @@ class MainAuthController extends GetxController {
     if (farmCtrl.lastLoadUsedCachedFallback && farmCtrl.farms.isNotEmpty) {
       _setFarmerLoginSyncStatus('offline_cached_session');
     }
+    await _syncFarmerInventoryForLogin();
     return farmCtrl.farms.length;
+  }
+
+  Future<void> _syncFarmerInventoryForLogin() async {
+    final record = verifiedFarmer.value;
+    final phone = _normalizePhone(record?.phone ?? '');
+    if (phone.length != 10) return;
+    try {
+      final inventoryCtrl = Get.isRegistered<FarmerInventoryController>()
+          ? Get.find<FarmerInventoryController>()
+          : Get.put(FarmerInventoryController());
+      await inventoryCtrl.syncForFarmer(
+        farmerPhone: phone,
+        farmerId: record?.farmerId,
+      );
+    } catch (error) {
+      Get.log('Farmer inventory sync failed: $error');
+    }
   }
 
   Future<void> _syncCurrentSupabaseSessionForSatellite() async {
@@ -1231,6 +1368,11 @@ class MainAuthController extends GetxController {
     required String phone,
     required String farmerName,
     required String defaultLocation,
+    required String agriRecordId,
+    required String aadhaarMasked,
+    required String aadhaarLast4,
+    required String identityDocumentPath,
+    double? identityOcrConfidence,
   }) async {
     try {
       final response = await _client.functions.invoke(
@@ -1240,6 +1382,13 @@ class MainAuthController extends GetxController {
           'phone': phone,
           'farmerName': farmerName,
           'defaultLocation': defaultLocation,
+          'agriRecordId': agriRecordId,
+          'aadhaarMasked': aadhaarMasked,
+          'aadhaarLast4': aadhaarLast4,
+          'identityDocumentPath': identityDocumentPath,
+          ...(identityOcrConfidence == null
+              ? const <String, Object?>{}
+              : {'identityOcrConfidence': identityOcrConfidence}),
         },
       );
       final data = _responseMap(response.data);
@@ -1300,11 +1449,18 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<VerifiedFarmerRecord> _verifyFarmerPhone(String phone) async {
+  Future<VerifiedFarmerRecord> _verifyFarmerPhone(
+    String phone, {
+    bool requireAgriRecord = false,
+  }) async {
     try {
+      final body = <String, dynamic>{'phone': phone};
+      if (requireAgriRecord) {
+        body['require_agri_record'] = true;
+      }
       final response = await _client.functions.invoke(
         'verify-farmer-phone',
-        body: {'phone': phone},
+        body: body,
       );
       final data = _responseMap(response.data);
       final code = _readResponseCode(data);
@@ -1397,7 +1553,9 @@ class MainAuthController extends GetxController {
     // 1. Try primary lookup by user_id
     final rows = await _client
         .from('farmer_phone_profiles')
-        .select('phone, farmer_id, farmer_name, default_location')
+        .select(
+          'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path',
+        )
         .eq('user_id', user.id)
         .limit(1);
 
@@ -1408,6 +1566,10 @@ class MainAuthController extends GetxController {
         farmerId: '${row['farmer_id'] ?? 'FMR-${row['phone'] ?? user.id}'}',
         farmerName: '${row['farmer_name'] ?? 'Farmer'}',
         defaultLocation: '${row['default_location'] ?? 'Remote farm profile'}',
+        agriRecordId: '${row['agri_record_id'] ?? ''}'.trim(),
+        aadhaarMasked: '${row['aadhaar_masked'] ?? ''}'.trim(),
+        aadhaarLast4: '${row['aadhaar_last4'] ?? ''}'.trim(),
+        identityDocumentPath: '${row['identity_document_path'] ?? ''}'.trim(),
         lots: const [],
       );
     }
@@ -1429,6 +1591,11 @@ class MainAuthController extends GetxController {
           farmerName: '${metadata['farmer_name'] ?? 'Farmer'}',
           defaultLocation:
               '${metadata['default_location'] ?? 'Remote farm profile'}',
+          agriRecordId: '${metadata['agri_record_id'] ?? ''}'.trim(),
+          aadhaarMasked: '${metadata['aadhaar_masked'] ?? ''}'.trim(),
+          aadhaarLast4: '${metadata['aadhaar_last4'] ?? ''}'.trim(),
+          identityDocumentPath: '${metadata['identity_document_path'] ?? ''}'
+              .trim(),
           lots: const [],
         );
       }
@@ -1459,6 +1626,11 @@ class MainAuthController extends GetxController {
       'farmer_name': farmerName,
       'default_location': defaultLocation,
       'auth_method': 'email_password',
+      'agri_record_id': '${metadata['agri_record_id'] ?? ''}'.trim(),
+      'aadhaar_masked': '${metadata['aadhaar_masked'] ?? ''}'.trim(),
+      'aadhaar_last4': '${metadata['aadhaar_last4'] ?? ''}'.trim(),
+      'identity_document_path': '${metadata['identity_document_path'] ?? ''}'
+          .trim(),
     }, onConflict: 'user_id');
 
     return VerifiedFarmerRecord(
@@ -1466,6 +1638,11 @@ class MainAuthController extends GetxController {
       farmerId: farmerId,
       farmerName: farmerName,
       defaultLocation: defaultLocation,
+      agriRecordId: '${metadata['agri_record_id'] ?? ''}'.trim(),
+      aadhaarMasked: '${metadata['aadhaar_masked'] ?? ''}'.trim(),
+      aadhaarLast4: '${metadata['aadhaar_last4'] ?? ''}'.trim(),
+      identityDocumentPath: '${metadata['identity_document_path'] ?? ''}'
+          .trim(),
       lots: const [],
     );
   }

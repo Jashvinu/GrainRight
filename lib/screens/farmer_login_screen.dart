@@ -1,18 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import '../config/brand_assets.dart';
-import '../config/locale_text.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../widgets/farm_hills_background.dart';
-import '../widgets/language_selector_button.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 
 class FarmerLoginScreen extends StatefulWidget {
-  const FarmerLoginScreen({super.key});
+  final String titleKey;
+  final String? subtitleKey;
+  final String loginNoteKey;
+  final String continueLabelKey;
+  final String nextRoute;
+  final bool requireAgriRecord;
+
+  const FarmerLoginScreen({
+    super.key,
+    this.titleKey = 'farmer_login',
+    this.subtitleKey,
+    this.loginNoteKey = 'login_note',
+    this.continueLabelKey = 'continue_',
+    this.nextRoute = '/farmer',
+    this.requireAgriRecord = false,
+  });
 
   @override
   State<FarmerLoginScreen> createState() => _FarmerLoginScreenState();
@@ -39,7 +54,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final auth = Get.find<MainAuthController>();
       if (auth.verifiedFarmer.value != null) {
-        Get.offAllNamed('/farmer');
+        Get.offAllNamed(widget.nextRoute);
       }
     });
   }
@@ -60,7 +75,14 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
     }
 
     FocusScope.of(context).unfocus();
-    await auth.continueAsVerifiedFarmer(digits, nextRoute: '/farmer');
+    if (widget.requireAgriRecord) {
+      await auth.continueAsStakeholderFarmer(
+        digits,
+        nextRoute: widget.nextRoute,
+      );
+    } else {
+      await auth.continueAsVerifiedFarmer(digits, nextRoute: widget.nextRoute);
+    }
   }
 
   void _useLastFarmer(String phone) {
@@ -96,6 +118,8 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
         normalized.contains('redirecting to sign up') ||
         normalized.contains('not verified') ||
         normalized.contains('not approved') ||
+        normalized.contains('stakeholder login needs') ||
+        normalized.contains('government agri record') ||
         normalized.contains('create account') ||
         normalized.contains('farmer_not_found');
   }
@@ -107,7 +131,10 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
       return;
     }
     FocusScope.of(context).unfocus();
-    Get.toNamed('/farmer/signup', arguments: {'phone': digits});
+    Get.toNamed(
+      '/farmer/signup',
+      arguments: {'phone': digits, 'nextRoute': widget.nextRoute},
+    );
   }
 
   void _goBack() {
@@ -234,7 +261,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                           ),
                           SizedBox(height: compact ? 12 : 16),
                           Text(
-                            UiStrings.t('farmer_login'),
+                            UiStrings.t(widget.titleKey),
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: AppTheme.greenDark,
@@ -244,6 +271,19 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                               height: 1.05,
                             ),
                           ),
+                          if (widget.subtitleKey != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              UiStrings.t(widget.subtitleKey!),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 14,
+                                height: 1.35,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           Obx(() {
                             final phone = auth.lastFarmerLoginPhone.value;
@@ -336,7 +376,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 14),
-                                const _LoginNote(),
+                                _LoginNote(noteKey: widget.loginNoteKey),
                               ],
                             ),
                           ),
@@ -361,7 +401,7 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                 label: Text(
                                   auth.isLoading.value
                                       ? UiStrings.t('please_wait')
-                                      : UiStrings.t('continue_'),
+                                      : UiStrings.t(widget.continueLabelKey),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.greenDark,
@@ -1091,7 +1131,9 @@ class _SupportActionCard extends StatelessWidget {
 }
 
 class _LoginNote extends StatelessWidget {
-  const _LoginNote();
+  final String noteKey;
+
+  const _LoginNote({required this.noteKey});
 
   @override
   Widget build(BuildContext context) {
@@ -1113,7 +1155,7 @@ class _LoginNote extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                UiStrings.t('login_note'),
+                UiStrings.t(noteKey),
                 style: const TextStyle(
                   color: AppTheme.textMuted,
                   height: 1.35,

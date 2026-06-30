@@ -3,11 +3,11 @@ import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../config/satellite_config.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/diagnostics_home_controller.dart';
 import '../models/satellite/diagnostics_model.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../widgets/satellite/problem_card.dart';
 import '../widgets/satellite/satellite_map_view.dart';
 

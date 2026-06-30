@@ -113,6 +113,10 @@ class LocalFarmerProfileRecord {
   final String userId;
   final String defaultLocation;
   final String preferredLanguage;
+  final String agriRecordId;
+  final String aadhaarMasked;
+  final String aadhaarLast4;
+  final String identityDocumentPath;
   final bool profileComplete;
   final String lastVerifiedAt;
   final String syncedAt;
@@ -124,6 +128,10 @@ class LocalFarmerProfileRecord {
     required this.userId,
     required this.defaultLocation,
     required this.preferredLanguage,
+    this.agriRecordId = '',
+    this.aadhaarMasked = '',
+    this.aadhaarLast4 = '',
+    this.identityDocumentPath = '',
     required this.profileComplete,
     required this.lastVerifiedAt,
     required this.syncedAt,
@@ -183,6 +191,78 @@ class LocalFarmCacheRecord {
     this.currentStatusStage,
     this.currentStatusUpdatedAt,
     this.selected = false,
+  });
+}
+
+class LocalInventoryCacheRecord {
+  final String localId;
+  final String? remoteId;
+  final String? userId;
+  final String farmerPhone;
+  final String? farmerIdValue;
+  final String farmId;
+  final String farmName;
+  final String batchId;
+  final String harvestBatchId;
+  final String productCategory;
+  final String productName;
+  final String crop;
+  final String variety;
+  final double quantity;
+  final String unit;
+  final int? bagCount;
+  final double? bagSizeKg;
+  final double? moisturePercent;
+  final String grade;
+  final int? gradeScore;
+  final String gradeBasis;
+  final double? estimatedYieldKg;
+  final String harvestedAt;
+  final double? latitude;
+  final double? longitude;
+  final String imageName;
+  final String sourceFlow;
+  final String notes;
+  final String syncStatus;
+  final String createdAt;
+  final String updatedAt;
+  final String? syncedAt;
+  final String? lastError;
+
+  const LocalInventoryCacheRecord({
+    required this.localId,
+    required this.farmerPhone,
+    required this.farmId,
+    required this.farmName,
+    required this.batchId,
+    this.harvestBatchId = '',
+    required this.productCategory,
+    required this.productName,
+    required this.crop,
+    required this.variety,
+    required this.quantity,
+    required this.unit,
+    required this.harvestedAt,
+    required this.imageName,
+    required this.sourceFlow,
+    required this.notes,
+    required this.syncStatus,
+    required this.createdAt,
+    required this.updatedAt,
+    this.remoteId,
+    this.userId,
+    this.farmerIdValue,
+    this.bagCount,
+    this.bagSizeKg,
+    this.moisturePercent,
+    this.grade = '',
+    this.gradeScore,
+    this.gradeBasis = '',
+    this.estimatedYieldKg,
+    this.latitude,
+    this.longitude,
+    this.syncedAt,
+    this.lastError,
   });
 }
 
@@ -253,11 +333,27 @@ class LocalAppDatabase extends GeneratedDatabase {
         user_id TEXT NOT NULL DEFAULT '',
         default_location TEXT NOT NULL DEFAULT '',
         preferred_language TEXT NOT NULL DEFAULT 'en',
+        agri_record_id TEXT NOT NULL DEFAULT '',
+        aadhaar_masked TEXT NOT NULL DEFAULT '',
+        aadhaar_last4 TEXT NOT NULL DEFAULT '',
+        identity_document_path TEXT NOT NULL DEFAULT '',
         profile_complete INTEGER NOT NULL DEFAULT 0,
         last_verified_at TEXT NOT NULL,
         synced_at TEXT NOT NULL
       );
     ''');
+    for (final statement in const [
+      'ALTER TABLE local_farmer_profile_cache ADD COLUMN agri_record_id TEXT NOT NULL DEFAULT \'\';',
+      'ALTER TABLE local_farmer_profile_cache ADD COLUMN aadhaar_masked TEXT NOT NULL DEFAULT \'\';',
+      'ALTER TABLE local_farmer_profile_cache ADD COLUMN aadhaar_last4 TEXT NOT NULL DEFAULT \'\';',
+      'ALTER TABLE local_farmer_profile_cache ADD COLUMN identity_document_path TEXT NOT NULL DEFAULT \'\';',
+    ]) {
+      try {
+        await customStatement(statement);
+      } catch (_) {
+        // Existing caches already have this column.
+      }
+    }
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_local_farmer_profile_farmer_id ON local_farmer_profile_cache(farmer_id);',
     );
@@ -309,6 +405,59 @@ class LocalAppDatabase extends GeneratedDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_local_farms_selected ON local_farms_cache(farmer_phone, selected);',
     );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS local_inventory_items (
+        local_id TEXT PRIMARY KEY,
+        remote_id TEXT,
+        user_id TEXT,
+        farmer_phone TEXT NOT NULL,
+        farmer_id TEXT,
+        farm_id TEXT NOT NULL,
+        farm_name TEXT NOT NULL,
+        batch_id TEXT NOT NULL,
+        harvest_batch_id TEXT NOT NULL DEFAULT '',
+        product_category TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        crop TEXT NOT NULL,
+        variety TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        bag_count INTEGER,
+        bag_size_kg REAL,
+        moisture_percent REAL,
+        grade TEXT NOT NULL DEFAULT '',
+        grade_score INTEGER,
+        grade_basis TEXT NOT NULL DEFAULT '',
+        estimated_yield_kg REAL,
+        harvested_at TEXT NOT NULL,
+        latitude REAL,
+        longitude REAL,
+        image_name TEXT NOT NULL DEFAULT '',
+        source_flow TEXT NOT NULL DEFAULT 'inventory',
+        notes TEXT NOT NULL DEFAULT '',
+        sync_status TEXT NOT NULL DEFAULT 'synced',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        synced_at TEXT,
+        last_error TEXT
+      );
+    ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_inventory_farmer ON local_inventory_items(farmer_phone, farmer_id, created_at DESC);',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_inventory_farm ON local_inventory_items(farm_id, created_at DESC);',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_inventory_status ON local_inventory_items(sync_status);',
+    );
+    try {
+      await customStatement(
+        "ALTER TABLE local_inventory_items ADD COLUMN harvest_batch_id TEXT NOT NULL DEFAULT '';",
+      );
+    } catch (_) {
+      // Existing caches already have this column.
+    }
     await customStatement('''
       CREATE TABLE IF NOT EXISTS offline_map_regions (
         region_id TEXT PRIMARY KEY,
@@ -513,14 +662,19 @@ class LocalAppDatabase extends GeneratedDatabase {
       '''
       INSERT INTO local_farmer_profile_cache (
         phone, farmer_id, farmer_name, user_id, default_location,
-        preferred_language, profile_complete, last_verified_at, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        preferred_language, agri_record_id, aadhaar_masked, aadhaar_last4,
+        identity_document_path, profile_complete, last_verified_at, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(phone) DO UPDATE SET
         farmer_id = excluded.farmer_id,
         farmer_name = excluded.farmer_name,
         user_id = excluded.user_id,
         default_location = excluded.default_location,
         preferred_language = excluded.preferred_language,
+        agri_record_id = excluded.agri_record_id,
+        aadhaar_masked = excluded.aadhaar_masked,
+        aadhaar_last4 = excluded.aadhaar_last4,
+        identity_document_path = excluded.identity_document_path,
         profile_complete = excluded.profile_complete,
         last_verified_at = excluded.last_verified_at,
         synced_at = excluded.synced_at
@@ -532,6 +686,10 @@ class LocalAppDatabase extends GeneratedDatabase {
         Variable.withString(record.userId),
         Variable.withString(record.defaultLocation),
         Variable.withString(record.preferredLanguage),
+        Variable.withString(record.agriRecordId),
+        Variable.withString(record.aadhaarMasked),
+        Variable.withString(record.aadhaarLast4),
+        Variable.withString(record.identityDocumentPath),
         Variable.withInt(record.profileComplete ? 1 : 0),
         Variable.withString(record.lastVerifiedAt),
         Variable.withString(record.syncedAt),
@@ -652,23 +810,13 @@ class LocalAppDatabase extends GeneratedDatabase {
     await ensureInitialized();
     final digits = _normalizePhone(farmerPhone);
     if (digits.isEmpty) return const [];
-    final farmerIdValue = farmerId?.trim();
     final rows = await customSelect(
-      farmerIdValue == null || farmerIdValue.isEmpty
-          ? '''
-            SELECT * FROM local_farms_cache
-            WHERE farmer_phone = ?
-            ORDER BY selected DESC, created_at DESC
-            '''
-          : '''
-            SELECT * FROM local_farms_cache
-            WHERE farmer_phone = ?
-              AND (farmer_id IS NULL OR farmer_id = '' OR farmer_id = ?)
-            ORDER BY selected DESC, created_at DESC
-            ''',
-      variables: farmerIdValue == null || farmerIdValue.isEmpty
-          ? [Variable.withString(digits)]
-          : [Variable.withString(digits), Variable.withString(farmerIdValue)],
+      '''
+      SELECT * FROM local_farms_cache
+      WHERE farmer_phone = ?
+      ORDER BY selected DESC, created_at DESC
+      ''',
+      variables: [Variable.withString(digits)],
     ).get();
     return rows.map(_farmCacheFromRow).toList();
   }
@@ -695,12 +843,211 @@ class LocalAppDatabase extends GeneratedDatabase {
         SET selected = 1
         WHERE farmer_phone = ? AND farm_id = ?
         ''',
-        variables: [
-          Variable.withString(digits),
-          Variable.withString(farmId),
-        ],
+        variables: [Variable.withString(digits), Variable.withString(farmId)],
       );
     });
+  }
+
+  Future<void> replaceInventoryCacheForFarmer({
+    required String farmerPhone,
+    String? farmerId,
+    required List<LocalInventoryCacheRecord> items,
+  }) async {
+    await ensureInitialized();
+    final digits = _normalizePhone(farmerPhone);
+    if (digits.isEmpty) return;
+    await transaction(() async {
+      await customUpdate(
+        '''
+        DELETE FROM local_inventory_items
+        WHERE farmer_phone = ? AND sync_status = 'synced'
+        ''',
+        variables: [Variable.withString(digits)],
+      );
+      for (final item in items) {
+        await _upsertInventoryCacheRecord(item, fallbackFarmerId: farmerId);
+      }
+    });
+  }
+
+  Future<void> upsertInventoryCache(
+    LocalInventoryCacheRecord item, {
+    String? fallbackFarmerId,
+  }) async {
+    await ensureInitialized();
+    await _upsertInventoryCacheRecord(item, fallbackFarmerId: fallbackFarmerId);
+  }
+
+  Future<List<LocalInventoryCacheRecord>> loadCachedInventoryForFarmer({
+    required String farmerPhone,
+    String? farmerId,
+  }) async {
+    await ensureInitialized();
+    final digits = _normalizePhone(farmerPhone);
+    if (digits.isEmpty) return const [];
+    final rows = await customSelect(
+      '''
+      SELECT * FROM local_inventory_items
+      WHERE farmer_phone = ?
+      ORDER BY created_at DESC
+      ''',
+      variables: [Variable.withString(digits)],
+    ).get();
+    return rows.map(_inventoryCacheFromRow).toList(growable: false);
+  }
+
+  Future<List<LocalInventoryCacheRecord>> loadPendingInventoryForFarmer({
+    required String farmerPhone,
+    String? farmerId,
+  }) async {
+    await ensureInitialized();
+    final digits = _normalizePhone(farmerPhone);
+    if (digits.isEmpty) return const [];
+    final rows = await customSelect(
+      '''
+      SELECT * FROM local_inventory_items
+      WHERE farmer_phone = ? AND sync_status != 'synced'
+      ORDER BY created_at ASC
+      ''',
+      variables: [Variable.withString(digits)],
+    ).get();
+    return rows.map(_inventoryCacheFromRow).toList(growable: false);
+  }
+
+  Future<void> markInventorySynced({
+    required String localId,
+    required String remoteId,
+    required String syncedAt,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      UPDATE local_inventory_items
+      SET remote_id = ?,
+          sync_status = 'synced',
+          synced_at = ?,
+          updated_at = ?,
+          last_error = NULL
+      WHERE local_id = ?
+      ''',
+      variables: [
+        Variable.withString(remoteId),
+        Variable.withString(syncedAt),
+        Variable.withString(syncedAt),
+        Variable.withString(localId),
+      ],
+    );
+  }
+
+  Future<void> markInventoryPending({
+    required String localId,
+    required String updatedAt,
+    String? lastError,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      UPDATE local_inventory_items
+      SET sync_status = 'pending',
+          updated_at = ?,
+          last_error = ?
+      WHERE local_id = ?
+      ''',
+      variables: [
+        Variable.withString(updatedAt),
+        Variable(lastError),
+        Variable.withString(localId),
+      ],
+    );
+  }
+
+  Future<void> _upsertInventoryCacheRecord(
+    LocalInventoryCacheRecord item, {
+    String? fallbackFarmerId,
+  }) async {
+    final digits = _normalizePhone(item.farmerPhone);
+    if (digits.isEmpty || item.localId.trim().isEmpty) return;
+    await customUpdate(
+      '''
+      INSERT INTO local_inventory_items (
+        local_id, remote_id, user_id, farmer_phone, farmer_id, farm_id,
+        farm_name, batch_id, harvest_batch_id, product_category, product_name,
+        crop, variety, quantity, unit, bag_count, bag_size_kg,
+        moisture_percent, grade, grade_score, grade_basis,
+        estimated_yield_kg, harvested_at, latitude, longitude, image_name,
+        source_flow, notes, sync_status, created_at, updated_at, synced_at,
+        last_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(local_id) DO UPDATE SET
+        remote_id = excluded.remote_id,
+        user_id = excluded.user_id,
+        farmer_phone = excluded.farmer_phone,
+        farmer_id = excluded.farmer_id,
+        farm_id = excluded.farm_id,
+        farm_name = excluded.farm_name,
+        batch_id = excluded.batch_id,
+        harvest_batch_id = excluded.harvest_batch_id,
+        product_category = excluded.product_category,
+        product_name = excluded.product_name,
+        crop = excluded.crop,
+        variety = excluded.variety,
+        quantity = excluded.quantity,
+        unit = excluded.unit,
+        bag_count = excluded.bag_count,
+        bag_size_kg = excluded.bag_size_kg,
+        moisture_percent = excluded.moisture_percent,
+        grade = excluded.grade,
+        grade_score = excluded.grade_score,
+        grade_basis = excluded.grade_basis,
+        estimated_yield_kg = excluded.estimated_yield_kg,
+        harvested_at = excluded.harvested_at,
+        latitude = excluded.latitude,
+        longitude = excluded.longitude,
+        image_name = excluded.image_name,
+        source_flow = excluded.source_flow,
+        notes = excluded.notes,
+        sync_status = excluded.sync_status,
+        created_at = excluded.created_at,
+        updated_at = excluded.updated_at,
+        synced_at = excluded.synced_at,
+        last_error = excluded.last_error
+      ''',
+      variables: [
+        Variable.withString(item.localId),
+        Variable(item.remoteId),
+        Variable(item.userId),
+        Variable.withString(digits),
+        Variable(item.farmerIdValue ?? fallbackFarmerId),
+        Variable.withString(item.farmId),
+        Variable.withString(item.farmName),
+        Variable.withString(item.batchId),
+        Variable.withString(item.harvestBatchId),
+        Variable.withString(item.productCategory),
+        Variable.withString(item.productName),
+        Variable.withString(item.crop),
+        Variable.withString(item.variety),
+        Variable.withReal(item.quantity),
+        Variable.withString(item.unit),
+        Variable(item.bagCount),
+        Variable(item.bagSizeKg),
+        Variable(item.moisturePercent),
+        Variable.withString(item.grade),
+        Variable(item.gradeScore),
+        Variable.withString(item.gradeBasis),
+        Variable(item.estimatedYieldKg),
+        Variable.withString(item.harvestedAt),
+        Variable(item.latitude),
+        Variable(item.longitude),
+        Variable.withString(item.imageName),
+        Variable.withString(item.sourceFlow),
+        Variable.withString(item.notes),
+        Variable.withString(item.syncStatus),
+        Variable.withString(item.createdAt),
+        Variable.withString(item.updatedAt),
+        Variable(item.syncedAt),
+        Variable(item.lastError),
+      ],
+    );
   }
 
   Future<void> cacheFormList({
@@ -935,6 +1282,10 @@ class LocalAppDatabase extends GeneratedDatabase {
       userId: row.read<String>('user_id'),
       defaultLocation: row.read<String>('default_location'),
       preferredLanguage: row.read<String>('preferred_language'),
+      agriRecordId: row.read<String>('agri_record_id'),
+      aadhaarMasked: row.read<String>('aadhaar_masked'),
+      aadhaarLast4: row.read<String>('aadhaar_last4'),
+      identityDocumentPath: row.read<String>('identity_document_path'),
       profileComplete: row.read<int>('profile_complete') == 1,
       lastVerifiedAt: row.read<String>('last_verified_at'),
       syncedAt: row.read<String>('synced_at'),
@@ -964,11 +1315,50 @@ class LocalAppDatabase extends GeneratedDatabase {
       sowingDate: row.readNullable<String>('sowing_date'),
       currentStatus: row.readNullable<String>('current_status'),
       currentStatusStage: row.readNullable<String>('current_status_stage'),
-      currentStatusUpdatedAt:
-          row.readNullable<String>('current_status_updated_at'),
+      currentStatusUpdatedAt: row.readNullable<String>(
+        'current_status_updated_at',
+      ),
       createdAt: row.read<String>('created_at'),
       updatedAt: row.read<String>('updated_at'),
       selected: row.read<int>('selected') == 1,
+    );
+  }
+
+  LocalInventoryCacheRecord _inventoryCacheFromRow(QueryRow row) {
+    return LocalInventoryCacheRecord(
+      localId: row.read<String>('local_id'),
+      remoteId: row.readNullable<String>('remote_id'),
+      userId: row.readNullable<String>('user_id'),
+      farmerPhone: row.read<String>('farmer_phone'),
+      farmerIdValue: row.readNullable<String>('farmer_id'),
+      farmId: row.read<String>('farm_id'),
+      farmName: row.read<String>('farm_name'),
+      batchId: row.read<String>('batch_id'),
+      harvestBatchId: row.read<String>('harvest_batch_id'),
+      productCategory: row.read<String>('product_category'),
+      productName: row.read<String>('product_name'),
+      crop: row.read<String>('crop'),
+      variety: row.read<String>('variety'),
+      quantity: row.read<double>('quantity'),
+      unit: row.read<String>('unit'),
+      bagCount: row.readNullable<int>('bag_count'),
+      bagSizeKg: row.readNullable<double>('bag_size_kg'),
+      moisturePercent: row.readNullable<double>('moisture_percent'),
+      grade: row.read<String>('grade'),
+      gradeScore: row.readNullable<int>('grade_score'),
+      gradeBasis: row.read<String>('grade_basis'),
+      estimatedYieldKg: row.readNullable<double>('estimated_yield_kg'),
+      harvestedAt: row.read<String>('harvested_at'),
+      latitude: row.readNullable<double>('latitude'),
+      longitude: row.readNullable<double>('longitude'),
+      imageName: row.read<String>('image_name'),
+      sourceFlow: row.read<String>('source_flow'),
+      notes: row.read<String>('notes'),
+      syncStatus: row.read<String>('sync_status'),
+      createdAt: row.read<String>('created_at'),
+      updatedAt: row.read<String>('updated_at'),
+      syncedAt: row.readNullable<String>('synced_at'),
+      lastError: row.readNullable<String>('last_error'),
     );
   }
 

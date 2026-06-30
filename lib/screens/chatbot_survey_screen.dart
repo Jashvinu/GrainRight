@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/chat_survey_controller.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
@@ -16,7 +16,7 @@ import '../widgets/chat/repeat_group_prompt.dart';
 import '../widgets/chat/summary_card.dart';
 import '../widgets/chat/typing_indicator.dart';
 import '../widgets/chat/user_text_bubble.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class ChatbotSurveyScreen extends StatefulWidget {
   const ChatbotSurveyScreen({super.key});

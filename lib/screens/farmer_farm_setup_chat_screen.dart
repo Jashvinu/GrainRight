@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../utils/boundary_map_launcher.dart';
 import '../utils/polygon_geometry.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class FarmSetupChatResult {
   final String farmName;
@@ -321,6 +321,27 @@ class _FarmerFarmSetupChatScreenState extends State<FarmerFarmSetupChatScreen> {
         _seedSource != null &&
         _harvestIntent != null &&
         _sowingDate != null;
+  }
+
+  String _formatSowingDate(DateTime date) {
+    return '${date.day.toString().padLeft(2, '0')}/'
+        '${date.month.toString().padLeft(2, '0')}/'
+        '${date.year}';
+  }
+
+  Future<void> _pickSowingDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _sowingDate ?? now,
+      firstDate: DateTime(now.year - 10, 1, 1),
+      lastDate: now,
+    );
+    if (picked == null) return;
+    _appendUserText(
+      '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}',
+      displayText: _formatSowingDate(picked),
+    );
   }
 
   Future<void> _openPolygonMap() async {
@@ -661,6 +682,18 @@ class _FarmerFarmSetupChatScreenState extends State<FarmerFarmSetupChatScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_step == _SetupStep.sowingDate) ...[
+                      OutlinedButton.icon(
+                        onPressed: _pickSowingDate,
+                        icon: const Icon(Icons.calendar_today_rounded),
+                        label: Text(
+                          _sowingDate == null
+                              ? UiStrings.t('sowing_date_label')
+                              : _formatSowingDate(_sowingDate!),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,

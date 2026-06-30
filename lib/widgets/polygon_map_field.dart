@@ -4,7 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../services/local_app_database.dart';
 import '../services/location_service.dart';
 import '../services/map_tile_cache_service.dart';

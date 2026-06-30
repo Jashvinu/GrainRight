@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../config/theme.dart';
-import '../../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
-import '../../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../../widgets/farm_hills_background.dart';
 
 class LoginScreen extends StatefulWidget {

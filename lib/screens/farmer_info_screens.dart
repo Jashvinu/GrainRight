@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../config/locale_text.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/auth_controller.dart';
 import '../models/satellite/farm_weather_model.dart';
 import '../services/satellite_service.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class WeatherPage extends StatefulWidget {
   final String? farmId;
@@ -356,7 +356,7 @@ class _CurrentWeatherCard extends StatelessWidget {
                 ),
                 _MetricText(
                   label: UiStrings.t('rain'),
-                  value: _suffix(current['rain_mm'], ' mm'),
+                  value: _rainAmount(current['rain_mm']),
                 ),
                 _MetricText(
                   label: UiStrings.t('wind'),
@@ -443,7 +443,7 @@ class _HourlyWeatherCard extends StatelessWidget {
                         ),
                         Text(
                           UiStrings.f('rain_amount_value', {
-                            'amount': _suffix(row['rain_mm'], 'mm'),
+                            'amount': _rainAmount(row['rain_mm']),
                           }),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -504,7 +504,7 @@ class _DailyWeatherCard extends StatelessWidget {
                         SizedBox(
                           width: 72,
                           child: Text(
-                            _suffix(row['rain_mm'], ' mm'),
+                            _rainAmount(row['rain_mm']),
                             textAlign: TextAlign.right,
                             style: const TextStyle(
                               color: AppTheme.textMuted,
@@ -875,6 +875,12 @@ String _suffix(dynamic value, String suffix) {
   final number = _num(value);
   if (number == null) return '--';
   return '${LocaleText.number(number, fractionDigits: number % 1 == 0 ? 0 : 1)}$suffix';
+}
+
+String _rainAmount(dynamic value) {
+  final number = _num(value);
+  if (number == null) return '--';
+  return '${LocaleText.number(number, fractionDigits: number % 1 == 0 ? 0 : 1)} mm';
 }
 
 String _percentValue(dynamic value) {

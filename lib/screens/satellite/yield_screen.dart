@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../config/theme.dart';
-import '../../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../controllers/satellite_controller.dart';
 import '../../models/satellite/timeline_entry_model.dart';
 import '../../widgets/satellite/time_series_chart.dart';

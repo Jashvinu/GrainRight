@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/brand_assets.dart';
-import '../config/theme.dart';
-import '../widgets/app_back_button.dart';
-import '../widgets/brand_text.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/brand_text.dart';
 
 class LandingScreen extends StatelessWidget {
   const LandingScreen({super.key});

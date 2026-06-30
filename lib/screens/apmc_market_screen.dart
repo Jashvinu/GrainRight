@@ -4,36 +4,51 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../config/theme.dart';
-import '../config/locale_text.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/language_controller.dart';
-import '../widgets/app_back_button.dart';
-import '../widgets/brand_text.dart';
+import '../models/farmer_inventory_item.dart';
+import '../models/marketplace_listing.dart';
+import '../services/marketplace_listing_service.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/brand_text.dart';
 import '../widgets/farmer_floating_bottom_nav.dart';
-import '../widgets/language_selector_button.dart';
+import '../widgets/fpc_bottom_nav.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 
-class ApmcMarketPage extends StatefulWidget {
+class MarketplacePage extends StatefulWidget {
   final List<Map<String, String>> inventoryLots;
   final String? farmName;
+  final Map<String, String>? initialSelectedLot;
+  final bool buyerMode;
   final ValueChanged<FarmerBottomNavItem>? onBottomNavSelected;
 
-  const ApmcMarketPage({
+  const MarketplacePage({
     super.key,
     required this.inventoryLots,
     this.farmName,
+    this.initialSelectedLot,
+    this.buyerMode = false,
     this.onBottomNavSelected,
   });
 
   @override
-  State<ApmcMarketPage> createState() => _ApmcMarketPageState();
+  State<MarketplacePage> createState() => _MarketplacePageState();
 }
 
-class _ApmcMarketPageState extends State<ApmcMarketPage> {
+class _MarketplacePageState extends State<MarketplacePage> {
   static const _allCrops = 'All crops';
+
+  final _listingService = MarketplaceListingService();
 
   List<_ApmcRate> _remoteRates = const [];
   bool _isLoadingRates = false;
+  List<MarketplaceListing> _farmerListings = const [];
+  List<MarketplaceListing> _fpcListings = const [];
+  bool _isLoadingListings = false;
+  String _savingInventoryItemId = '';
+  String _savingInterestListingId = '';
 
   List<_ApmcRate> get _fallbackRates => [
     _ApmcRate(
@@ -112,6 +127,7 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
   void initState() {
     super.initState();
     unawaited(_loadRemoteRates());
+    unawaited(_loadMarketplaceListings());
   }
 
   Future<void> _loadRemoteRates() async {
@@ -147,6 +163,98 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
     }
   }
 
+  Future<void> _loadMarketplaceListings() async {
+    if (_isLoadingListings) return;
+    setState(() => _isLoadingListings = true);
+    try {
+      final listings = widget.buyerMode
+          ? await _listingService.listFpcListings()
+          : await _listingService.listFarmerListings();
+      if (!mounted) return;
+      setState(() {
+        if (widget.buyerMode) {
+          _fpcListings = listings;
+        } else {
+          _farmerListings = listings;
+        }
+      });
+    } catch (_) {
+      // Marketplace still shows local inventory and APMC rates if listing sync fails.
+    } finally {
+      if (mounted) setState(() => _isLoadingListings = false);
+    }
+  }
+
+  Future<void> _listLotForSale(Map<String, String> lot) async {
+    final remoteId = (lot['remoteId'] ?? '').trim();
+    final inventoryId = (lot['itemId'] ?? '').trim();
+    if (remoteId.isEmpty) {
+      Get.snackbar(
+        UiStrings.t('apmc_market'),
+        UiStrings.t('sync_inventory_first_market'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    if (_savingInventoryItemId == remoteId) return;
+    setState(() => _savingInventoryItemId = remoteId);
+    try {
+      final listing = await _listingService.createOrUpdateFromInventory(
+        inventoryItemId: remoteId,
+        inventoryId: inventoryId,
+      );
+      if (!mounted) return;
+      setState(() {
+        final next = _farmerListings.toList(growable: true);
+        final index = next.indexWhere((item) => item.id == listing.id);
+        if (index >= 0) {
+          next[index] = listing;
+        } else {
+          next.insert(0, listing);
+        }
+        _farmerListings = next;
+      });
+      Get.snackbar(
+        UiStrings.t('apmc_market'),
+        UiStrings.t('listing_created_for_fpc'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (error) {
+      Get.snackbar(
+        UiStrings.t('apmc_market'),
+        UiStrings.t('listing_failed'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      if (mounted) setState(() => _savingInventoryItemId = '');
+    }
+  }
+
+  Future<void> _markInterest(MarketplaceListing listing) async {
+    if (_savingInterestListingId == listing.id || listing.interestedByMe) {
+      return;
+    }
+    setState(() => _savingInterestListingId = listing.id);
+    try {
+      await _listingService.markInterest(listingId: listing.id);
+      if (!mounted) return;
+      await _loadMarketplaceListings();
+      Get.snackbar(
+        UiStrings.t('apmc_market'),
+        UiStrings.t('buyer_interest_saved'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (_) {
+      Get.snackbar(
+        UiStrings.t('apmc_market'),
+        UiStrings.t('buyer_interest_failed'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } finally {
+      if (mounted) setState(() => _savingInterestListingId = '');
+    }
+  }
+
   List<String> get _cropOptions {
     final crops = <String>{_allCrops};
     crops.addAll(_rates.map((rate) => rate.crop));
@@ -154,6 +262,16 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
       final crop = lot['crop']?.trim();
       if (crop != null && crop.isNotEmpty) crops.add(crop);
     }
+    crops.addAll(
+      _farmerListings
+          .map((listing) => listing.crop.trim())
+          .where((crop) => crop.isNotEmpty),
+    );
+    crops.addAll(
+      _fpcListings
+          .map((listing) => listing.crop.trim())
+          .where((crop) => crop.isNotEmpty),
+    );
     return crops.toList(growable: false);
   }
 
@@ -165,11 +283,43 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
   }
 
   List<Map<String, String>> get _visibleLots {
-    if (_selectedCrop == _allCrops) return widget.inventoryLots;
-    return widget.inventoryLots
+    final lots = _selectedCrop == _allCrops
+        ? widget.inventoryLots
+        : widget.inventoryLots
+              .where(
+                (lot) =>
+                    (lot['crop'] ?? '').toLowerCase() ==
+                    _selectedCrop.toLowerCase(),
+              )
+              .toList(growable: false);
+    final selectedKey = _lotKey(widget.initialSelectedLot);
+    if (selectedKey.isEmpty) return lots;
+    final sorted = lots.toList(growable: false)
+      ..sort((a, b) {
+        final aSelected = _lotKey(a) == selectedKey;
+        final bSelected = _lotKey(b) == selectedKey;
+        if (aSelected == bSelected) return 0;
+        return aSelected ? -1 : 1;
+      });
+    return sorted;
+  }
+
+  List<MarketplaceListing> get _visibleBuyerListings {
+    if (_selectedCrop == _allCrops) return _fpcListings;
+    return _fpcListings
         .where(
-          (lot) =>
-              (lot['crop'] ?? '').toLowerCase() == _selectedCrop.toLowerCase(),
+          (listing) =>
+              listing.crop.toLowerCase() == _selectedCrop.toLowerCase(),
+        )
+        .toList(growable: false);
+  }
+
+  List<MarketplaceListing> get _visibleFarmerListings {
+    if (_selectedCrop == _allCrops) return _farmerListings;
+    return _farmerListings
+        .where(
+          (listing) =>
+              listing.crop.toLowerCase() == _selectedCrop.toLowerCase(),
         )
         .toList(growable: false);
   }
@@ -178,13 +328,59 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
 
   int _toInt(String? value) => int.tryParse(value ?? '') ?? 0;
 
+  String _lotKey(Map<String, String>? lot) {
+    if (lot == null) return '';
+    final remoteId = (lot['remoteId'] ?? '').trim();
+    if (remoteId.isNotEmpty) return 'remote:$remoteId';
+    final itemId = (lot['itemId'] ?? '').trim();
+    if (itemId.isNotEmpty) return 'item:$itemId';
+    return (lot['batchId'] ?? '').trim();
+  }
+
+  MarketplaceListing? _listingForLot(Map<String, String> lot) {
+    final remoteId = (lot['remoteId'] ?? '').trim();
+    final batchId = (lot['batchId'] ?? '').trim();
+    for (final listing in _farmerListings) {
+      if (remoteId.isNotEmpty && listing.inventoryItemId == remoteId) {
+        return listing;
+      }
+      if (remoteId.isEmpty &&
+          batchId.isNotEmpty &&
+          listing.batchId == batchId) {
+        return listing;
+      }
+    }
+    return null;
+  }
+
+  String _categoryTitle(String category) {
+    return switch (category) {
+      FarmerInventoryProductCategory.byproduct => UiStrings.t(
+        'inventory_section_byproducts',
+      ),
+      FarmerInventoryProductCategory.processedProduct => UiStrings.t(
+        'inventory_section_made_products',
+      ),
+      _ => UiStrings.t('inventory_section_harvest_lots'),
+    };
+  }
+
+  IconData _categoryIcon(String category) {
+    return switch (category) {
+      FarmerInventoryProductCategory.byproduct => Icons.eco_rounded,
+      FarmerInventoryProductCategory.processedProduct =>
+        Icons.shopping_bag_rounded,
+      _ => Icons.inventory_2_rounded,
+    };
+  }
+
   int get _bestRate {
     final rates = _visibleRates.isEmpty ? _rates : _visibleRates;
     return rates.map((rate) => rate.modalRate).reduce((a, b) => a > b ? a : b);
   }
 
   void _handleBottomNav(FarmerBottomNavItem item) {
-    if (item == FarmerBottomNavItem.apmc) return;
+    if (item == FarmerBottomNavItem.marketplace) return;
     if (widget.onBottomNavSelected != null) {
       widget.onBottomNavSelected!(item);
       return;
@@ -206,11 +402,159 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
     );
   }
 
+  List<Widget> _buildRateSection(List<_ApmcRate> rates) {
+    return [
+      _SectionHeader(
+        icon: Icons.query_stats_rounded,
+        title: UiStrings.t('today_mandi_rates'),
+        actionLabel: UiStrings.f('markets_count', {'count': rates.length}),
+      ),
+      const SizedBox(height: 10),
+      if (rates.isEmpty)
+        _EmptyApmcPanel(
+          title: UiStrings.t('no_mandi_rate_found'),
+          message: UiStrings.t('try_all_crops_market_sync'),
+        )
+      else
+        ...rates.map(
+          (rate) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ApmcRateCard(rate: rate),
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _buildSellableProductSections(List<Map<String, String>> lots) {
+    final widgets = <Widget>[
+      _SectionHeader(
+        icon: Icons.storefront_rounded,
+        title: UiStrings.t('my_sellable_products'),
+        actionLabel: UiStrings.f('lots_count', {'count': lots.length}),
+      ),
+      const SizedBox(height: 10),
+    ];
+    if (lots.isEmpty) {
+      widgets.add(
+        _EmptyApmcPanel(
+          title: UiStrings.t('no_sellable_products'),
+          message: UiStrings.t('graded_lot_empty_message'),
+        ),
+      );
+      return widgets;
+    }
+
+    const categories = [
+      FarmerInventoryProductCategory.cropLot,
+      FarmerInventoryProductCategory.byproduct,
+      FarmerInventoryProductCategory.processedProduct,
+    ];
+    for (final category in categories) {
+      final categoryLots = lots
+          .where(
+            (lot) =>
+                (lot['productCategory'] ??
+                    FarmerInventoryProductCategory.cropLot) ==
+                category,
+          )
+          .toList(growable: false);
+      if (categoryLots.isEmpty) continue;
+      widgets.add(
+        _ApmcCategoryHeader(
+          icon: _categoryIcon(category),
+          title: _categoryTitle(category),
+          count: categoryLots.length,
+        ),
+      );
+      widgets.add(const SizedBox(height: 8));
+      widgets.addAll(
+        categoryLots.map((lot) {
+          final listing = _listingForLot(lot);
+          final remoteId = (lot['remoteId'] ?? '').trim();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ApmcLotReadinessCard(
+              lot: lot,
+              modalRate: _bestRate,
+              toDouble: _toDouble,
+              toInt: _toInt,
+              isListed: listing?.isActive == true,
+              isSavingListing:
+                  remoteId.isNotEmpty && _savingInventoryItemId == remoteId,
+              onListForSale: () => _listLotForSale(lot),
+            ),
+          );
+        }),
+      );
+      widgets.add(const SizedBox(height: 2));
+    }
+    return widgets;
+  }
+
+  List<Widget> _buildFarmerListingSection(List<MarketplaceListing> listings) {
+    return [
+      _SectionHeader(
+        icon: Icons.handshake_rounded,
+        title: UiStrings.t('active_fpc_listings'),
+        actionLabel: UiStrings.f('listings_count', {'count': listings.length}),
+      ),
+      const SizedBox(height: 10),
+      if (_isLoadingListings)
+        _LoadingApmcPanel(label: UiStrings.t('marketplace_syncing'))
+      else if (listings.isEmpty)
+        _EmptyApmcPanel(
+          title: UiStrings.t('no_active_fpc_listings'),
+          message: UiStrings.t('list_products_for_fpc_message'),
+        )
+      else
+        ...listings
+            .take(6)
+            .map(
+              (listing) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _MarketplaceListingCard(listing: listing),
+              ),
+            ),
+    ];
+  }
+
+  List<Widget> _buildBuyerListingSection(List<MarketplaceListing> listings) {
+    return [
+      _SectionHeader(
+        icon: Icons.shopping_cart_checkout_rounded,
+        title: UiStrings.t('buy_from_farmers'),
+        actionLabel: UiStrings.f('listings_count', {'count': listings.length}),
+      ),
+      const SizedBox(height: 10),
+      if (_isLoadingListings)
+        _LoadingApmcPanel(label: UiStrings.t('marketplace_syncing'))
+      else if (listings.isEmpty)
+        _EmptyApmcPanel(
+          title: UiStrings.t('no_farmer_listing_found'),
+          message: UiStrings.t('no_farmer_listing_message'),
+        )
+      else
+        ...listings.map(
+          (listing) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _MarketplaceListingCard(
+              listing: listing,
+              buyerMode: true,
+              isSavingInterest: _savingInterestListingId == listing.id,
+              onMarkInterest: () => _markInterest(listing),
+            ),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     Widget content() {
       final rates = _visibleRates;
       final lots = _visibleLots;
+      final farmerListings = _visibleFarmerListings;
+      final buyerListings = _visibleBuyerListings;
 
       return Scaffold(
         extendBody: true,
@@ -250,54 +594,17 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
                       modalRate: _bestRate,
                     ),
                     const SizedBox(height: 14),
-                    _SectionHeader(
-                      icon: Icons.query_stats_rounded,
-                      title: UiStrings.t('today_mandi_rates'),
-                      actionLabel: UiStrings.f(
-                        'markets_count',
-                        {'count': rates.length},
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (rates.isEmpty)
-                      _EmptyApmcPanel(
-                        title: UiStrings.t('no_mandi_rate_found'),
-                        message: UiStrings.t('try_all_crops_market_sync'),
-                      )
-                    else
-                      ...rates.map(
-                        (rate) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _ApmcRateCard(rate: rate),
-                        ),
-                      ),
-                    const SizedBox(height: 6),
-                    _SectionHeader(
-                      icon: Icons.inventory_2_rounded,
-                      title: UiStrings.t('your_lot_readiness'),
-                      actionLabel: UiStrings.f(
-                        'lots_count',
-                        {'count': lots.length},
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    if (lots.isEmpty)
-                      _EmptyApmcPanel(
-                        title: UiStrings.t('no_graded_lot_ready'),
-                        message: UiStrings.t('graded_lot_empty_message'),
-                      )
-                    else
-                      ...lots.take(4).map(
-                            (lot) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _ApmcLotReadinessCard(
-                                lot: lot,
-                                modalRate: _bestRate,
-                                toDouble: _toDouble,
-                                toInt: _toInt,
-                              ),
-                            ),
-                          ),
+                    if (widget.buyerMode) ...[
+                      ..._buildBuyerListingSection(buyerListings),
+                      const SizedBox(height: 6),
+                      ..._buildRateSection(rates),
+                    ] else ...[
+                      ..._buildRateSection(rates),
+                      const SizedBox(height: 6),
+                      ..._buildSellableProductSections(lots),
+                      const SizedBox(height: 6),
+                      ..._buildFarmerListingSection(farmerListings),
+                    ],
                     const SizedBox(height: 6),
                     _SectionHeader(
                       icon: Icons.place_rounded,
@@ -317,10 +624,12 @@ class _ApmcMarketPageState extends State<ApmcMarketPage> {
                 bottom: 0,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                  child: FarmerFloatingBottomNav(
-                    selectedItem: FarmerBottomNavItem.apmc,
-                    onSelected: _handleBottomNav,
-                  ),
+                  child: widget.buyerMode
+                      ? const FpcBottomNavBar(current: FpcNavTab.marketplace)
+                      : FarmerFloatingBottomNav(
+                          selectedItem: FarmerBottomNavItem.marketplace,
+                          onSelected: _handleBottomNav,
+                        ),
                 ),
               ),
             ],
@@ -393,7 +702,7 @@ class _ApmcSaleWindowCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cropLabel = selectedCrop == _ApmcMarketPageState._allCrops
+    final cropLabel = selectedCrop == _MarketplacePageState._allCrops
         ? UiStrings.t('millet_lots')
         : UiStrings.option(selectedCrop);
     return _ApmcPanel(
@@ -409,10 +718,7 @@ class _ApmcSaleWindowCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(18),
               ),
               alignment: Alignment.center,
-              child: const Icon(
-                Icons.schedule_rounded,
-                color: AppTheme.gold,
-              ),
+              child: const Icon(Icons.schedule_rounded, color: AppTheme.gold),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -491,18 +797,252 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+class _ApmcCategoryHeader extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final int count;
+
+  const _ApmcCategoryHeader({
+    required this.icon,
+    required this.title,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.green, size: 18),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        Text(
+          UiStrings.f('lots_count', {'count': count}),
+          style: const TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LoadingApmcPanel extends StatelessWidget {
+  final String label;
+
+  const _LoadingApmcPanel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return _ApmcPanel(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.textDark,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MarketplaceListingCard extends StatelessWidget {
+  final MarketplaceListing listing;
+  final bool buyerMode;
+  final bool isSavingInterest;
+  final VoidCallback? onMarkInterest;
+
+  const _MarketplaceListingCard({
+    required this.listing,
+    this.buyerMode = false,
+    this.isSavingInterest = false,
+    this.onMarkInterest,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final unitLabel = switch (listing.unit.trim().toLowerCase()) {
+      'kg' => UiStrings.t('kg_unit'),
+      'qtl' => UiStrings.t('qtl_unit'),
+      'bag' => UiStrings.t('bag_unit'),
+      'packet' => UiStrings.t('packet_unit'),
+      final value when value.isNotEmpty => value,
+      _ => UiStrings.t('kg_unit'),
+    };
+    final quantity =
+        '${LocaleText.number(listing.quantity, fractionDigits: 1)} $unitLabel';
+    final moisture = listing.moisturePercent;
+    final price = listing.askingPricePerUnit;
+    return _ApmcPanel(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    listing.displayProductName,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _ApmcTrendPill(
+                  icon: buyerMode && listing.interestedByMe
+                      ? Icons.check_circle_rounded
+                      : Icons.storefront_rounded,
+                  label: buyerMode && listing.interestedByMe
+                      ? UiStrings.t('interest_marked')
+                      : UiStrings.t('active'),
+                  color: AppTheme.green,
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              listing.farmName.trim().isEmpty
+                  ? _localizedLotId(listing.batchId)
+                  : '${UiStrings.label(listing.farmName)} - ${_localizedLotId(listing.batchId)}',
+              style: const TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _ApmcChip(icon: Icons.scale_rounded, label: quantity),
+                if (listing.grade.trim().isNotEmpty)
+                  _ApmcChip(
+                    icon: Icons.verified_rounded,
+                    label: UiStrings.f('grade_value', {'grade': listing.grade}),
+                  ),
+                if (moisture != null)
+                  _ApmcChip(
+                    icon: Icons.water_drop_rounded,
+                    label: '${LocaleText.number(moisture, fractionDigits: 1)}%',
+                  ),
+                if (price != null)
+                  _ApmcChip(
+                    icon: Icons.currency_rupee_rounded,
+                    label:
+                        '${LocaleText.number(price, fractionDigits: 0)} ${UiStrings.t('per_unit')}',
+                  ),
+              ],
+            ),
+            if (listing.listingNote.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                listing.listingNote,
+                style: const TextStyle(
+                  color: AppTheme.textDark,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            if (buyerMode)
+              SizedBox(
+                width: double.infinity,
+                child: listing.interestedByMe
+                    ? OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.check_circle_rounded, size: 18),
+                        label: Text(UiStrings.t('interest_marked')),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: isSavingInterest ? null : onMarkInterest,
+                        icon: isSavingInterest
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.shopping_cart_rounded, size: 18),
+                        label: Text(UiStrings.t('mark_interest')),
+                      ),
+              )
+            else
+              Row(
+                children: [
+                  const Icon(
+                    Icons.groups_2_rounded,
+                    size: 18,
+                    color: AppTheme.green,
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      UiStrings.f('buyer_interest_count', {
+                        'count': listing.interestCount,
+                      }),
+                      style: const TextStyle(
+                        color: AppTheme.greenDark,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 String _localizedRateNote(String note) {
   return switch (note) {
-    'Clean graded lots are getting faster bids.' =>
-      UiStrings.t('apmc_note_clean_lots'),
-    'Buyers prefer dry lots below 12 percent moisture.' =>
-      UiStrings.t('apmc_note_dry_lots'),
-    'Premium for sorted grain and uniform bag weight.' =>
-      UiStrings.t('apmc_note_sorted_grain'),
-    'Arrival is higher today; hold if moisture is high.' =>
-      UiStrings.t('apmc_note_high_arrival'),
-    'Bulk buyers active for clean farm-gate pickup.' =>
-      UiStrings.t('apmc_note_bulk_buyers'),
+    'Clean graded lots are getting faster bids.' => UiStrings.t(
+      'apmc_note_clean_lots',
+    ),
+    'Buyers prefer dry lots below 12 percent moisture.' => UiStrings.t(
+      'apmc_note_dry_lots',
+    ),
+    'Premium for sorted grain and uniform bag weight.' => UiStrings.t(
+      'apmc_note_sorted_grain',
+    ),
+    'Arrival is higher today; hold if moisture is high.' => UiStrings.t(
+      'apmc_note_high_arrival',
+    ),
+    'Bulk buyers active for clean farm-gate pickup.' => UiStrings.t(
+      'apmc_note_bulk_buyers',
+    ),
     _ => note,
   };
 }
@@ -730,12 +1270,18 @@ class _ApmcLotReadinessCard extends StatelessWidget {
   final int modalRate;
   final double Function(String? value) toDouble;
   final int Function(String? value) toInt;
+  final VoidCallback? onListForSale;
+  final bool isListed;
+  final bool isSavingListing;
 
   const _ApmcLotReadinessCard({
     required this.lot,
     required this.modalRate,
     required this.toDouble,
     required this.toInt,
+    this.onListForSale,
+    this.isListed = false,
+    this.isSavingListing = false,
   });
 
   @override
@@ -782,7 +1328,10 @@ class _ApmcLotReadinessCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _ApmcChip(icon: Icons.grass_rounded, label: UiStrings.option(crop)),
+                _ApmcChip(
+                  icon: Icons.grass_rounded,
+                  label: UiStrings.option(crop),
+                ),
                 _ApmcChip(
                   icon: Icons.verified_rounded,
                   label: UiStrings.f('grade_value', {'grade': grade}),
@@ -793,7 +1342,8 @@ class _ApmcLotReadinessCard extends StatelessWidget {
                 ),
                 _ApmcChip(
                   icon: Icons.scale_rounded,
-                  label: '${LocaleText.number(qty, fractionDigits: 1)} ${UiStrings.t('kg_unit')}',
+                  label:
+                      '${LocaleText.number(qty, fractionDigits: 1)} ${UiStrings.t('kg_unit')}',
                 ),
               ],
             ),
@@ -808,6 +1358,31 @@ class _ApmcLotReadinessCard extends StatelessWidget {
                 fontWeight: FontWeight.w900,
               ),
             ),
+            if (onListForSale != null || isListed) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: isListed
+                    ? OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.check_circle_rounded, size: 18),
+                        label: Text(UiStrings.t('listed_for_fpc')),
+                      )
+                    : ElevatedButton.icon(
+                        onPressed: isSavingListing ? null : onListForSale,
+                        icon: isSavingListing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.storefront_rounded, size: 18),
+                        label: Text(UiStrings.t('list_for_sale')),
+                      ),
+              ),
+            ],
           ],
         ),
       ),
@@ -965,10 +1540,7 @@ class _EmptyApmcPanel extends StatelessWidget {
   final String title;
   final String message;
 
-  const _EmptyApmcPanel({
-    required this.title,
-    required this.message,
-  });
+  const _EmptyApmcPanel({required this.title, required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -1014,10 +1586,7 @@ class _ApmcPanel extends StatelessWidget {
   final Widget child;
   final Color? tint;
 
-  const _ApmcPanel({
-    required this.child,
-    this.tint,
-  });
+  const _ApmcPanel({required this.child, this.tint});
 
   @override
   Widget build(BuildContext context) {
@@ -1043,10 +1612,7 @@ class _ApmcChip extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _ApmcChip({
-    required this.icon,
-    required this.label,
-  });
+  const _ApmcChip({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {

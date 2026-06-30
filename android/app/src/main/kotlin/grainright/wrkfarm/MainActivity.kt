@@ -12,6 +12,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -26,6 +27,7 @@ class MainActivity : FlutterActivity() {
     private var pendingNotificationPayload: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        WindowCompat.enableEdgeToEdge(window)
         super.onCreate(savedInstanceState)
         captureNotificationPayload(intent)
     }

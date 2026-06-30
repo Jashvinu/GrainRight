@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../config/satellite_config.dart';
 import '../../models/satellite/diagnostics_model.dart';
 

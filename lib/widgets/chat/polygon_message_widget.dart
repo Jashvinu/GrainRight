@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/form_config.dart';
 import '../../services/map_tile_provider.dart';
 import '../../utils/boundary_map_launcher.dart';
@@ -129,7 +129,7 @@ class PolygonAnswerWidget extends StatelessWidget {
                   const OfflineMapBackground(
                     message: 'Offline boundary preview',
                   ),
-                  OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
+                  ...fieldImageryTileLayers(),
                   if (points.length >= 4)
                     PolygonLayer(
                       polygons: [

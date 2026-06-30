@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/brand_assets.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../widgets/farm_hills_background.dart';
-import '../widgets/language_selector_button.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 
 class MainLoginScreen extends StatefulWidget {
   const MainLoginScreen({super.key});
@@ -121,12 +121,25 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                           onTap: () => Get.toNamed('/satellite/login'),
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      _AnimatedEntrance(
+                        delay: 300,
+                        child: _RoleCard(
+                          icon: Icons.handshake_outlined,
+                          title: UiStrings.t('role_stakeholder'),
+                          subtitle: UiStrings.t('role_stakeholder_sub'),
+                          color: const Color(0xFF00897B),
+                          tint: const Color(0xFFE0F2F1),
+                          isDisabled: false,
+                          onTap: () => Get.toNamed('/stakeholder/login'),
+                        ),
+                      ),
                       const SizedBox(height: 24),
                       _DividerLabel(label: UiStrings.t('or')),
                       const SizedBox(height: 24),
                       Obx(
                         () => _AnimatedEntrance(
-                          delay: 300,
+                          delay: 370,
                           child: _RoleCard(
                             icon: Icons.person_outline_rounded,
                             title: UiStrings.t('guest'),
@@ -180,10 +193,7 @@ class _BrandHeader extends StatelessWidget {
       duration: const Duration(milliseconds: 680),
       curve: Curves.easeOutBack,
       builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: child,
-        );
+        return Transform.scale(scale: value, child: child);
       },
       child: Column(
         children: [
@@ -206,8 +216,8 @@ class _BrandHeader extends StatelessWidget {
                 BrandAssets.logo,
                 width: 292,
                 height: 164,
-                cacheWidth:
-                    (292 * MediaQuery.devicePixelRatioOf(context)).round(),
+                cacheWidth: (292 * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
                 fit: BoxFit.contain,
               ),
             ),
@@ -461,7 +471,11 @@ class _SecurityStrip extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.verified_user_rounded, color: Color(0xFF52B788), size: 22),
+        const Icon(
+          Icons.verified_user_rounded,
+          color: Color(0xFF52B788),
+          size: 22,
+        ),
         const SizedBox(width: 10),
         Flexible(
           child: Text(

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/locale_text.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
-import '../widgets/brand_text.dart';
+import 'package:kalsubai_farms/core/widgets/brand_text.dart';
 
 class FpoHomeScreen extends StatelessWidget {
   const FpoHomeScreen({super.key});
@@ -61,6 +61,14 @@ class FpoHomeScreen extends StatelessWidget {
                 color: const Color(0xFF1976D2),
                 tint: const Color(0xFFEAF4FF),
                 onTap: () => Get.toNamed('/fpo/grading-review'),
+              ),
+              _FpoAction(
+                icon: Icons.storefront_rounded,
+                title: UiStrings.t('apmc_market'),
+                subtitle: UiStrings.t('fpo_marketplace_subtitle'),
+                color: const Color(0xFF2E7D32),
+                tint: AppTheme.greenPale,
+                onTap: () => Get.toNamed('/fpo/marketplace'),
               ),
               _FpoAction(
                 icon: Icons.grain_rounded,

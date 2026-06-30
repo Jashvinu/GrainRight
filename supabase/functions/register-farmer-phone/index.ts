@@ -42,6 +42,10 @@ function rowToProfile(row: Record<string, unknown>) {
     farmerId: String(row.farmer_id ?? `FMR-${phone}`),
     farmerName: String(row.farmer_name ?? "Farmer"),
     defaultLocation: String(row.default_location ?? ""),
+    agriRecordId: String(row.agri_record_id ?? ""),
+    aadhaarMasked: String(row.aadhaar_masked ?? ""),
+    aadhaarLast4: String(row.aadhaar_last4 ?? ""),
+    identityDocumentPath: String(row.identity_document_path ?? ""),
     preferredLanguage: String(row.preferred_language ?? "en"),
     profileComplete: Boolean(row.profile_completed_at),
     lots: [],
@@ -52,6 +56,17 @@ function createFarmerId(): string {
   const random = crypto.randomUUID().replaceAll("-", "").slice(0, 12)
     .toUpperCase();
   return `FMR-${random}`;
+}
+
+function aadhaarLast4(raw: unknown): string {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  return digits.length === 4 ? digits : "";
+}
+
+function maskedAadhaar(raw: unknown, last4: string): string {
+  const value = text(raw);
+  if (/^X{4}\sX{4}\s\d{4}$/i.test(value)) return value.toUpperCase();
+  return last4.length === 4 ? `XXXX XXXX ${last4}` : "";
 }
 
 Deno.serve(async (req) => {
@@ -81,6 +96,20 @@ Deno.serve(async (req) => {
     const phone = normalizePhone(body.phone);
     const farmerName = text(body.farmerName);
     const defaultLocation = text(body.defaultLocation) || "Kalsubai Farms";
+    const agriRecordId = text(body.agriRecordId ?? body.agri_record_id);
+    const identityDocumentPath = text(
+      body.identityDocumentPath ?? body.identity_document_path,
+    );
+    const last4 = aadhaarLast4(body.aadhaarLast4 ?? body.aadhaar_last4);
+    const aadhaarMasked = maskedAadhaar(
+      body.aadhaarMasked ?? body.aadhaar_masked,
+      last4,
+    );
+    const identityOcrConfidenceRaw =
+      body.identityOcrConfidence ?? body.identity_ocr_confidence;
+    const identityOcrConfidence = identityOcrConfidenceRaw == null
+      ? null
+      : Number(identityOcrConfidenceRaw);
 
     if (phone.length !== 10) {
       return errorResponse(
@@ -98,6 +127,30 @@ Deno.serve(async (req) => {
         "missing_farmer_name",
       );
     }
+    if (agriRecordId.length === 0) {
+      return errorResponse(
+        "Enter farmer agri record ID",
+        400,
+        undefined,
+        "missing_agri_record_id",
+      );
+    }
+    if (last4.length !== 4 || aadhaarMasked.length === 0) {
+      return errorResponse(
+        "Enter a 12 digit Aadhaar number",
+        400,
+        undefined,
+        "invalid_aadhaar",
+      );
+    }
+    if (identityDocumentPath.length === 0) {
+      return errorResponse(
+        "Upload agri record document",
+        400,
+        undefined,
+        "missing_identity_document",
+      );
+    }
 
     const supabase = createServiceClient();
     const { data: userData, error: userError } = await supabase.auth.getUser(
@@ -112,12 +165,20 @@ Deno.serve(async (req) => {
       );
     }
     const userId = userData.user.id;
+    if (!identityDocumentPath.startsWith(`${userId}/`)) {
+      return errorResponse(
+        "Document does not belong to this farmer session",
+        403,
+        undefined,
+        "document_owner_mismatch",
+      );
+    }
 
     const phoneValues = phoneVariants(phone);
     const { data: registryRows, error: registryError } = await supabase
       .from("farmer_phone_registry")
       .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at",
+        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
       )
       .in("phone", phoneValues);
 
@@ -162,7 +223,7 @@ Deno.serve(async (req) => {
     const { data: profileRows, error: profileError } = await supabase
       .from("farmer_phone_profiles")
       .select(
-        "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status",
+        "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
       )
       .in("phone", phoneValues);
 
@@ -210,6 +271,15 @@ Deno.serve(async (req) => {
       status: "active",
       profile_completed_at: now,
       source: "mobile_signup",
+      agri_record_id: agriRecordId,
+      aadhaar_masked: aadhaarMasked,
+      aadhaar_last4: last4,
+      identity_document_bucket: "farmer-identity-documents",
+      identity_document_path: identityDocumentPath,
+      identity_ocr_confidence:
+        Number.isFinite(identityOcrConfidence) ? identityOcrConfidence : null,
+      identity_source: "agri_record_document",
+      identity_verified_at: now,
     };
 
     let registryRecord: Record<string, unknown> | null = null;
@@ -221,7 +291,7 @@ Deno.serve(async (req) => {
           .update(profile)
           .eq("phone", registryPhone)
           .select(
-            "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at",
+            "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
           )
           .maybeSingle();
 
@@ -233,7 +303,7 @@ Deno.serve(async (req) => {
           .from("farmer_phone_registry")
           .insert(profile)
           .select(
-            "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at",
+            "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
           )
           .single();
 

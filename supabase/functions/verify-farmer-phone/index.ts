@@ -22,12 +22,30 @@ function rowToProfile(row: Record<string, unknown>) {
     farmerId,
     farmerName,
     defaultLocation,
+    agriRecordId: String(row.agri_record_id ?? ""),
+    aadhaarMasked: String(row.aadhaar_masked ?? ""),
+    aadhaarLast4: String(row.aadhaar_last4 ?? ""),
+    identityDocumentPath: String(row.identity_document_path ?? ""),
     preferredLanguage: String(row.preferred_language ?? "en"),
     profileComplete: Boolean(row.profile_completed_at) &&
       farmerId.trim().length > 0 &&
       farmerName.trim().length > 0,
     lots: [],
   };
+}
+
+function hasStakeholderAgriRecord(profile: ReturnType<typeof rowToProfile>) {
+  return profile.agriRecordId.trim().length > 0 &&
+    profile.identityDocumentPath.trim().length > 0;
+}
+
+function agriRecordRequiredResponse() {
+  return errorResponse(
+    "Stakeholder login needs a government agri record. Complete farmer signup with your agri record card first.",
+    403,
+    undefined,
+    "farmer_agri_record_required",
+  );
 }
 
 Deno.serve(async (req) => {
@@ -45,6 +63,8 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const phone = normalizePhone(body.phone);
+    const requireAgriRecord = body.require_agri_record === true ||
+      body.requireAgriRecord === true;
     if (phone.length !== 10) {
       return errorResponse(
         "Enter a valid 10 digit mobile number",
@@ -59,7 +79,7 @@ Deno.serve(async (req) => {
     const { data: registryRows, error: registryError } = await supabase
       .from("farmer_phone_registry")
       .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at",
+        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
       )
       .in("phone", phoneValues);
 
@@ -98,6 +118,9 @@ Deno.serve(async (req) => {
           "farmer_not_found",
         );
       }
+      if (requireAgriRecord && !hasStakeholderAgriRecord(profile)) {
+        return agriRecordRequiredResponse();
+      }
       return successResponse({ farmer: profile }, 200, "farmer_verified");
     }
 
@@ -106,7 +129,7 @@ Deno.serve(async (req) => {
     const { data: profileRows, error: profileError } = await supabase
       .from("farmer_phone_profiles")
       .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at",
+        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
       )
       .in("phone", phoneValues)
       .order("profile_completed_at", { ascending: false, nullsFirst: false });
@@ -149,6 +172,9 @@ Deno.serve(async (req) => {
         undefined,
         "farmer_not_found",
       );
+    }
+    if (requireAgriRecord && !hasStakeholderAgriRecord(profile)) {
+      return agriRecordRequiredResponse();
     }
     return successResponse({ farmer: profile }, 200, "farmer_verified");
   } catch (error) {

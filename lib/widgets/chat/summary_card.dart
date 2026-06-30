@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../utils/pii_masking.dart';
 
 class SummaryCard extends StatelessWidget {

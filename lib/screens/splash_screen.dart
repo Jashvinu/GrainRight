@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/brand_assets.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -78,6 +78,10 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final logoWidth = (size.width - 48).clamp(260.0, 560.0).toDouble();
+    final logoCacheWidth =
+        (logoWidth * MediaQuery.devicePixelRatioOf(context))
+            .clamp(260.0, 720.0)
+            .round();
 
     return Scaffold(
       backgroundColor: const Color(0xFFE7F0E2),
@@ -97,11 +101,9 @@ class _SplashScreenState extends State<SplashScreen>
                       child: Image.asset(
                         BrandAssets.kalsubaiFarmsWithTagline,
                         width: logoWidth,
-                        cacheWidth:
-                            (logoWidth * MediaQuery.devicePixelRatioOf(context))
-                                .round(),
+                        cacheWidth: logoCacheWidth,
                         fit: BoxFit.contain,
-                        filterQuality: FilterQuality.high,
+                        filterQuality: FilterQuality.medium,
                       ),
                     ),
                     const SizedBox(height: 24),

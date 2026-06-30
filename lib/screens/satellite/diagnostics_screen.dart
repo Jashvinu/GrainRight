@@ -3,7 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../controllers/farm_controller.dart';
 import '../../controllers/satellite_controller.dart';
 import '../../models/satellite/diagnostics_model.dart';

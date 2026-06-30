@@ -20,6 +20,7 @@ void main() {
     final bootstrap = await _bootstrapProductionApp();
     if (bootstrap.supabaseReady) {
       runApp(KalsubaiFarmsApp(initialLocale: bootstrap.locale));
+      _deferWorkmanagerBootstrap();
     } else {
       runApp(_StartupRecoveryApp(initialLocale: bootstrap.locale));
     }
@@ -62,14 +63,6 @@ Future<_BootstrapResult> _bootstrapProductionApp() async {
     _reportUncaughtError(error, stack);
   }
 
-  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    try {
-      await Workmanager().initialize(offlineMapCallbackDispatcher);
-    } catch (error, stack) {
-      _reportUncaughtError(error, stack);
-    }
-  }
-
   var supabaseReady = true;
   try {
     await Supabase.initialize(
@@ -93,6 +86,21 @@ Future<_BootstrapResult> _bootstrapProductionApp() async {
     locale: Locale(language),
     supabaseReady: supabaseReady,
   );
+}
+
+void _deferWorkmanagerBootstrap() {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeWorkmanager());
+  });
+}
+
+Future<void> _initializeWorkmanager() async {
+  try {
+    await Workmanager().initialize(offlineMapCallbackDispatcher);
+  } catch (error, stack) {
+    _reportUncaughtError(error, stack);
+  }
 }
 
 class _BootstrapResult {

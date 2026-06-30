@@ -6,13 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../config/brand_assets.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
 import '../config/runtime_config.dart';
-import '../config/theme.dart';
-import '../config/locale_text.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../utils/harvest_sticker_downloader.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class HarvestQrScreen extends StatefulWidget {
   const HarvestQrScreen({super.key});
