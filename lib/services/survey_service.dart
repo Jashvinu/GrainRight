@@ -58,6 +58,35 @@ class SurveyService {
     return rows.first as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>?> fetchLatestWithPolygonForPhone(
+    String phoneDigits,
+  ) async {
+    final normalizedPhone = phoneDigits.replaceAll(RegExp(r'\D'), '');
+    if (normalizedPhone.isEmpty) return null;
+
+    final data = await _table
+        .select()
+        .not('farm_polygon', 'is', null)
+        .order('created_at', ascending: false)
+        .limit(30);
+    final rows = data as List;
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final survey = Map<String, dynamic>.from(row);
+      final surveyPhone = '${survey['mobile_number'] ?? ''}'.replaceAll(
+        RegExp(r'\D'),
+        '',
+      );
+      if (surveyPhone.isEmpty) continue;
+      if (surveyPhone == normalizedPhone ||
+          surveyPhone.endsWith(normalizedPhone) ||
+          normalizedPhone.endsWith(surveyPhone)) {
+        return survey;
+      }
+    }
+    return null;
+  }
+
   Future<void> insert(Map<String, dynamic> survey) async {
     await insertWithChildren(survey, const [], const [], const []);
   }

@@ -2,9 +2,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/satellite_config.dart';
+import '../controllers/farm_controller.dart';
 import '../models/satellite/diagnostics_model.dart';
+import '../models/satellite/farm_model.dart';
 import '../services/satellite_service.dart';
 import '../services/survey_service.dart';
+import '../services/backend_bridge_session.dart';
 
 class DiagnosticsHomeController extends GetxController {
   final _surveyService = SurveyService();
@@ -15,6 +18,7 @@ class DiagnosticsHomeController extends GetxController {
   final result = Rxn<DiagnosticsResult>();
   final selectedIndex = 'ndvi'.obs;
   final survey = Rxn<Map<String, dynamic>>();
+  final activeFarm = Rxn<Farm>();
 
   @override
   void onInit() {
@@ -26,10 +30,42 @@ class DiagnosticsHomeController extends GetxController {
     isLoading.value = true;
     errorMessage.value = '';
     try {
+      final session = await ensureBackendBridgeSession();
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : Get.put(FarmController());
+      if (farmCtrl.farms.isEmpty && !farmCtrl.isLoading.value) {
+        await farmCtrl.loadFarms(forceRefresh: true);
+      }
+      final selectedFarm =
+          farmCtrl.selectedFarm.value ??
+          (farmCtrl.farms.isEmpty ? null : farmCtrl.farms.first);
+      if (selectedFarm != null) {
+        activeFarm.value = selectedFarm;
+        survey.value = {'farm_polygon': selectedFarm.geometry};
+        result.value = await _satelliteService.getDiagnostics(
+          polygonJson: jsonEncode(selectedFarm.geometry),
+          farmId: selectedFarm.id,
+          indices: const [
+            'nitrogen',
+            'phosphorus',
+            'potassium',
+            'moisture',
+            'ndvi',
+          ],
+          jwt: session.accessToken,
+        );
+        final available = result.value?.analysis.keys;
+        if (available != null && available.isNotEmpty) {
+          selectedIndex.value = available.first;
+        }
+        return;
+      }
+
       final latest = await _surveyService.fetchLatestWithPolygon();
       if (latest == null) {
         errorMessage.value =
-            'Submit a baseline survey with a farm boundary first.';
+            'No farm boundary found. Open Farms, add or select a farm, then retry diagnostics.';
         return;
       }
       survey.value = latest;
@@ -44,6 +80,7 @@ class DiagnosticsHomeController extends GetxController {
           'moisture',
           'ndvi',
         ],
+        jwt: session.accessToken,
       );
       final available = result.value?.analysis.keys;
       if (available != null && available.isNotEmpty) {

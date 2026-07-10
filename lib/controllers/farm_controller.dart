@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../config/runtime_config.dart';
 import '../config/ui_strings.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/main_auth_controller.dart';
@@ -19,6 +20,7 @@ class FarmController extends GetxController {
   final isLoading = false.obs;
   final hasError = false.obs;
   final errorMessage = ''.obs;
+  final lastSaveErrorMessage = ''.obs;
   String? _farmSessionCacheKey;
   List<Farm> _cachedSessionFarms = const [];
   bool _cacheLoadedForSession = false;
@@ -64,7 +66,8 @@ class FarmController extends GetxController {
     if (!Get.isRegistered<MainAuthController>()) return null;
     final phone = Get.find<MainAuthController>().verifiedFarmer.value?.phone;
     final digits = phone?.replaceAll(RegExp(r'\D'), '');
-    return digits == null || digits.isEmpty ? null : digits;
+    if (digits == null || digits.isEmpty) return null;
+    return digits.length <= 10 ? digits : digits.substring(digits.length - 10);
   }
 
   String? get _verifiedFarmerId {
@@ -112,6 +115,36 @@ class FarmController extends GetxController {
       final authCtrl = Get.isRegistered<AuthController>()
           ? Get.find<AuthController>()
           : Get.put(AuthController());
+      final controllerToken = authCtrl.accessToken.value.trim();
+      final controllerUserId = authCtrl.currentUser.value?.id.trim();
+      if (controllerToken.isNotEmpty &&
+          controllerUserId != null &&
+          controllerUserId.isNotEmpty) {
+        return;
+      }
+
+      final backendEmail = RuntimeConfig.backendAuthEmail.trim();
+      final backendPassword = RuntimeConfig.backendAuthPassword.trim();
+      if (backendEmail.isNotEmpty && backendPassword.isNotEmpty) {
+        try {
+          await authCtrl.ensureBackendAccountSession(
+            email: backendEmail,
+            password: backendPassword,
+          );
+          final restoredToken = authCtrl.accessToken.value.trim();
+          final restoredUserId = authCtrl.currentUser.value?.id.trim();
+          if (restoredToken.isNotEmpty &&
+              restoredUserId != null &&
+              restoredUserId.isNotEmpty) {
+            return;
+          }
+        } catch (error) {
+          Get.log(
+            'Backend bridge session restore before farm save failed: $error',
+          );
+        }
+      }
+
       final supabaseAuth = Supabase.instance.client.auth;
       final session = supabaseAuth.currentSession;
       final user = supabaseAuth.currentUser;
@@ -440,6 +473,63 @@ class FarmController extends GetxController {
       _markVerifiedFarmSyncReady();
     }
     unawaited(_cacheVerifiedFarmerFarms());
+  }
+
+  Future<bool> deleteFarm(Farm farm, {bool showSnackbars = true}) async {
+    final farmId = farm.id.trim();
+    if (farmId.isEmpty) return false;
+    await _ensureSatelliteSessionFromMainAuth();
+    final jwt = _jwt;
+    if (jwt.trim().isEmpty) {
+      if (showSnackbars) {
+        Get.snackbar(
+          UiStrings.t('login_required'),
+          'Sign in again before deleting a farm.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      return false;
+    }
+
+    isLoading.value = true;
+    hasError.value = false;
+    try {
+      await _service.deleteFarm(farmId, jwt);
+      _pendingSavedFarmsById.remove(farmId);
+      farms.removeWhere((item) => item.id == farmId);
+      if (selectedFarm.value?.id == farmId) {
+        _selectFreshFarmFrom(farms);
+      }
+      if (_verifiedFarmerPhone != null) {
+        _cachedSessionFarms = List<Farm>.from(farms, growable: false);
+        _cachedSessionRemoteConfirmed = true;
+        _lastLoadUsedCachedFallback = false;
+        _lastLoadRemoteConfirmed = true;
+        _markVerifiedFarmSyncReady();
+        await _cacheVerifiedFarmerFarms();
+      }
+      if (showSnackbars) {
+        Get.snackbar(
+          'Farm deleted',
+          '${farm.name} was removed from the database.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      return true;
+    } on Exception catch (error) {
+      hasError.value = true;
+      errorMessage.value = error.toString();
+      if (showSnackbars) {
+        Get.snackbar(
+          'Could not delete farm',
+          'Refresh and try again.',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      return false;
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   void _markVerifiedFarmSyncReady() {
@@ -862,9 +952,13 @@ class FarmController extends GetxController {
     bool showSnackbars = true,
     bool waitForRemoteConfirmation = false,
   }) async {
+    lastSaveErrorMessage.value = '';
     try {
       await _ensureSatelliteSessionFromMainAuth();
       if (points.length < 3) {
+        lastSaveErrorMessage.value = UiStrings.t(
+          'add_boundary_points_before_save',
+        );
         if (showSnackbars) {
           Get.snackbar(
             UiStrings.t('too_few_points'),
@@ -883,6 +977,9 @@ class FarmController extends GetxController {
       final bounds = PolygonGeometry.bounds(points);
       final areaHa = PolygonGeometry.areaHectares(points);
       if (areaHa <= 0) {
+        lastSaveErrorMessage.value = UiStrings.t(
+          'add_boundary_points_before_save',
+        );
         if (showSnackbars) {
           Get.snackbar(
             UiStrings.t('too_few_points'),
@@ -896,6 +993,7 @@ class FarmController extends GetxController {
       final userId = _currentUserId;
       final jwt = _jwt;
       if (jwt.trim().isEmpty || userId == null || userId.trim().isEmpty) {
+        lastSaveErrorMessage.value = UiStrings.t('farm_link_login_required');
         if (showSnackbars) {
           Get.snackbar(
             UiStrings.t('login_required'),
@@ -950,9 +1048,8 @@ class FarmController extends GetxController {
               : const Duration(seconds: 1),
         );
         if (waitForRemoteConfirmation && !confirmedFast) {
-          throw SatelliteApiException(
-            'Saved farm did not appear in the synced farm list yet.',
-            code: 'farm_sync_pending',
+          Get.log(
+            'Saved farm ${farm.id} is waiting for farmer-list confirmation.',
           );
         }
         if (!confirmedFast) {
@@ -974,10 +1071,11 @@ class FarmController extends GetxController {
       return farm;
     } catch (e) {
       Get.log('Farm save failed: $e');
+      lastSaveErrorMessage.value = _farmSaveErrorMessage(e);
       if (showSnackbars) {
         Get.snackbar(
           UiStrings.t('error'),
-          _farmSaveErrorMessage(e),
+          lastSaveErrorMessage.value,
           snackPosition: SnackPosition.BOTTOM,
         );
       }

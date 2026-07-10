@@ -17,25 +17,47 @@ class FpcLoginScreen extends StatefulWidget {
 
 class _FpcLoginScreenState extends State<FpcLoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
   bool _obscure = true;
+  bool _creatingAccount = false;
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    await Get.find<MainAuthController>().loginFpc(
-      _emailCtrl.text.trim(),
-      _passwordCtrl.text,
-      nextRoute: '/fpo',
-    );
+    final auth = Get.find<MainAuthController>();
+    if (_creatingAccount) {
+      await auth.signupFpc(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+        nextRoute: '/fpo',
+        organizationName: _nameCtrl.text,
+      );
+    } else {
+      await auth.loginFpc(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+        nextRoute: '/fpo',
+      );
+    }
+  }
+
+  void _toggleMode() {
+    setState(() {
+      _creatingAccount = !_creatingAccount;
+      Get.find<MainAuthController>().errorMessage.value = '';
+    });
   }
 
   void _goBack() {
@@ -88,12 +110,30 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    const _FpcHeader(),
+                    _FpcHeader(creatingAccount: _creatingAccount),
                     const SizedBox(height: 24),
                     const _FpcInfoStrip(),
                     const SizedBox(height: 18),
                     _FpcFormCard(
                       children: [
+                        if (_creatingAccount) ...[
+                          TextFormField(
+                            controller: _nameCtrl,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                              labelText: 'FPC / organization name',
+                              hintText: 'Kalsubai Farms',
+                              prefixIcon: Icon(Icons.badge_outlined),
+                            ),
+                            validator: (value) {
+                              if (!_creatingAccount) return null;
+                              return (value ?? '').trim().isEmpty
+                                  ? 'Enter the FPC or organization name'
+                                  : null;
+                            },
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                         TextFormField(
                           controller: _emailCtrl,
                           keyboardType: TextInputType.emailAddress,
@@ -105,9 +145,9 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                           ),
                           validator: (value) {
                             final text = (value ?? '').trim();
-                            final valid =
-                                RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-                                    .hasMatch(text);
+                            final valid = RegExp(
+                              r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
+                            ).hasMatch(text);
                             return valid
                                 ? null
                                 : UiStrings.t('enter_valid_email');
@@ -117,7 +157,9 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                         TextFormField(
                           controller: _passwordCtrl,
                           obscureText: _obscure,
-                          textInputAction: TextInputAction.done,
+                          textInputAction: _creatingAccount
+                              ? TextInputAction.next
+                              : TextInputAction.done,
                           onFieldSubmitted: (_) => _submit(),
                           decoration: InputDecoration(
                             labelText: UiStrings.t('password'),
@@ -140,6 +182,25 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                               ? null
                               : UiStrings.t('password_min_six_chars'),
                         ),
+                        if (_creatingAccount) ...[
+                          const SizedBox(height: 14),
+                          TextFormField(
+                            controller: _confirmPasswordCtrl,
+                            obscureText: _obscure,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => _submit(),
+                            decoration: InputDecoration(
+                              labelText: UiStrings.t('confirm_password'),
+                              hintText: UiStrings.t('confirm_password'),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
+                            ),
+                            validator: (value) => value == _passwordCtrl.text
+                                ? null
+                                : UiStrings.t('passwords_do_not_match'),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 22),
@@ -161,6 +222,8 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                           label: Text(
                             auth.isLoading.value
                                 ? UiStrings.t('verifying')
+                                : _creatingAccount
+                                ? UiStrings.t('create_account')
                                 : UiStrings.t('login_to_fpc_dashboard'),
                           ),
                           style: ElevatedButton.styleFrom(
@@ -171,6 +234,15 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                             ),
                           ),
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton(
+                      onPressed: auth.isLoading.value ? null : _toggleMode,
+                      child: Text(
+                        _creatingAccount
+                            ? 'Already have an FPC account? Sign in'
+                            : 'Create a new FPC / FPO account',
                       ),
                     ),
                     Obx(
@@ -201,7 +273,9 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
 }
 
 class _FpcHeader extends StatelessWidget {
-  const _FpcHeader();
+  final bool creatingAccount;
+
+  const _FpcHeader({required this.creatingAccount});
 
   @override
   Widget build(BuildContext context) {
@@ -221,7 +295,9 @@ class _FpcHeader extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          UiStrings.t('fpc_login_desc'),
+          creatingAccount
+              ? 'Create a Firebase login for your FPC or FPO workspace.'
+              : UiStrings.t('fpc_login_desc'),
           textAlign: TextAlign.center,
           style: const TextStyle(
             color: AppTheme.textMuted,

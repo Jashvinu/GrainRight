@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import '../config/locale_text.dart';
 import '../config/theme.dart';
 import '../config/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
+import '../services/backend_bridge_session.dart';
+import '../services/satellite_service.dart';
 import '../widgets/app_back_button.dart';
 import '../widgets/fpc_bottom_nav.dart';
 import '../widgets/brand_text.dart';
@@ -22,13 +25,6 @@ class FpoHomeScreen extends StatelessWidget {
         title: Text(UiStrings.t('fpo_dashboard')),
         leadingWidth: appBackButtonLeadingWidth,
         leading: appBackButtonLeading(context, onPressed: auth.logout),
-        actions: [
-          IconButton(
-            tooltip: UiStrings.t('admin_login'),
-            onPressed: () => Get.toNamed('/satellite/login'),
-            icon: const Icon(Icons.admin_panel_settings_outlined),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 112),
@@ -82,12 +78,12 @@ class FpoHomeScreen extends StatelessWidget {
                 onTap: () => Get.toNamed('/fpo/receiver'),
               ),
               _FpoAction(
-                icon: Icons.map_outlined,
-                title: UiStrings.t('field_maps'),
-                subtitle: UiStrings.t('offline_map_areas'),
+                icon: Icons.grass_outlined,
+                title: 'Farms',
+                subtitle: 'View and delete farm records',
                 color: const Color(0xFF673AB7),
                 tint: const Color(0xFFF0EAFE),
-                onTap: () => Get.toNamed('/offline-maps'),
+                onTap: () => Get.toNamed('/farms/manage'),
               ),
               _FpoAction(
                 icon: Icons.biotech_outlined,
@@ -103,10 +99,23 @@ class FpoHomeScreen extends StatelessWidget {
           const _FpoSummary(),
           const SizedBox(height: 18),
           _FpoListTile(
-            icon: Icons.satellite_alt_outlined,
-            title: UiStrings.t('satellite_monitoring'),
-            subtitle: UiStrings.t('satellite_monitoring_subtitle'),
-            onTap: () => Get.toNamed('/satellite/login'),
+            icon: Icons.map_outlined,
+            title: UiStrings.t('field_maps'),
+            subtitle: UiStrings.t('offline_map_areas'),
+            onTap: () => Get.toNamed('/offline-maps'),
+          ),
+          _FpoListTile(
+            icon: Icons.privacy_tip_outlined,
+            title: UiStrings.t('privacy_data'),
+            subtitle: UiStrings.t('fpo_privacy_data_desc'),
+            onTap: () => _showFpoPrivacyData(context),
+          ),
+          _FpoListTile(
+            icon: Icons.delete_forever_outlined,
+            title: UiStrings.t('delete_fpo_account_data'),
+            subtitle: UiStrings.t('delete_fpo_account_data_desc'),
+            iconColor: Colors.redAccent,
+            onTap: () => _requestFpoAccountDeletion(context, auth),
           ),
           _FpoListTile(
             icon: Icons.logout_rounded,
@@ -117,6 +126,97 @@ class FpoHomeScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _showFpoPrivacyData(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(UiStrings.t('privacy_data')),
+          content: Text(UiStrings.t('fpo_privacy_data_details')),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(UiStrings.t('ok')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _fpoDeletionRequestText(MainAuthController auth) {
+    return [
+      'FPO/FPC account deletion request',
+      'Email: ${auth.userEmail ?? ''}',
+      'User ID: ${auth.remoteUserId ?? ''}',
+      'Requested at: ${DateTime.now().toIso8601String()}',
+    ].join('\n');
+  }
+
+  Future<void> _requestFpoAccountDeletion(
+    BuildContext context,
+    MainAuthController auth,
+  ) async {
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: Text(UiStrings.t('delete_fpo_account_data')),
+              content: Text(UiStrings.t('delete_fpo_account_data_body')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(UiStrings.t('cancel')),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(UiStrings.t('request_deletion')),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+    if (!confirmed) return;
+
+    final payload = {
+      'status': 'requested',
+      'source': 'fpo_app_settings',
+      'account_type': 'fpo_fpc',
+      'email': auth.userEmail ?? '',
+      'user_id': auth.remoteUserId ?? '',
+      'requested_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final session = await ensureBackendBridgeSession();
+      await SatelliteService().requestAccountDeletion(
+        jwt: session.accessToken,
+        payload: payload,
+      );
+      Get.snackbar(
+        UiStrings.t('delete_fpo_account_data'),
+        UiStrings.t('deletion_request_saved'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (_) {
+      await Clipboard.setData(
+        ClipboardData(text: _fpoDeletionRequestText(auth)),
+      );
+      Get.snackbar(
+        UiStrings.t('delete_fpo_account_data'),
+        UiStrings.t('deletion_request_copied'),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 5),
+      );
+    }
   }
 }
 
@@ -337,12 +437,14 @@ class _FpoListTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final Color? iconColor;
 
   const _FpoListTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.iconColor,
   });
 
   @override
@@ -351,7 +453,7 @@ class _FpoListTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         onTap: onTap,
-        leading: Icon(icon, color: AppTheme.green),
+        leading: Icon(icon, color: iconColor ?? AppTheme.green),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900)),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right_rounded),

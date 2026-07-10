@@ -23,10 +23,7 @@ class DashboardScreen extends StatelessWidget {
       final ring = coords[0] as List;
       return ring.map((pt) {
         final p = pt as List;
-        return LatLng(
-          (p[1] as num).toDouble(),
-          (p[0] as num).toDouble(),
-        );
+        return LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble());
       }).toList();
     } catch (_) {
       return [];
@@ -51,33 +48,53 @@ class DashboardScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Farm + Index selectors
-            Obx(() => FarmSelector(
-                  farms: farmCtrl.farms,
-                  selected: farmCtrl.selectedFarm.value,
-                  onChanged: farmCtrl.selectFarm,
-                  onAddFarm: () => Get.toNamed('/satellite/draw-polygon'),
-                )),
+            Obx(
+              () => FarmSelector(
+                farms: farmCtrl.farms,
+                selected: farmCtrl.selectedFarm.value,
+                onChanged: farmCtrl.selectFarm,
+                onAddFarm: () => Get.toNamed('/satellite/draw-polygon'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => Get.toNamed('/farms/manage'),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Manage farms'),
+              ),
+            ),
             const SizedBox(height: 10),
-            Obx(() => IndexSelector(
-                  value: satCtrl.selectedIndex.value,
-                  onChanged: satCtrl.selectIndex,
-                )),
+            Obx(
+              () => IndexSelector(
+                value: satCtrl.selectedIndex.value,
+                onChanged: satCtrl.selectIndex,
+              ),
+            ),
             const SizedBox(height: 14),
 
             // Date chips
             _SectionHeader(
-                label: 'Observation Date',
-                child: Obx(() => satCtrl.datesLoading.value
+              label: 'Observation Date',
+              child: Obx(
+                () => satCtrl.datesLoading.value
                     ? const SizedBox(
                         height: 40,
                         child: Center(
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: AppTheme.green)))
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.green,
+                          ),
+                        ),
+                      )
                     : DateChipRow(
                         dates: satCtrl.availableDates,
                         selected: satCtrl.selectedDate.value,
                         onSelected: satCtrl.selectDate,
-                      ))),
+                      ),
+              ),
+            ),
             const SizedBox(height: 16),
 
             // Map
@@ -85,7 +102,8 @@ class DashboardScreen extends StatelessWidget {
               label: 'Satellite View',
               child: Obx(() {
                 final polygonPts = _polygonPoints(
-                    farmCtrl.selectedFarm.value?.geometry);
+                  farmCtrl.selectedFarm.value?.geometry,
+                );
                 return SatelliteMapView(
                   tileUrl: satCtrl.tileUrl.value,
                   isLoading: satCtrl.tileIsLoading.value,
@@ -148,16 +166,24 @@ class DashboardScreen extends StatelessWidget {
               child: Obx(() {
                 if (satCtrl.timelineIsLoading.value) {
                   return const SizedBox(
-                      height: 160,
-                      child: Center(
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.green)));
+                    height: 160,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.green,
+                      ),
+                    ),
+                  );
                 }
-                final entries =
-                    satCtrl.entriesForIndex(satCtrl.selectedIndex.value);
+                final entries = satCtrl.entriesForIndex(
+                  satCtrl.selectedIndex.value,
+                );
                 return TimeSeriesChart(
                   data: entries,
-                  label: SatelliteConfig.indexLabels[satCtrl.selectedIndex.value] ??
+                  label:
+                      SatelliteConfig.indexLabels[satCtrl
+                          .selectedIndex
+                          .value] ??
                       satCtrl.selectedIndex.value.toUpperCase(),
                 );
               }),
@@ -179,11 +205,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Label(label),
-        const SizedBox(height: 8),
-        child,
-      ],
+      children: [_Label(label), const SizedBox(height: 8), child],
     );
   }
 }
@@ -194,11 +216,14 @@ class _Label extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textMuted,
-            letterSpacing: 0.3));
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppTheme.textMuted,
+        letterSpacing: 0.3,
+      ),
+    );
   }
 }

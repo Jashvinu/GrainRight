@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
-import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 import '../config/brand_assets.dart';
 import '../config/satellite_config.dart';
@@ -33,9 +33,13 @@ import '../services/grain_grading_service.dart';
 import '../services/farm_status_notification_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/secure_app_storage.dart';
+import '../services/backend_bridge_session.dart';
+import '../services/policy_disclosure_service.dart';
 import '../services/satellite_service.dart';
+import '../services/survey_service.dart';
 import '../controllers/farm_controller.dart';
 import '../utils/harvest_machine_capture.dart';
+import '../utils/polygon_geometry.dart';
 import 'farmer_farm_setup_chat_screen.dart';
 import 'farmer_ai_chat_screen.dart';
 import 'farmer_ai_grading_screen.dart';
@@ -209,6 +213,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   String? _initialFarmServiceActiveKey;
   bool _firstFarmTutorialCheckScheduled = false;
   String? _lastSelectedFarmSnapshotEnsureKey;
+  bool _surveyFarmRecoveryInProgress = false;
+  String? _surveyFarmRecoveryPhone;
 
   @override
   void initState() {
@@ -944,15 +950,124 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     }
     if (_requiresFirstFarmSetup) {
       if (!_firstFarmTutorialOpen) {
-        if (_needsFirstFarmTutorial) {
-          unawaited(_maybeShowFirstFarmTutorial());
-        } else {
-          unawaited(_openAddFarmSheet(silentAutoSync: true));
-        }
+        unawaited(_recoverSurveyFarmThenContinueFirstFarmGate());
       }
       return true;
     }
     return false;
+  }
+
+  Future<void> _recoverSurveyFarmThenContinueFirstFarmGate() async {
+    final recovered = await _recoverLatestSurveyPolygonAsFarm();
+    if (!mounted || recovered || !_requiresFirstFarmSetup) return;
+    if (_firstFarmTutorialOpen) return;
+    if (_needsFirstFarmTutorial) {
+      unawaited(_maybeShowFirstFarmTutorial());
+    } else {
+      unawaited(_openAddFarmSheet(silentAutoSync: true));
+    }
+  }
+
+  Future<bool> _recoverLatestSurveyPolygonAsFarm() async {
+    if (_surveyFarmRecoveryInProgress) return false;
+    final auth = Get.find<MainAuthController>();
+    final verified = auth.verifiedFarmer.value;
+    final phone = verified?.phone.replaceAll(RegExp(r'\D'), '');
+    if (verified == null || phone == null || phone.isEmpty) return false;
+
+    _surveyFarmRecoveryInProgress = true;
+    _surveyFarmRecoveryPhone = phone;
+    try {
+      final survey = await SurveyService().fetchLatestWithPolygonForPhone(
+        phone,
+      );
+      if (!mounted || survey == null || _surveyFarmRecoveryPhone != phone) {
+        return false;
+      }
+      final points = _surveyPolygonPoints(survey['farm_polygon']);
+      if (points.length < 3) return false;
+
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : Get.put(FarmController());
+      final farmerName = _surveyText(survey['farmer_name']).isNotEmpty
+          ? _surveyText(survey['farmer_name'])
+          : verified.farmerName;
+      final village = _surveyText(survey['village']);
+      final crop = _surveyText(survey['main_crop_other']).isNotEmpty
+          ? _surveyText(survey['main_crop_other'])
+          : _surveyText(survey['main_crop']);
+      final farmName = [
+        if (farmerName.isNotEmpty) farmerName,
+        if (crop.isNotEmpty) crop,
+        if (village.isNotEmpty) village,
+      ].join(' - ');
+      final savedFarm = await farmCtrl.saveFarmRecord(
+        name: farmName.isEmpty ? 'Recorded farm' : farmName,
+        points: points,
+        showSnackbars: false,
+        waitForRemoteConfirmation: false,
+        metadata: {
+          if (_surveyText(survey['id']).isNotEmpty)
+            'survey_id': _surveyText(survey['id']),
+          if (crop.isNotEmpty) 'crop': crop,
+          if (village.isNotEmpty) 'village': village,
+        },
+      );
+      if (!mounted || savedFarm == null) {
+        final message = farmCtrl.lastSaveErrorMessage.value.trim();
+        if (message.isNotEmpty) {
+          Get.snackbar(
+            UiStrings.t('could_not_save_farm'),
+            message,
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        }
+        return false;
+      }
+
+      await farmCtrl.loadFarms(
+        forceRefresh: true,
+        preferredFarmId: savedFarm.id,
+      );
+      auth.farmerLoginSyncedFarmCount.value = farmCtrl.farms.length;
+      auth.farmerLoginLastSyncAt.value = DateTime.now().toUtc();
+      auth.farmerLoginSyncStatusCode.value = farmCtrl.farms.isEmpty
+          ? 'farms_not_found'
+          : 'farms_synced';
+      _initializeFarmerStateFromSession();
+      return farmCtrl.farms.isNotEmpty;
+    } catch (error) {
+      Get.log('Survey polygon farm recovery failed: $error');
+      return false;
+    } finally {
+      _surveyFarmRecoveryInProgress = false;
+    }
+  }
+
+  List<LatLng> _surveyPolygonPoints(dynamic polygon) {
+    if (polygon is! Map) return const [];
+    final coordinates = polygon['coordinates'];
+    if (coordinates is! List || coordinates.isEmpty) return const [];
+    final ring = coordinates.first;
+    if (ring is! List) return const [];
+    final points = <LatLng>[];
+    for (final point in ring) {
+      if (point is! List || point.length < 2) continue;
+      final lng = _surveyToDouble(point[0]);
+      final lat = _surveyToDouble(point[1]);
+      if (lat == null || lng == null) continue;
+      points.add(LatLng(lat, lng));
+    }
+    return points;
+  }
+
+  String _surveyText(dynamic value) => value?.toString().trim() ?? '';
+
+  double? _surveyToDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
+    return null;
   }
 
   void _openInventoryTab() {
@@ -3589,6 +3704,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     FarmIssueCell issue,
     HarvestMachineImageSource source,
   ) async {
+    final canUsePhoto = await PolicyDisclosureService.confirmPhotoUse(context);
+    if (!canUsePhoto) return null;
+
     final shot = await pickHarvestMachineImage(source: source);
     if (shot == null) return null;
     final farm = _farms[index];
@@ -4041,7 +4159,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       waitForRemoteConfirmation: true,
     );
     if (savedFarm == null) {
-      await _showFirstFarmLoadFailure();
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : null;
+      final reason = farmCtrl?.lastSaveErrorMessage.value.trim();
+      final debugReason = [
+        if (reason != null && reason.isNotEmpty) reason,
+        if (reason == null || reason.isEmpty)
+          'No farm row was returned. Points: ${polygonPoints.length}. Area: ${PolygonGeometry.areaHectares(polygonPoints).toStringAsFixed(4)} ha.',
+      ].join('\n');
+      await _showFirstFarmLoadFailure(debugReason);
       return;
     }
 
@@ -4058,9 +4185,20 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       savedFarm: savedFarm,
       setupResult: setupResult,
     );
-    if (activeIndex == null) {
+    var visibleFarmIndex = activeIndex;
+    if (visibleFarmIndex == null) {
       _quietInitialAlertFarmIds.remove(quietFarmId);
-      await _showFirstFarmLoadFailure();
+      visibleFarmIndex = _activateSavedFarmImmediately(
+        savedFarm,
+        setupResult,
+        warmMonitoring: false,
+      );
+    }
+    if (visibleFarmIndex == null) {
+      _hideFirstFarmLoadOverlay();
+      await _markFirstFarmGuideSeen();
+      _firstFarmTutorialShown = true;
+      _firstFarmTutorialOpen = false;
       return;
     }
 
@@ -4069,13 +4207,22 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       message: UiStrings.t('initial_farm_sync_message'),
     );
     final servicesReady = await _syncNewFarmServicesBeforeOpen(
-      index: activeIndex,
+      index: visibleFarmIndex,
       farmId: savedFarm.id,
     );
     if (!servicesReady) {
       _quietInitialAlertFarmIds.remove(quietFarmId);
-      await _showFirstFarmLoadFailure(
-        UiStrings.t('farm_sync_incomplete_retry'),
+      _hideFirstFarmLoadOverlay();
+      await _markFirstFarmGuideSeen();
+      _firstFarmTutorialShown = true;
+      _firstFarmTutorialOpen = false;
+      unawaited(
+        _warmNewFarmMonitoring(
+          index: visibleFarmIndex,
+          farmId: savedFarm.id,
+          clearFirst: false,
+          showAlertErrors: false,
+        ),
       );
       return;
     }
@@ -4085,7 +4232,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     _firstFarmTutorialOpen = false;
     unawaited(
       _sendFarmAddedNotification(
-        activeIndex,
+        visibleFarmIndex,
         showPopup: !silentAutoSync,
         mirrorLocalNotification: !silentAutoSync,
       ),
@@ -4271,8 +4418,32 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     bool showSnackbars = true,
     bool waitForRemoteConfirmation = false,
   }) async {
-    if (!Get.isRegistered<FarmController>()) return null;
-    if (polygonPoints.length < 3) return null;
+    if (!Get.isRegistered<FarmController>()) {
+      final message =
+          'Farm service is not ready. Reopen farmer home and try again.';
+      if (showSnackbars) {
+        Get.snackbar(
+          UiStrings.t('could_not_save_farm'),
+          message,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      Get.put(FarmController()).lastSaveErrorMessage.value = message;
+      return null;
+    }
+    if (polygonPoints.length < 3) {
+      final message =
+          'Farm boundary did not return enough points. Points: ${polygonPoints.length}. Draw at least 3 corners and tap Confirm.';
+      if (showSnackbars) {
+        Get.snackbar(
+          UiStrings.t('too_few_points'),
+          message,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+      Get.find<FarmController>().lastSaveErrorMessage.value = message;
+      return null;
+    }
     final farmCtrl = Get.find<FarmController>();
     final savedFarm = await farmCtrl.saveFarmRecord(
       name: setupResult.farmName,
@@ -9187,6 +9358,8 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     final source = await _chooseMoistureImageSource();
     if (source == null) return;
     if (!mounted) return;
+    final canUsePhoto = await PolicyDisclosureService.confirmPhotoUse(context);
+    if (!canUsePhoto) return;
 
     setState(() => _isCapturingImage = true);
     try {
@@ -9227,6 +9400,8 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     final source = await _chooseGrainImageSource();
     if (source == null) return;
     if (!mounted) return;
+    final canUsePhoto = await PolicyDisclosureService.confirmPhotoUse(context);
+    if (!canUsePhoto) return;
 
     setState(() => _isCapturingGrainImage = true);
     try {
@@ -15902,6 +16077,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   bool _gradingReminders = true;
   bool _offlineAccess = true;
   bool _autoSync = true;
+  bool _deletionRequesting = false;
 
   void _saveToggle(String title, bool value, ValueChanged<bool> assign) {
     setState(() => assign(value));
@@ -15915,6 +16091,101 @@ class _SettingsPageState extends State<_SettingsPage> {
   void _openAddFarm() {
     Get.back();
     widget.onOpenAddFarm();
+  }
+
+  void _showPrivacyData() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(UiStrings.t('privacy_data')),
+          content: Text(UiStrings.t('privacy_data_details')),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(UiStrings.t('ok')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _deletionRequestText() {
+    return [
+      'Account deletion request',
+      'Name: ${widget.profile.name}',
+      'Farmer ID: ${widget.profile.farmerId}',
+      'Phone: ${widget.profile.phone}',
+      'Location: ${widget.profile.location}',
+      'Requested at: ${DateTime.now().toIso8601String()}',
+    ].join('\n');
+  }
+
+  Future<void> _requestAccountDeletion() async {
+    if (_deletionRequesting) return;
+    final confirmed =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: Text(UiStrings.t('delete_account_data')),
+              content: Text(UiStrings.t('delete_account_data_body')),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(UiStrings.t('cancel')),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(UiStrings.t('request_deletion')),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+    if (!confirmed || !mounted) return;
+
+    setState(() => _deletionRequesting = true);
+    final payload = {
+      'status': 'requested',
+      'source': 'farmer_app_settings',
+      'farmer_id': widget.profile.farmerId,
+      'farmer_name': widget.profile.name,
+      'phone': widget.profile.phone,
+      'location': widget.profile.location,
+      'requested_at': DateTime.now().toIso8601String(),
+    };
+
+    try {
+      final session = await ensureBackendBridgeSession();
+      await SatelliteService().requestAccountDeletion(
+        jwt: session.accessToken,
+        payload: payload,
+      );
+      if (!mounted) return;
+      Get.snackbar(
+        UiStrings.t('delete_account_data'),
+        UiStrings.t('deletion_request_saved'),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    } catch (_) {
+      await Clipboard.setData(ClipboardData(text: _deletionRequestText()));
+      if (!mounted) return;
+      Get.snackbar(
+        UiStrings.t('delete_account_data'),
+        UiStrings.t('deletion_request_copied'),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 5),
+      );
+    } finally {
+      if (mounted) setState(() => _deletionRequesting = false);
+    }
   }
 
   @override
@@ -16031,6 +16302,13 @@ class _SettingsPageState extends State<_SettingsPage> {
                   onTap: _openAddFarm,
                 ),
                 const Divider(height: 1),
+                _SettingsActionRow(
+                  icon: Icons.delete_outline_rounded,
+                  title: 'Manage farms',
+                  subtitle: 'View synced farms and delete records from DB',
+                  onTap: () => Get.toNamed('/farms/manage'),
+                ),
+                const Divider(height: 1),
                 _SettingsSwitchRow(
                   icon: Icons.offline_bolt_outlined,
                   title: UiStrings.t('offline_access'),
@@ -16116,11 +16394,23 @@ class _SettingsPageState extends State<_SettingsPage> {
                   icon: Icons.privacy_tip_outlined,
                   title: UiStrings.t('privacy_data'),
                   subtitle: UiStrings.t('privacy_data_desc'),
-                  onTap: () => Get.snackbar(
-                    UiStrings.t('privacy_data'),
-                    UiStrings.t('privacy_data_message'),
-                    snackPosition: SnackPosition.BOTTOM,
-                  ),
+                  onTap: _showPrivacyData,
+                ),
+                const Divider(height: 1),
+                _SettingsActionRow(
+                  icon: Icons.delete_forever_outlined,
+                  title: UiStrings.t('delete_account_data'),
+                  subtitle: UiStrings.t('delete_account_data_desc'),
+                  iconColor: Colors.redAccent,
+                  textColor: Colors.redAccent,
+                  trailing: _deletionRequesting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  onTap: _requestAccountDeletion,
                 ),
                 const Divider(height: 1),
                 _SettingsActionRow(

@@ -26,6 +26,13 @@ class RuntimeConfig {
   static const _publicTraceBaseUrlFallback = String.fromEnvironment(
     'PUBLIC_TRACE_BASE_URL',
   );
+  static const _backendAuthEmailFallback = String.fromEnvironment(
+    'BACKEND_AUTH_EMAIL',
+    defaultValue: 'jashvinu@wrkfarm.com',
+  );
+  static const _backendAuthPasswordFallback = String.fromEnvironment(
+    'BACKEND_AUTH_PASSWORD',
+  );
 
   static Map<String, String> _localConfig = const {};
 
@@ -59,7 +66,9 @@ class RuntimeConfig {
   static String get onlineSatelliteTileUrlTemplate {
     final override = _onlineSatelliteTileUrlTemplate.trim();
     if (_isUsable(override)) return override;
-    final localOverride = _localConfigValue('ONLINE_SATELLITE_TILE_URL_TEMPLATE');
+    final localOverride = _localConfigValue(
+      'ONLINE_SATELLITE_TILE_URL_TEMPLATE',
+    );
     if (localOverride.isNotEmpty) return localOverride;
     final apiKey = mapTilerApiKey;
     if (apiKey.isNotEmpty) {
@@ -75,12 +84,27 @@ class RuntimeConfig {
   static String get publicTraceBaseUrl {
     final fallback = _stripTrailingSlash(_publicTraceBaseUrlFallback.trim());
     if (_isUsable(fallback)) return fallback;
-    final local = _stripTrailingSlash(_localConfigValue('PUBLIC_TRACE_BASE_URL'));
+    final local = _stripTrailingSlash(
+      _localConfigValue('PUBLIC_TRACE_BASE_URL'),
+    );
     return local.isEmpty ? 'https://grainright.app' : local;
   }
 
   static String publicTraceUrl(String token) {
     return '$publicTraceBaseUrl/#/trace/$token';
+  }
+
+  static String get backendAuthEmail {
+    final fallback = _backendAuthEmailFallback.trim();
+    if (_isUsable(fallback)) return fallback;
+    final local = _localConfigValue('BACKEND_AUTH_EMAIL');
+    return local.isEmpty ? 'jashvinu@wrkfarm.com' : local;
+  }
+
+  static String get backendAuthPassword {
+    final fallback = _backendAuthPasswordFallback.trim();
+    if (_isUsable(fallback)) return fallback;
+    return _localConfigValue('BACKEND_AUTH_PASSWORD');
   }
 
   static Future<String> mapTilerApiKeyRuntime() {

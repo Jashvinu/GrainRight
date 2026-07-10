@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../config/locale_text.dart';
 import '../config/theme.dart';
 import '../config/ui_strings.dart';
+import '../services/policy_disclosure_service.dart';
 import '../utils/harvest_machine_capture.dart';
 import '../widgets/app_back_button.dart';
 
@@ -106,26 +107,13 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   void initState() {
     super.initState();
     _messages
-      ..add(
-        _StatusMessage(
-          isUser: false,
-          text: _farmContextText,
-        ),
-      )
-      ..add(
-        _StatusMessage(
-          isUser: false,
-          text: _stageQuestionText,
-        ),
-      );
+      ..add(_StatusMessage(isUser: false, text: _farmContextText))
+      ..add(_StatusMessage(isUser: false, text: _stageQuestionText));
 
     if (widget.lifecycleContext != null &&
         widget.lifecycleContext!.trim().isNotEmpty) {
       _messages.add(
-        _StatusMessage(
-          isUser: false,
-          text: widget.lifecycleContext!.trim(),
-        ),
+        _StatusMessage(isUser: false, text: widget.lifecycleContext!.trim()),
       );
     }
 
@@ -143,9 +131,7 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
       _messages.add(
         _StatusMessage(
           isUser: false,
-          text: UiStrings.f('stage_needs_field_photo', {
-            'stage': widget.stage,
-          }),
+          text: UiStrings.f('stage_needs_field_photo', {'stage': widget.stage}),
         ),
       );
     }
@@ -200,12 +186,15 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   }
 
   void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickPhoto() async {
+    final canUsePhoto = await PolicyDisclosureService.confirmPhotoUse(context);
+    if (!canUsePhoto) return;
+
     final result = await pickHarvestMachineImage();
     if (result == null) return;
     if (!mounted) return;
@@ -247,10 +236,7 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
     return '${UiStrings.t('selected_farm')}: ${widget.farmName}\n'
         '${UiStrings.t('crop_label')}: $_cropName • ${UiStrings.t('variety')}: $_varietyName\n'
         '${UiStrings.t('location')}: ${UiStrings.label(widget.location)}\n'
-        '${UiStrings.t('growth')}: ${UiStrings.f('day_stage', {
-          'day': LocaleText.number(widget.daysAfterSowing),
-          'stage': UiStrings.option(widget.stage),
-        })}';
+        '${UiStrings.t('growth')}: ${UiStrings.f('day_stage', {'day': LocaleText.number(widget.daysAfterSowing), 'stage': UiStrings.option(widget.stage)})}';
   }
 
   String get _stageQuestionText {
@@ -262,14 +248,14 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   }
 
   List<String> get _quickSuggestions => [
-        UiStrings.f('quick_growth_normal_for_crop', {
-          'crop': widget.crop,
-          'variety': widget.variety,
-        }),
-        UiStrings.f('quick_irrigation_done_for_crop', {'crop': widget.crop}),
-        UiStrings.f('quick_reinspection_for_crop', {'crop': widget.crop}),
-        UiStrings.t('quick_unexpected_yellowing'),
-      ];
+    UiStrings.f('quick_growth_normal_for_crop', {
+      'crop': widget.crop,
+      'variety': widget.variety,
+    }),
+    UiStrings.f('quick_irrigation_done_for_crop', {'crop': widget.crop}),
+    UiStrings.f('quick_reinspection_for_crop', {'crop': widget.crop}),
+    UiStrings.t('quick_unexpected_yellowing'),
+  ];
 
   List<String> get _quickReplies {
     final fromStage = _stageQuickReplyKeys[widget.stage];
@@ -309,8 +295,9 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
                 itemBuilder: (context, index) {
                   final item = _messages[index];
                   return Align(
-                    alignment:
-                        item.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: item.isUser
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Container(
                       constraints: const BoxConstraints(maxWidth: 340),
                       padding: const EdgeInsets.symmetric(
@@ -318,9 +305,7 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
                         vertical: 12,
                       ),
                       decoration: BoxDecoration(
-                        color: item.isUser
-                            ? AppTheme.greenPale
-                            : Colors.white,
+                        color: item.isUser ? AppTheme.greenPale : Colors.white,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: item.isUser
@@ -343,7 +328,10 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
             ),
             if (_photoBytes != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: AspectRatio(
@@ -440,8 +428,5 @@ class _StatusMessage {
   final bool isUser;
   final String text;
 
-  const _StatusMessage({
-    required this.isUser,
-    required this.text,
-  });
+  const _StatusMessage({required this.isUser, required this.text});
 }

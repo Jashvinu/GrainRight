@@ -285,22 +285,6 @@ class UiStrings {
       'hi': 'किसान उत्पादक कंपनी की जानकारी से लॉगिन',
       'mr': 'शेतकरी उत्पादक कंपनीच्या माहितीने लॉगिन',
     },
-    'role_admin': {'en': 'Admin', 'hi': 'एडमिन', 'mr': 'अ‍ॅडमिन'},
-    'role_admin_sub': {
-      'en': 'System administration',
-      'hi': 'सिस्टम प्रशासन',
-      'mr': 'सिस्टम प्रशासन',
-    },
-    'guest': {
-      'en': 'Continue as Guest',
-      'hi': 'मेहमान के रूप में जारी रखें',
-      'mr': 'पाहुणा म्हणून सुरू ठेवा',
-    },
-    'guest_sub': {
-      'en': 'Fill survey form only\n(Limited Access)',
-      'hi': 'केवल सर्वे फॉर्म भरें\n(सीमित पहुँच)',
-      'mr': 'फक्त सर्वे फॉर्म भरा\n(मर्यादित प्रवेश)',
-    },
     'or': {'en': 'or', 'hi': 'या', 'mr': 'किंवा'},
     'data_safe': {
       'en': 'Your data is safe and secure with us',
@@ -1249,6 +1233,82 @@ class UiStrings {
       'mr':
           'तुमचा शेत डेटा फक्त या मोबाइल नंबरशी जोडलेल्या शेतकरी प्रोफाइलशी सिंक होतो.',
     },
+    'privacy_data_details': {
+      'en':
+          'Kalsubai Farms stores your phone login, farmer profile, farm boundaries, crop survey answers, field photos, grading results, diagnostics, and sync records so your farm data can be recovered on this account and shared with your FPC workflow. You can request account and farm-data deletion from this settings page.',
+      'hi':
+          'Kalsubai Farms आपके फोन लॉगिन, किसान प्रोफ़ाइल, खेत सीमाएँ, फसल सर्वे उत्तर, फील्ड फोटो, ग्रेडिंग परिणाम, डायग्नोस्टिक्स और सिंक रिकॉर्ड को इस खाते पर खेत डेटा वापस लाने और FPC वर्कफ़्लो में उपयोग करने के लिए रखता है। आप इसी सेटिंग पेज से खाता और खेत डेटा हटाने का अनुरोध कर सकते हैं।',
+      'mr':
+          'Kalsubai Farms तुमचा फोन लॉगिन, शेतकरी प्रोफाइल, शेत सीमा, पीक सर्वे उत्तरे, फील्ड फोटो, ग्रेडिंग निकाल, डायग्नोस्टिक्स आणि सिंक नोंदी या खात्यावर शेत डेटा परत मिळवण्यासाठी आणि FPC वर्कफ्लोमध्ये वापरण्यासाठी साठवते. या सेटिंग पेजवरून खाते आणि शेत डेटा हटवण्याची विनंती करता येते.',
+    },
+    'delete_account_data': {
+      'en': 'Delete account and farm data',
+      'hi': 'खाता और खेत डेटा हटाएँ',
+      'mr': 'खाते आणि शेत डेटा हटवा',
+    },
+    'delete_account_data_desc': {
+      'en':
+          'Request deletion of your login, profile, farms, photos, and records',
+      'hi': 'अपना लॉगिन, प्रोफ़ाइल, खेत, फोटो और रिकॉर्ड हटाने का अनुरोध करें',
+      'mr': 'तुमचा लॉगिन, प्रोफाइल, शेत, फोटो आणि नोंदी हटवण्याची विनंती करा',
+    },
+    'delete_account_data_body': {
+      'en':
+          'This sends a deletion request for your farmer login, profile, farm boundaries, survey answers, field photos, grading records, and diagnostics. Your coordinator may contact you before permanent deletion.',
+      'hi':
+          'यह आपके किसान लॉगिन, प्रोफ़ाइल, खेत सीमाएँ, सर्वे उत्तर, फील्ड फोटो, ग्रेडिंग रिकॉर्ड और डायग्नोस्टिक्स हटाने का अनुरोध भेजता है। स्थायी हटाने से पहले आपका समन्वयक आपसे संपर्क कर सकता है।',
+      'mr':
+          'यामुळे तुमचा शेतकरी लॉगिन, प्रोफाइल, शेत सीमा, सर्वे उत्तरे, फील्ड फोटो, ग्रेडिंग नोंदी आणि डायग्नोस्टिक्स हटवण्याची विनंती पाठवली जाते. कायमचे हटवण्यापूर्वी तुमचा समन्वयक संपर्क करू शकतो.',
+    },
+    'request_deletion': {
+      'en': 'Request deletion',
+      'hi': 'हटाने का अनुरोध',
+      'mr': 'हटवण्याची विनंती',
+    },
+    'deletion_request_saved': {
+      'en':
+          'Deletion request saved. We will process the account and farm data deletion request.',
+      'hi':
+          'हटाने का अनुरोध सेव हो गया। हम खाता और खेत डेटा हटाने का अनुरोध प्रोसेस करेंगे।',
+      'mr':
+          'हटवण्याची विनंती सेव झाली. खाते आणि शेत डेटा हटवण्याची विनंती आम्ही प्रक्रिया करू.',
+    },
+    'deletion_request_copied': {
+      'en':
+          'Deletion request copied. Send it to support if online saving is unavailable.',
+      'hi':
+          'हटाने का अनुरोध कॉपी हो गया। ऑनलाइन सेव न हो तो इसे सपोर्ट को भेजें।',
+      'mr':
+          'हटवण्याची विनंती कॉपी झाली. ऑनलाइन सेव उपलब्ध नसल्यास ती सपोर्टला पाठवा.',
+    },
+    'location_disclosure_title': {
+      'en': 'Location use',
+      'hi': 'स्थान का उपयोग',
+      'mr': 'स्थान वापर',
+    },
+    'location_disclosure_body': {
+      'en':
+          'Kalsubai Farms uses your device location to center the map and help mark farm boundaries. Saved farm boundaries and coordinates are linked to your farmer profile for weather, diagnostics, farm sync, and advisory features.',
+      'hi':
+          'Kalsubai Farms आपके डिवाइस स्थान का उपयोग मैप को केंद्र में लाने और खेत सीमा चिह्नित करने में मदद के लिए करता है। सेव की गई खेत सीमाएँ और निर्देशांक मौसम, डायग्नोस्टिक्स, फार्म सिंक और सलाह सुविधाओं के लिए आपकी किसान प्रोफ़ाइल से जुड़े रहते हैं।',
+      'mr':
+          'Kalsubai Farms तुमचे डिवाइस स्थान नकाशा केंद्रित करण्यासाठी आणि शेत सीमा चिन्हांकित करण्यात मदत करण्यासाठी वापरते. सेव केलेल्या शेत सीमा आणि निर्देशांक हवामान, डायग्नोस्टिक्स, फार्म सिंक आणि सल्ला सुविधांसाठी तुमच्या शेतकरी प्रोफाइलशी जोडलेले राहतात.',
+    },
+    'photo_disclosure_title': {
+      'en': 'Camera and photo use',
+      'hi': 'कैमरा और फोटो उपयोग',
+      'mr': 'कॅमेरा आणि फोटो वापर',
+    },
+    'photo_disclosure_body': {
+      'en':
+          'Kalsubai Farms uses camera or gallery images for grain grading, moisture-meter reading, crop-stage proof, and disease diagnostics. Uploaded photos are linked to your selected farm or harvest record for review and advisory features.',
+      'hi':
+          'Kalsubai Farms कैमरा या गैलरी इमेज का उपयोग अनाज ग्रेडिंग, नमी मीटर रीडिंग, फसल चरण प्रमाण और रोग डायग्नोस्टिक्स के लिए करता है। अपलोड की गई फोटो समीक्षा और सलाह सुविधाओं के लिए आपके चुने हुए खेत या हार्वेस्ट रिकॉर्ड से जुड़ती हैं।',
+      'mr':
+          'Kalsubai Farms कॅमेरा किंवा गॅलरी फोटो धान्य ग्रेडिंग, ओलावा मीटर रीडिंग, पीक अवस्था पुरावा आणि रोग डायग्नोस्टिक्ससाठी वापरते. अपलोड केलेले फोटो पुनरावलोकन आणि सल्ला सुविधांसाठी निवडलेल्या शेत किंवा कापणी नोंदीशी जोडले जातात.',
+    },
+    'not_now': {'en': 'Not now', 'hi': 'अभी नहीं', 'mr': 'आता नाही'},
+    'ok': {'en': 'OK', 'hi': 'ठीक है', 'mr': 'ठीक आहे'},
     'help_and_support': {
       'en': 'Help and support',
       'hi': 'मदद और सहायता',
@@ -5751,12 +5811,9 @@ class UiStrings {
           'शेतकरी पडताळणी, खरेदी आणि field tools साठी तुमच्या नोंदणीकृत FPC account ने login करा.',
     },
     'fpc_login_info': {
-      'en':
-          'Use the email and password configured in Supabase for your FPC account.',
-      'hi':
-          'अपने FPC account के लिए Supabase में configured ईमेल और पासवर्ड उपयोग करें।',
-      'mr':
-          'तुमच्या FPC account साठी Supabase मध्ये configured ईमेल आणि पासवर्ड वापरा.',
+      'en': 'Use your Firebase email and password for the FPC workspace.',
+      'hi': 'FPC workspace के लिए अपना Firebase ईमेल और पासवर्ड उपयोग करें।',
+      'mr': 'FPC workspace साठी तुमचा Firebase ईमेल आणि पासवर्ड वापरा.',
     },
     'management': {'en': 'Management', 'hi': 'प्रबंधन', 'mr': 'व्यवस्थापन'},
     'farmers': {'en': 'Farmers', 'hi': 'किसान', 'mr': 'शेतकरी'},
@@ -5781,6 +5838,37 @@ class UiStrings {
       'en': 'Scan harvest QR and save purchases',
       'hi': 'कटाई QR स्कैन करें और खरीद सेव करें',
       'mr': 'कापणी QR स्कॅन करा आणि खरेदी जतन करा',
+    },
+    'fpo_privacy_data_desc': {
+      'en': 'FPO login, staff actions, procurement, and grading records',
+      'hi': 'FPO लॉगिन, स्टाफ कार्रवाई, खरीद और ग्रेडिंग रिकॉर्ड',
+      'mr': 'FPO लॉगिन, कर्मचारी कृती, खरेदी आणि ग्रेडिंग नोंदी',
+    },
+    'fpo_privacy_data_details': {
+      'en':
+          'Kalsubai Farms stores your FPO/FPC login, organization identity, farmer verification scans, procurement review actions, received harvest lots, grading records, and farm-operation records so your workspace can manage farmer service and traceability. You can request deletion of the FPO/FPC account and associated workspace data from this dashboard.',
+      'hi':
+          'Kalsubai Farms आपके FPO/FPC लॉगिन, संगठन पहचान, किसान सत्यापन स्कैन, खरीद समीक्षा कार्रवाई, प्राप्त हार्वेस्ट लॉट, ग्रेडिंग रिकॉर्ड और फार्म-ऑपरेशन रिकॉर्ड को किसान सेवा और traceability workspace चलाने के लिए रखता है। आप इसी डैशबोर्ड से FPO/FPC खाते और जुड़े workspace डेटा को हटाने का अनुरोध कर सकते हैं।',
+      'mr':
+          'Kalsubai Farms तुमचा FPO/FPC लॉगिन, संस्था ओळख, शेतकरी पडताळणी स्कॅन, खरेदी पुनरावलोकन कृती, प्राप्त कापणी लॉट, ग्रेडिंग नोंदी आणि शेत-ऑपरेशन नोंदी शेतकरी सेवा आणि traceability workspace साठी साठवते. या डॅशबोर्डवरून FPO/FPC खाते आणि संबंधित workspace डेटा हटवण्याची विनंती करता येते.',
+    },
+    'delete_fpo_account_data': {
+      'en': 'Delete FPO/FPC account and data',
+      'hi': 'FPO/FPC खाता और डेटा हटाएँ',
+      'mr': 'FPO/FPC खाते आणि डेटा हटवा',
+    },
+    'delete_fpo_account_data_desc': {
+      'en': 'Request deletion of this workspace login and associated records',
+      'hi': 'इस workspace लॉगिन और जुड़े रिकॉर्ड हटाने का अनुरोध करें',
+      'mr': 'या workspace लॉगिन आणि संबंधित नोंदी हटवण्याची विनंती करा',
+    },
+    'delete_fpo_account_data_body': {
+      'en':
+          'This sends a deletion request for the FPO/FPC login, organization profile, staff actions, farmer verification scans, procurement records, grading records, and received harvest-lot records. Support may contact you to verify ownership before permanent deletion.',
+      'hi':
+          'यह FPO/FPC लॉगिन, संगठन प्रोफ़ाइल, स्टाफ कार्रवाई, किसान सत्यापन स्कैन, खरीद रिकॉर्ड, ग्रेडिंग रिकॉर्ड और प्राप्त हार्वेस्ट-लॉट रिकॉर्ड हटाने का अनुरोध भेजता है। स्थायी हटाने से पहले सपोर्ट स्वामित्व सत्यापित करने के लिए संपर्क कर सकता है।',
+      'mr':
+          'यामुळे FPO/FPC लॉगिन, संस्था प्रोफाइल, कर्मचारी कृती, शेतकरी पडताळणी स्कॅन, खरेदी नोंदी, ग्रेडिंग नोंदी आणि प्राप्त कापणी-लॉट नोंदी हटवण्याची विनंती पाठवली जाते. कायमचे हटवण्यापूर्वी सपोर्ट मालकी पडताळण्यासाठी संपर्क करू शकते.',
     },
     'field_maps': {'en': 'Field Maps', 'hi': 'खेत मैप', 'mr': 'शेत नकाशे'},
     'offline_map_areas': {

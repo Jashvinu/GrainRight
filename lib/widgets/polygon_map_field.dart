@@ -11,6 +11,7 @@ import '../services/map_tile_cache_service.dart';
 import '../services/map_tile_provider.dart';
 import '../services/network_status_service.dart';
 import '../services/offline_map_service.dart';
+import '../services/policy_disclosure_service.dart';
 
 class PolygonMapField extends StatefulWidget {
   final String label;
@@ -104,6 +105,18 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   }
 
   Future<void> _loadLocation() async {
+    final canUseLocation = await PolicyDisclosureService.confirmLocationUse(
+      context,
+    );
+    if (!mounted) return;
+    if (!canUseLocation) {
+      final fallbackRegion = await _preferredOfflineRegion(_downloadedRegions);
+      if (fallbackRegion != null) {
+        _focusOfflineRegion(fallbackRegion, showSnack: false);
+      }
+      return;
+    }
+
     final quickLocation = await _locationService.getLastKnownLocation();
     if (!mounted) return;
     if (quickLocation != null) {
@@ -435,7 +448,8 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                     ),
                     OfflineAwareTileLayer(
                       urlTemplate: fieldImageryTileUrl,
-                      offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
+                      offlineUrlTemplateOverride:
+                          _selectedOfflineRegion?.sourceId,
                       maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
                     ),
                     if (_currentPoints.length >= 3)
@@ -510,7 +524,10 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                                         )
                                       : _searchController.text.isNotEmpty
                                       ? IconButton(
-                                          icon: const Icon(Icons.clear, size: 20),
+                                          icon: const Icon(
+                                            Icons.clear,
+                                            size: 20,
+                                          ),
                                           onPressed: () {
                                             _searchDebounce?.cancel();
                                             _searchController.clear();
@@ -562,7 +579,9 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.94),
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: const Color(0xFFD9E4D8)),
+                                border: Border.all(
+                                  color: const Color(0xFFD9E4D8),
+                                ),
                               ),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(

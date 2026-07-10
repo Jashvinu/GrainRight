@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/brand_assets.dart';
 import '../config/theme.dart';
 import '../config/ui_strings.dart';
@@ -51,20 +50,13 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    if (auth.isAuthenticated) {
-      final user = Supabase.instance.client.auth.currentUser;
-      final role =
-          '${user?.userMetadata?['role'] ?? ''}'.trim().toLowerCase();
+    final route = await auth.startupRoute();
+    if (!mounted) return;
 
-      if (auth.verifiedFarmer.value != null || role == 'farmer') {
-        Get.offAllNamed('/farmer');
-      } else if ({'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)) {
-        Get.offAllNamed('/fpo');
-      } else {
-        Get.offAllNamed('/home');
-      }
-    } else {
+    if (route == '/login') {
       Get.offNamed('/login');
+    } else {
+      Get.offAllNamed(route);
     }
   }
 

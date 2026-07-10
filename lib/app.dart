@@ -13,6 +13,7 @@ import 'screens/splash_screen.dart';
 import 'screens/farmer_home_screen.dart';
 import 'screens/farmer_login_screen.dart';
 import 'screens/farmer_signup_screen.dart';
+import 'screens/farm_management_screen.dart';
 import 'screens/fpc_login_screen.dart';
 import 'screens/fpo_farmer_qr_scan_screen.dart';
 import 'screens/fpo_grading_review_screen.dart';
@@ -98,6 +99,7 @@ class KalsubaiFarmsApp extends StatelessWidget {
           Get.put(ConnectivitySyncController());
         }
         Get.put(MainAuthController());
+        Get.put(FarmController());
       }),
       initialRoute: '/',
       getPages: [
@@ -109,6 +111,11 @@ class KalsubaiFarmsApp extends StatelessWidget {
         GetPage(
           name: '/farmer',
           page: () => const FarmerHomeScreen(),
+          binding: BindingsBuilder(_bindSatelliteFarmFlow),
+        ),
+        GetPage(
+          name: '/farms/manage',
+          page: () => const FarmManagementScreen(),
           binding: BindingsBuilder(_bindSatelliteFarmFlow),
         ),
         GetPage(
@@ -137,14 +144,8 @@ class KalsubaiFarmsApp extends StatelessWidget {
           name: '/fpo/grain-grading',
           page: () => const FarmerAiGradingScreen(),
         ),
-        GetPage(
-          name: '/fpo/receiver',
-          page: () => const FpoReceiverScreen(),
-        ),
-        GetPage(
-          name: '/trace/:token',
-          page: () => const PublicTraceScreen(),
-        ),
+        GetPage(name: '/fpo/receiver', page: () => const FpoReceiverScreen()),
+        GetPage(name: '/trace/:token', page: () => const PublicTraceScreen()),
         GetPage(name: '/home', page: () => const LandingScreen()),
         GetPage(name: '/surveys', page: () => const HomeScreen()),
         GetPage(name: '/form', page: () => const ChatbotSurveyScreen()),

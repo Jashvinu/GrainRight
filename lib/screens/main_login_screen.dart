@@ -16,18 +16,6 @@ class MainLoginScreen extends StatefulWidget {
 }
 
 class _MainLoginScreenState extends State<MainLoginScreen> {
-  String? _activeRole;
-
-  Future<void> _continueAnonymously(
-    String role, {
-    String nextRoute = '/home',
-  }) async {
-    final auth = Get.find<MainAuthController>();
-    setState(() => _activeRole = role);
-    await auth.continueAsGuest(nextRoute: nextRoute);
-    if (mounted) setState(() => _activeRole = null);
-  }
-
   @override
   Widget build(BuildContext context) {
     final auth = Get.find<MainAuthController>();
@@ -109,37 +97,6 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _AnimatedEntrance(
-                        delay: 230,
-                        child: _RoleCard(
-                          icon: Icons.admin_panel_settings_outlined,
-                          title: UiStrings.t('role_admin'),
-                          subtitle: UiStrings.t('role_admin_sub'),
-                          color: const Color(0xFF673AB7),
-                          tint: const Color(0xFFF1E8FF),
-                          isDisabled: false,
-                          onTap: () => Get.toNamed('/satellite/login'),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      _DividerLabel(label: UiStrings.t('or')),
-                      const SizedBox(height: 24),
-                      Obx(
-                        () => _AnimatedEntrance(
-                          delay: 300,
-                          child: _RoleCard(
-                            icon: Icons.person_outline_rounded,
-                            title: UiStrings.t('guest'),
-                            subtitle: UiStrings.t('guest_sub'),
-                            color: const Color(0xFFB8860B),
-                            tint: const Color(0xFFFFF8E1),
-                            isLoading:
-                                auth.isLoading.value && _activeRole == 'guest',
-                            isDisabled: auth.isLoading.value,
-                            onTap: () => _continueAnonymously('guest'),
-                          ),
-                        ),
-                      ),
                       Obx(
                         () => auth.errorMessage.isEmpty
                             ? const SizedBox.shrink()
@@ -180,10 +137,7 @@ class _BrandHeader extends StatelessWidget {
       duration: const Duration(milliseconds: 680),
       curve: Curves.easeOutBack,
       builder: (context, value, child) {
-        return Transform.scale(
-          scale: value,
-          child: child,
-        );
+        return Transform.scale(scale: value, child: child);
       },
       child: Column(
         children: [
@@ -206,8 +160,8 @@ class _BrandHeader extends StatelessWidget {
                 BrandAssets.logo,
                 width: 292,
                 height: 164,
-                cacheWidth:
-                    (292 * MediaQuery.devicePixelRatioOf(context)).round(),
+                cacheWidth: (292 * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
                 fit: BoxFit.contain,
               ),
             ),
@@ -320,7 +274,6 @@ class _RoleCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final Color tint;
-  final bool isLoading;
   final bool isDisabled;
   final VoidCallback onTap;
 
@@ -331,7 +284,6 @@ class _RoleCard extends StatelessWidget {
     required this.color,
     required this.tint,
     required this.onTap,
-    this.isLoading = false,
     this.isDisabled = false,
   });
 
@@ -370,16 +322,7 @@ class _RoleCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
-                    child: isLoading
-                        ? SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.4,
-                              color: color,
-                            ),
-                          )
-                        : Icon(icon, color: color, size: 42),
+                    child: Icon(icon, color: color, size: 42),
                   ),
                   const SizedBox(width: 18),
                   Expanded(
@@ -426,33 +369,6 @@ class _RoleCard extends StatelessWidget {
   }
 }
 
-class _DividerLabel extends StatelessWidget {
-  final String label;
-
-  const _DividerLabel({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18),
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: AppTheme.textMuted,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
-      ],
-    );
-  }
-}
-
 class _SecurityStrip extends StatelessWidget {
   const _SecurityStrip();
 
@@ -461,7 +377,11 @@ class _SecurityStrip extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.verified_user_rounded, color: Color(0xFF52B788), size: 22),
+        const Icon(
+          Icons.verified_user_rounded,
+          color: Color(0xFF52B788),
+          size: 22,
+        ),
         const SizedBox(width: 10),
         Flexible(
           child: Text(

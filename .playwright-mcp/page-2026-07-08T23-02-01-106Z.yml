@@ -1,0 +1,7 @@
+- generic [active]:
+  - generic:
+    - generic:
+      - generic:
+        - region "Notifications (F8)":
+          - list
+  - document [ref=f1e1]

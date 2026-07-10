@@ -1,0 +1,8 @@
+- generic [ref=f1e2] [cursor=pointer]:
+  - button "Enable accessibility" [ref=f1e3]
+  - generic:
+    - generic:
+      - generic:
+        - region "Notifications (F8)":
+          - list
+  - document [ref=f1e1]

@@ -1,6 +1,9 @@
 import 'dart:convert';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:http/http.dart' as http;
+
+import '../config/supabase_config.dart';
+import 'backend_bridge_session.dart';
 
 class FpcProcurementException implements Exception {
   final String message;
@@ -119,25 +122,37 @@ class HarvestTraceParser {
 }
 
 class FpcProcurementService {
-  SupabaseClient get _client => Supabase.instance.client;
+  static const _restBase = '${SupabaseConfig.url}/rest/v1';
 
-  String get _uid {
-    final id = _client.auth.currentUser?.id;
-    if (id == null || id.isEmpty) {
+  Future<BackendBridgeSession> _session() async {
+    try {
+      return await ensureBackendBridgeSession();
+    } catch (_) {
       throw const FpcProcurementException(
         'Login as FPC before receiving product.',
       );
     }
-    return id;
+  }
+
+  Map<String, String> _headers(String token, {bool jsonBody = false}) {
+    return {
+      'apikey': SupabaseConfig.anonKey,
+      'Authorization': 'Bearer $token',
+      if (jsonBody) 'Content-Type': 'application/json',
+    };
   }
 
   Future<List<FpcProcurementRecord>> fetchRecords() async {
-    final rows = await _client
-        .from('fpc_procurement_records')
-        .select()
-        .eq('fpc_id', _uid)
-        .order('received_at', ascending: false)
-        .limit(100);
+    final session = await _session();
+    final uri = Uri.parse(
+      '$_restBase/fpc_procurement_records'
+      '?select=*&fpc_id=eq.${Uri.encodeQueryComponent(session.userId)}'
+      '&order=received_at.desc&limit=100',
+    );
+    final response = await http
+        .get(uri, headers: _headers(session.accessToken))
+        .timeout(const Duration(seconds: 25));
+    final rows = _decodeList(response);
     return rows
         .whereType<Map>()
         .map(
@@ -153,7 +168,8 @@ class FpcProcurementService {
     int? fpcRating,
     String notes = '',
   }) async {
-    final userId = _uid;
+    final session = await _session();
+    final userId = session.userId;
     final batchId = _text(trace, 'batchId');
     if (batchId.isEmpty) {
       throw const FpcProcurementException(
@@ -189,35 +205,78 @@ class FpcProcurementService {
       'received_at': DateTime.now().toUtc().toIso8601String(),
     };
 
-    final existing = await _existingRecord(userId, batchId);
-    final saved = existing == null
-        ? await _client
-              .from('fpc_procurement_records')
-              .insert(payload)
-              .select()
-              .single()
-        : await _client
-              .from('fpc_procurement_records')
-              .update(payload)
-              .eq('id', existing)
-              .select()
-              .single();
-    return FpcProcurementRecord.fromJson(
-      Map<String, dynamic>.from(saved as Map),
-    );
+    final existing = await _existingRecord(session, batchId);
+    final response = existing == null
+        ? await http
+              .post(
+                Uri.parse('$_restBase/fpc_procurement_records'),
+                headers: {
+                  ..._headers(session.accessToken, jsonBody: true),
+                  'Prefer': 'return=representation',
+                },
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 25))
+        : await http
+              .patch(
+                Uri.parse(
+                  '$_restBase/fpc_procurement_records?id=eq.${Uri.encodeQueryComponent(existing)}',
+                ),
+                headers: {
+                  ..._headers(session.accessToken, jsonBody: true),
+                  'Prefer': 'return=representation',
+                },
+                body: jsonEncode(payload),
+              )
+              .timeout(const Duration(seconds: 25));
+    final rows = _decodeList(response);
+    if (rows.isEmpty) {
+      throw const FpcProcurementException('Received lot was not saved.');
+    }
+    return FpcProcurementRecord.fromJson(rows.first);
   }
 
-  Future<String?> _existingRecord(String userId, String batchId) async {
+  Future<String?> _existingRecord(
+    BackendBridgeSession session,
+    String batchId,
+  ) async {
     if (batchId.isEmpty) return null;
-    final rows = await _client
-        .from('fpc_procurement_records')
-        .select('id')
-        .eq('fpc_id', userId)
-        .eq('batch_id', batchId)
-        .limit(1);
+    final uri = Uri.parse(
+      '$_restBase/fpc_procurement_records'
+      '?select=id&fpc_id=eq.${Uri.encodeQueryComponent(session.userId)}'
+      '&batch_id=eq.${Uri.encodeQueryComponent(batchId)}&limit=1',
+    );
+    final response = await http
+        .get(uri, headers: _headers(session.accessToken))
+        .timeout(const Duration(seconds: 20));
+    final rows = _decodeList(response);
     if (rows.isEmpty) return null;
-    final row = Map<String, dynamic>.from(rows.first as Map);
+    final row = rows.first;
     return '${row['id'] ?? ''}'.trim().isEmpty ? null : '${row['id']}';
+  }
+
+  List<Map<String, dynamic>> _decodeList(http.Response response) {
+    dynamic body;
+    try {
+      body = response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body);
+    } catch (_) {
+      body = response.body;
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (body is List) {
+        return body
+            .whereType<Map>()
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList(growable: false);
+      }
+      return const [];
+    }
+    final message = body is Map
+        ? '${body['message'] ?? body['error'] ?? 'HTTP ${response.statusCode}'}'
+        : body is String && body.isNotEmpty
+        ? body
+        : 'HTTP ${response.statusCode}';
+    throw FpcProcurementException(message);
   }
 }
 

@@ -491,6 +491,125 @@ class SatelliteService {
     throw lastError ?? SatelliteApiException('Failed to save farm');
   }
 
+  Future<void> deleteFarm(String farmId, String jwt) async {
+    final id = farmId.trim();
+    if (id.isEmpty) {
+      throw SatelliteApiException('Farm id is required');
+    }
+
+    const dependentTables = <String, String>{
+      'farm_data_compactions': 'farm_id',
+      'farm_data_snapshots': 'farm_id',
+      'farm_timeline_events': 'farm_id',
+      'farm_status_updates': 'farm_id',
+      'farm_issue_actions': 'farm_id',
+      'farmer_notifications': 'farm_id',
+      'diagnostics_cache': 'farm_id',
+      'disease_risk_cells': 'farm_id',
+      'disease_scout_zones': 'farm_id',
+      'farmer_photo_submissions': 'farm_id',
+      'agricultural_indices': 'farm_id',
+      'satellite_observations': 'farm_id',
+      'marketplace_listings': 'farm_id',
+    };
+
+    for (final entry in dependentTables.entries) {
+      await _deleteRows(
+        table: entry.key,
+        column: entry.value,
+        value: id,
+        jwt: jwt,
+        ignoreMissingRelation: true,
+      );
+    }
+
+    await _deleteRows(
+      table: 'farms',
+      column: 'id',
+      value: id,
+      jwt: jwt,
+      ignoreMissingRelation: false,
+    );
+  }
+
+  Future<void> requestAccountDeletion({
+    required String jwt,
+    required Map<String, dynamic> payload,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('${SatelliteConfig.restBase}/account_deletion_requests'),
+          headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+    throw _parseDeleteError(response);
+  }
+
+  Future<void> _deleteRows({
+    required String table,
+    required String column,
+    required String value,
+    required String jwt,
+    required bool ignoreMissingRelation,
+  }) async {
+    final url =
+        '${SatelliteConfig.restBase}/$table?$column=eq.${Uri.encodeQueryComponent(value)}';
+    final response = await http
+        .delete(
+          Uri.parse(url),
+          headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
+        )
+        .timeout(const Duration(seconds: 20));
+
+    if (response.statusCode >= 200 && response.statusCode < 300) return;
+
+    final error = _parseDeleteError(response);
+    if (ignoreMissingRelation && _looksLikeMissingRelationError(error)) {
+      return;
+    }
+    throw error;
+  }
+
+  SatelliteApiException _parseDeleteError(http.Response response) {
+    final bodyText = response.body.trim();
+    dynamic body;
+    try {
+      body = bodyText.isEmpty ? null : jsonDecode(bodyText);
+    } catch (_) {
+      body = bodyText;
+    }
+    final code = body is Map ? body['code']?.toString() : null;
+    final details = body is Map ? body['details']?.toString() : null;
+    final msg = body is Map
+        ? (body['message'] ?? body['error'] ?? 'HTTP ${response.statusCode}')
+        : body is String && body.isNotEmpty
+        ? body
+        : 'HTTP ${response.statusCode}';
+    return SatelliteApiException(
+      msg.toString(),
+      statusCode: response.statusCode,
+      code: code,
+      details: details,
+    );
+  }
+
+  bool _looksLikeMissingRelationError(SatelliteApiException error) {
+    final text = [
+      error.code,
+      error.message,
+      error.details,
+    ].whereType<String>().join(' ').toLowerCase();
+    return error.statusCode == 404 ||
+        text.contains('42p01') ||
+        text.contains('42703') ||
+        text.contains('pgrst205') ||
+        text.contains('does not exist') ||
+        text.contains('could not find');
+  }
+
   Future<Farm> insertFarmerLinkedFarm({
     required Map<String, dynamic> farmJson,
     required String farmerPhone,

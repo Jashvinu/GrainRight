@@ -14,6 +14,7 @@ import '../services/map_tile_cache_service.dart';
 import '../services/map_tile_provider.dart';
 import '../services/network_status_service.dart';
 import '../services/offline_map_service.dart';
+import '../services/policy_disclosure_service.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/polygon_simplify.dart';
 import '../widgets/app_back_button.dart';
@@ -101,6 +102,18 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
   }
 
   Future<void> _loadLocation() async {
+    final canUseLocation = await PolicyDisclosureService.confirmLocationUse(
+      context,
+    );
+    if (!mounted) return;
+    if (!canUseLocation) {
+      final fallbackRegion = await _preferredOfflineRegion(_downloadedRegions);
+      if (fallbackRegion != null) {
+        _focusOfflineRegion(fallbackRegion, showSnack: false);
+      }
+      return;
+    }
+
     final quickLocation = await _locationService.getLastKnownLocation();
     if (!mounted) return;
     if (quickLocation != null) {

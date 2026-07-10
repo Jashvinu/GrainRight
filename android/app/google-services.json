@@ -1,0 +1,90 @@
+{
+  "project_info": {
+    "project_number": "590561808882",
+    "project_id": "milletsnow-eae4f",
+    "storage_bucket": "milletsnow-eae4f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:590561808882:android:27f447bbc85ea7b0701b6b",
+        "android_client_info": {
+          "package_name": "kalsubai.wrkfarm"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "590561808882-pcu1rfvk4qvl9f1intmo1i9q16t7l0pv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEyDj_dItLzlD_dQzGP_u1eMM_ZsLciig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "590561808882-pcu1rfvk4qvl9f1intmo1i9q16t7l0pv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "590561808882-bj8698gdio6ft9jvdtdrt57djrr97s5a.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kalsubaifarms.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:590561808882:android:0e798ad789bca2e9701b6b",
+        "android_client_info": {
+          "package_name": "kalsubai.wrkfarm.debug"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "590561808882-jesafu6e4r98ottn8gnk15v6so6d25vl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "kalsubai.wrkfarm.debug",
+            "certificate_hash": "4e0fe2d579dddf769c9d85a8d3b99485b87624b3"
+          }
+        },
+        {
+          "client_id": "590561808882-pcu1rfvk4qvl9f1intmo1i9q16t7l0pv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEyDj_dItLzlD_dQzGP_u1eMM_ZsLciig"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "590561808882-pcu1rfvk4qvl9f1intmo1i9q16t7l0pv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "590561808882-bj8698gdio6ft9jvdtdrt57djrr97s5a.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kalsubaifarms.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -121,7 +121,8 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     if (argFarmerName.isNotEmpty) return argFarmerName;
     if (_isFpcMode && _fpcCustomerName.isNotEmpty) return _fpcCustomerName;
     if (!Get.isRegistered<MainAuthController>()) return '';
-    return Get.find<MainAuthController>().verifiedFarmer.value?.farmerName ?? '';
+    return Get.find<MainAuthController>().verifiedFarmer.value?.farmerName ??
+        '';
   }
 
   bool get _setupComplete {
@@ -155,13 +156,6 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       _loadingCrops = true;
       _notConfigured = false;
     });
-    if (!_service.isConfigured) {
-      setState(() {
-        _loadingCrops = false;
-        _notConfigured = true;
-      });
-      return;
-    }
     try {
       final crops = await _service.fetchCrops();
       final loaded = crops.isEmpty ? _fallbackCrops : crops;
@@ -171,7 +165,14 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         _variety = _crop!.varieties.isNotEmpty ? _crop!.varieties.first : null;
         _loadingCrops = false;
       });
-    } on GradingException catch (_) {
+    } on GradingException catch (error) {
+      if (error.notConfigured) {
+        setState(() {
+          _loadingCrops = false;
+          _notConfigured = true;
+        });
+        return;
+      }
       // Catalog is non-critical: fall back to a built-in crop so grading still
       // works even when the catalog endpoint is unreachable.
       setState(() {
@@ -188,14 +189,13 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         .toLowerCase()
         .trim();
     if (desired.isEmpty) return crops.first;
-    return crops.firstWhere(
-      (crop) {
-        final label = crop.label.toLowerCase();
-        final value = crop.value.toLowerCase();
-        return label.contains(desired) || desired.contains(label) || value == desired;
-      },
-      orElse: () => crops.first,
-    );
+    return crops.firstWhere((crop) {
+      final label = crop.label.toLowerCase();
+      final value = crop.value.toLowerCase();
+      return label.contains(desired) ||
+          desired.contains(label) ||
+          value == desired;
+    }, orElse: () => crops.first);
   }
 
   static const List<CropOption> _fallbackCrops = [
@@ -271,7 +271,9 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     final grain = _grainBytes;
     if (crop == null || grain == null) return;
     final manual = double.tryParse(_manualMoistureCtrl.text.trim());
-    if (_moistureImagePath == null && _moistureBytes == null && manual == null) {
+    if (_moistureImagePath == null &&
+        _moistureBytes == null &&
+        manual == null) {
       Get.snackbar(
         GradingStrings.t('step_moisture'),
         GradingStrings.t('moisture_hint'),
@@ -349,31 +351,37 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
     }
     final farm = _farmArgs;
     final moisture = result.moisturePercent;
-    Get.toNamed('/farmer/harvest-qr', arguments: {
-      ...farm,
-      'analysisId': result.analysisId,
-      'farmId': _farmId,
-      'farmName': _farmName,
-      'farmerId': _farmerId,
-      'farmerName': _farmerName,
-      'crop': _crop?.label ?? farm['crop'],
-      'variety': _variety?.label ?? 'Local',
-      'grade': result.grade,
-      'score': result.finalScore?.round().toString() ??
-          result.confidenceOverall?.round().toString() ??
-          '--',
-      'moisture': moisture != null ? '${moisture.toStringAsFixed(1)}%' : '--',
-      'moistureSource': result.moistureSource.isEmpty ? '--' : result.moistureSource,
-      'grader': GradingStrings.t('ai_grading'),
-      'batchId': _batchCtrl.text.trim(),
-      'bagSizeKg': bagSize.toStringAsFixed(1),
-      'bagCount': bagCount.toString(),
-      'totalKg': (bagSize * bagCount).toStringAsFixed(1),
-      'reviewStatus': 'approved',
-      'actorRole': _actorRole,
-      if (_isFpcMode) 'fpcCustomerId': _fpcCustomerId,
-      if (_isFpcMode) 'fpcCustomerName': _fpcCustomerName,
-    });
+    Get.toNamed(
+      '/farmer/harvest-qr',
+      arguments: {
+        ...farm,
+        'analysisId': result.analysisId,
+        'farmId': _farmId,
+        'farmName': _farmName,
+        'farmerId': _farmerId,
+        'farmerName': _farmerName,
+        'crop': _crop?.label ?? farm['crop'],
+        'variety': _variety?.label ?? 'Local',
+        'grade': result.grade,
+        'score':
+            result.finalScore?.round().toString() ??
+            result.confidenceOverall?.round().toString() ??
+            '--',
+        'moisture': moisture != null ? '${moisture.toStringAsFixed(1)}%' : '--',
+        'moistureSource': result.moistureSource.isEmpty
+            ? '--'
+            : result.moistureSource,
+        'grader': GradingStrings.t('ai_grading'),
+        'batchId': _batchCtrl.text.trim(),
+        'bagSizeKg': bagSize.toStringAsFixed(1),
+        'bagCount': bagCount.toString(),
+        'totalKg': (bagSize * bagCount).toStringAsFixed(1),
+        'reviewStatus': 'approved',
+        'actorRole': _actorRole,
+        if (_isFpcMode) 'fpcCustomerId': _fpcCustomerId,
+        if (_isFpcMode) 'fpcCustomerName': _fpcCustomerName,
+      },
+    );
   }
 
   void _addResultToInventory() {
@@ -439,14 +447,17 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      bottomNavigationBar:
-          _isFpcMode ? const FpcBottomNavBar(current: FpcNavTab.grading) : null,
+      bottomNavigationBar: _isFpcMode
+          ? const FpcBottomNavBar(current: FpcNavTab.grading)
+          : null,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leadingWidth: appBackButtonLeadingWidth,
         leading: appBackButtonLeading(context),
         title: Text(
-          _isFpcMode ? GradingStrings.t('fpc_title') : GradingStrings.t('title'),
+          _isFpcMode
+              ? GradingStrings.t('fpc_title')
+              : GradingStrings.t('title'),
         ),
       ),
       body: SafeArea(
@@ -489,7 +500,9 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           }),
           onVariety: (v) => setState(() => _variety = v),
           onChanged: () => setState(() {}),
-          onNext: _setupComplete ? () => setState(() => _step = _Step.moisture) : null,
+          onNext: _setupComplete
+              ? () => setState(() => _step = _Step.moisture)
+              : null,
         );
       case _Step.grain:
         return _PhotoStep(
@@ -500,8 +513,10 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           bytes: _grainBytes,
           primaryLabel: GradingStrings.t('check_grade'),
           primaryIcon: Icons.verified_rounded,
-          onCamera: () => _pick(grain: true, source: HarvestMachineImageSource.camera),
-          onGallery: () => _pick(grain: true, source: HarvestMachineImageSource.gallery),
+          onCamera: () =>
+              _pick(grain: true, source: HarvestMachineImageSource.camera),
+          onGallery: () =>
+              _pick(grain: true, source: HarvestMachineImageSource.gallery),
           onBack: () => setState(() => _step = _Step.moisture),
           onNext: _grainBytes == null ? null : _analyze,
         );
@@ -511,8 +526,10 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
           reading: _moistureReading,
           readingMoisture: _readingMoisture,
           manualController: _manualMoistureCtrl,
-          onCamera: () => _pick(grain: false, source: HarvestMachineImageSource.camera),
-          onGallery: () => _pick(grain: false, source: HarvestMachineImageSource.gallery),
+          onCamera: () =>
+              _pick(grain: false, source: HarvestMachineImageSource.camera),
+          onGallery: () =>
+              _pick(grain: false, source: HarvestMachineImageSource.gallery),
           onBack: () => setState(() => _step = _Step.setup),
           onReadMoisture: _readMoisture,
           onManualChanged: (_) => setState(() {}),
@@ -561,8 +578,11 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         snackPosition: SnackPosition.BOTTOM,
       );
     } on GradingException catch (e) {
-      Get.snackbar(GradingStrings.t('error_generic'), e.message,
-          snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar(
+        GradingStrings.t('error_generic'),
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+      );
     }
   }
 }
@@ -601,7 +621,9 @@ class _StepBar extends StatelessWidget {
                         height: 4,
                         color: i == 0
                             ? Colors.transparent
-                            : (done || active ? AppTheme.green : const Color(0xFFE2E7DC)),
+                            : (done || active
+                                  ? AppTheme.green
+                                  : const Color(0xFFE2E7DC)),
                       ),
                     ),
                     Container(
@@ -611,14 +633,18 @@ class _StepBar extends StatelessWidget {
                         color: (done || active) ? AppTheme.green : Colors.white,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: (done || active) ? AppTheme.green : const Color(0xFFD9E0D6),
+                          color: (done || active)
+                              ? AppTheme.green
+                              : const Color(0xFFD9E0D6),
                           width: 1.5,
                         ),
                       ),
                       child: Icon(
                         done ? Icons.check_rounded : icons[i],
                         size: 18,
-                        color: (done || active) ? Colors.white : AppTheme.textMuted,
+                        color: (done || active)
+                            ? Colors.white
+                            : AppTheme.textMuted,
                       ),
                     ),
                     Expanded(
@@ -732,8 +758,9 @@ class _SetupStep extends StatelessWidget {
                     child: TextField(
                       controller: bagSizeController,
                       onChanged: (_) => onChanged(),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: InputDecoration(
                         labelText: GradingStrings.t('bag_kg'),
                         prefixIcon: const Icon(Icons.scale_rounded),
@@ -760,12 +787,14 @@ class _SetupStep extends StatelessWidget {
                 icon: Icons.eco_rounded,
               ),
               const SizedBox(height: 12),
-              ...crops.map((c) => _SelectTile(
-                    label: _gradingOptionLabel(c.label),
-                    icon: Icons.grass_rounded,
-                    selected: c.value == selectedCrop?.value,
-                    onTap: () => onCrop(c),
-                  )),
+              ...crops.map(
+                (c) => _SelectTile(
+                  label: _gradingOptionLabel(c.label),
+                  icon: Icons.grass_rounded,
+                  selected: c.value == selectedCrop?.value,
+                  onTap: () => onCrop(c),
+                ),
+              ),
               if (varieties.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 _StepTitle(
@@ -777,17 +806,19 @@ class _SetupStep extends StatelessWidget {
                   spacing: 10,
                   runSpacing: 10,
                   children: varieties
-                      .map((v) => ChoiceChip(
-                            label: Text(_gradingOptionLabel(v.label)),
-                            selected: v.value == selectedVariety?.value,
-                            labelStyle: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: v.value == selectedVariety?.value
-                                  ? Colors.white
-                                  : AppTheme.textDark,
-                            ),
-                            onSelected: (_) => onVariety(v),
-                          ))
+                      .map(
+                        (v) => ChoiceChip(
+                          label: Text(_gradingOptionLabel(v.label)),
+                          selected: v.value == selectedVariety?.value,
+                          labelStyle: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: v.value == selectedVariety?.value
+                                ? Colors.white
+                                : AppTheme.textDark,
+                          ),
+                          onSelected: (_) => onVariety(v),
+                        ),
+                      )
                       .toList(),
                 ),
               ],
@@ -863,10 +894,9 @@ class _ContextCard extends StatelessWidget {
                 const SizedBox(height: 10),
                 _LotInfoLine(
                   label: GradingStrings.t('farmer'),
-                  value:
-                      farmerName.isEmpty
-                          ? GradingStrings.t('farmer_name_unavailable')
-                          : farmerName,
+                  value: farmerName.isEmpty
+                      ? GradingStrings.t('farmer_name_unavailable')
+                      : farmerName,
                 ),
                 const SizedBox(height: 6),
                 _LotInfoLine(
@@ -967,11 +997,18 @@ class _PhotoStep extends StatelessWidget {
             children: [
               _StepTitle(text: title, icon: icon),
               const SizedBox(height: 6),
-              Text(hint, style: const TextStyle(color: AppTheme.textMuted, height: 1.4)),
+              Text(
+                hint,
+                style: const TextStyle(color: AppTheme.textMuted, height: 1.4),
+              ),
               const SizedBox(height: 16),
               _PhotoPreview(bytes: bytes, icon: icon),
               const SizedBox(height: 16),
-              _CaptureButtons(onCamera: onCamera, onGallery: onGallery, hasPhoto: bytes != null),
+              _CaptureButtons(
+                onCamera: onCamera,
+                onGallery: onGallery,
+                hasPhoto: bytes != null,
+              ),
             ],
           ),
         ),
@@ -1028,26 +1065,41 @@ class _MoistureStep extends StatelessWidget {
                 icon: Icons.water_drop_rounded,
               ),
               const SizedBox(height: 6),
-              Text(GradingStrings.t('moisture_hint'),
-                  style: const TextStyle(color: AppTheme.textMuted, height: 1.4)),
+              Text(
+                GradingStrings.t('moisture_hint'),
+                style: const TextStyle(color: AppTheme.textMuted, height: 1.4),
+              ),
               const SizedBox(height: 16),
               _PhotoPreview(bytes: bytes, icon: Icons.speed_rounded),
               const SizedBox(height: 16),
-              _CaptureButtons(onCamera: onCamera, onGallery: onGallery, hasPhoto: bytes != null),
+              _CaptureButtons(
+                onCamera: onCamera,
+                onGallery: onGallery,
+                hasPhoto: bytes != null,
+              ),
               const SizedBox(height: 20),
-              Row(children: [
-                const Expanded(child: Divider()),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(GradingStrings.t('enter_moisture'),
-                      style: const TextStyle(color: AppTheme.textMuted, fontWeight: FontWeight.w700)),
-                ),
-                const Expanded(child: Divider()),
-              ]),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      GradingStrings.t('enter_moisture'),
+                      style: const TextStyle(
+                        color: AppTheme.textMuted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: manualController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 onChanged: onManualChanged,
                 decoration: InputDecoration(
                   labelText: GradingStrings.t('moisture_percent'),
@@ -1150,8 +1202,10 @@ class _GradingProgress extends StatelessWidget {
             child: CircularProgressIndicator(strokeWidth: 5),
           ),
           const SizedBox(height: 20),
-          Text(GradingStrings.t('checking'),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          Text(
+            GradingStrings.t('checking'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -1262,11 +1316,18 @@ class _GradeHero extends StatelessWidget {
           Container(
             width: 96,
             height: 96,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
             alignment: Alignment.center,
             child: Text(
               result.grade,
-              style: TextStyle(color: color, fontSize: 52, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: color,
+                fontSize: 52,
+                fontWeight: FontWeight.w900,
+              ),
             ),
           ),
           const SizedBox(width: 18),
@@ -1276,24 +1337,37 @@ class _GradeHero extends StatelessWidget {
               children: [
                 Text(
                   'Grade from cloud score',
-                  style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _gradeWord(result.grade),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
                 if (score != null) ...[
                   const SizedBox(height: 10),
                   Text(
                     'Score: ${score.round()}/100',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ] else if (confidence != null) ...[
                   const SizedBox(height: 10),
                   Text(
                     '${GradingStrings.t('confidence')}: ${confidence.round()}%',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ],
@@ -1333,7 +1407,10 @@ class _ReviewBanner extends StatelessWidget {
           Expanded(
             child: Text(
               GradingStrings.t('needs_human_check'),
-              style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.earth),
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                color: AppTheme.earth,
+              ),
             ),
           ),
         ],
@@ -1353,14 +1430,19 @@ class _CloudModelAnalysisCard extends StatelessWidget {
     final grainScore = result.grainScore;
     final moistureScore = result.moistureScore;
     final modelGrade = result.modelGrade.isEmpty ? '--' : result.modelGrade;
-    final scoreGrade = result.scoreGrade.isEmpty ? result.grade : result.scoreGrade;
+    final scoreGrade = result.scoreGrade.isEmpty
+        ? result.grade
+        : result.scoreGrade;
     final moisture = result.moisturePercent;
     final rows = <Widget>[
       _AnalysisMetric(
         label: GradingStrings.t('cloud_score'),
         value: finalScore == null ? '--' : '${finalScore.round()}/100',
       ),
-      _AnalysisMetric(label: GradingStrings.t('score_grade'), value: scoreGrade),
+      _AnalysisMetric(
+        label: GradingStrings.t('score_grade'),
+        value: scoreGrade,
+      ),
       _AnalysisMetric(
         label: GradingStrings.t('model_suggested'),
         value: modelGrade,
@@ -1419,7 +1501,10 @@ class _CloudModelAnalysisCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     GradingStrings.t('cloud_model_analysis'),
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
@@ -1532,19 +1617,35 @@ class _MoistureCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(GradingStrings.t('moisture_label'),
-                      style: const TextStyle(color: AppTheme.textMuted, fontWeight: FontWeight.w700)),
+                  Text(
+                    GradingStrings.t('moisture_label'),
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(_riskLabel(risk),
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900, color: color)),
+                  Text(
+                    _riskLabel(risk),
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                    ),
+                  ),
                 ],
               ),
             ),
             if (percent != null)
-              Text(UiStrings.f('percent_value', {
-                'value': LocaleText.number(percent, fractionDigits: 1),
-              }),
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+              Text(
+                UiStrings.f('percent_value', {
+                  'value': LocaleText.number(percent, fractionDigits: 1),
+                }),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
           ],
         ),
       ),
@@ -1562,11 +1663,19 @@ class _SignalChips extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: signals
-          .map((s) => Chip(
-                avatar: const Icon(Icons.check_circle_outline_rounded,
-                    size: 18, color: AppTheme.green),
-                label: Text(s, style: const TextStyle(fontWeight: FontWeight.w600)),
-              ))
+          .map(
+            (s) => Chip(
+              avatar: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 18,
+                color: AppTheme.green,
+              ),
+              label: Text(
+                s,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          )
           .toList(),
     );
   }
@@ -1582,7 +1691,10 @@ class _WhyCard extends StatelessWidget {
       if (result.brokenGrainPercent != null)
         ('Broken', '${result.brokenGrainPercent!.toStringAsFixed(0)}%'),
       if (result.foreignMatterPercent != null)
-        ('Foreign matter', '${result.foreignMatterPercent!.toStringAsFixed(0)}%'),
+        (
+          'Foreign matter',
+          '${result.foreignMatterPercent!.toStringAsFixed(0)}%',
+        ),
       if (result.damagedPercent != null)
         ('Damaged', '${result.damagedPercent!.toStringAsFixed(0)}%'),
       if (result.uniformityScore != null)
@@ -1596,15 +1708,25 @@ class _WhyCard extends StatelessWidget {
           shape: const Border(),
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          leading: const Icon(Icons.tips_and_updates_outlined, color: AppTheme.green),
-          title: Text(GradingStrings.t('why'),
-              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16)),
+          leading: const Icon(
+            Icons.tips_and_updates_outlined,
+            color: AppTheme.green,
+          ),
+          title: Text(
+            GradingStrings.t('why'),
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+          ),
           children: [
             if (result.operatorSummary.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
-                child: Text(result.operatorSummary,
-                    style: const TextStyle(color: AppTheme.textMuted, height: 1.45)),
+                child: Text(
+                  result.operatorSummary,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    height: 1.45,
+                  ),
+                ),
               ),
             if (metrics.isNotEmpty)
               Wrap(
@@ -1614,17 +1736,23 @@ class _WhyCard extends StatelessWidget {
                     .map((m) => _MetricPill(label: m.$1, value: m.$2))
                     .toList(),
               ),
-            ...result.rejectReasons.map((r) => Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.error_outline_rounded, size: 18, color: AppTheme.error),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(r)),
-                    ],
-                  ),
-                )),
+            ...result.rejectReasons.map(
+              (r) => Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      size: 18,
+                      color: AppTheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(r)),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1642,8 +1770,18 @@ class _MetricPill extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
       ],
     );
   }
@@ -1663,8 +1801,10 @@ class _StepTitle extends StatelessWidget {
         Icon(icon, color: AppTheme.green),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(text,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          child: Text(
+            text,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
         ),
       ],
     );
@@ -1705,11 +1845,19 @@ class _SelectTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Icon(icon, color: selected ? AppTheme.green : AppTheme.textMuted),
+                Icon(
+                  icon,
+                  color: selected ? AppTheme.green : AppTheme.textMuted,
+                ),
                 const SizedBox(width: 14),
                 Expanded(
-                  child: Text(label,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 if (selected)
                   const Icon(Icons.check_circle_rounded, color: AppTheme.green),
@@ -1764,8 +1912,14 @@ class _CaptureButtons extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: onCamera,
             icon: const Icon(Icons.photo_camera_rounded),
-            label: Text(hasPhoto ? GradingStrings.t('retake') : GradingStrings.t('camera')),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+            label: Text(
+              hasPhoto
+                  ? GradingStrings.t('retake')
+                  : GradingStrings.t('camera'),
+            ),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
           ),
         ),
         const SizedBox(width: 12),
@@ -1774,7 +1928,9 @@ class _CaptureButtons extends StatelessWidget {
             onPressed: onGallery,
             icon: const Icon(Icons.photo_library_outlined),
             label: Text(GradingStrings.t('gallery')),
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
           ),
         ),
       ],
@@ -1803,7 +1959,11 @@ class _BottomBar extends StatelessWidget {
         color: Colors.white,
         border: const Border(top: BorderSide(color: Color(0xFFE5ECE2))),
         boxShadow: const [
-          BoxShadow(color: Color(0x0C0B5D2A), blurRadius: 24, offset: Offset(0, -8)),
+          BoxShadow(
+            color: Color(0x0C0B5D2A),
+            blurRadius: 24,
+            offset: Offset(0, -8),
+          ),
         ],
       ),
       child: Row(
@@ -1817,7 +1977,9 @@ class _BottomBar extends StatelessWidget {
               onPressed: onPrimary,
               icon: Icon(primaryIcon),
               label: Text(primaryLabel),
-              style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(56),
+              ),
             ),
           ),
         ],
@@ -1838,14 +2000,22 @@ class _NotConfiguredState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.wifi_off_rounded, size: 72, color: AppTheme.textMuted),
+            const Icon(
+              Icons.wifi_off_rounded,
+              size: 72,
+              color: AppTheme.textMuted,
+            ),
             const SizedBox(height: 20),
-            Text(GradingStrings.t('offline_title'),
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+            Text(
+              GradingStrings.t('offline_title'),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
             const SizedBox(height: 10),
-            Text(GradingStrings.t('not_configured'),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppTheme.textMuted, height: 1.45)),
+            Text(
+              GradingStrings.t('not_configured'),
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppTheme.textMuted, height: 1.45),
+            ),
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: onRetry,
@@ -1876,14 +2046,18 @@ class _FeedbackSheetState extends State<_FeedbackSheet> {
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLarge)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppTheme.radiusLarge),
+        ),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(GradingStrings.t('feedback_title'),
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(
+            GradingStrings.t('feedback_title'),
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+          ),
           const SizedBox(height: 16),
           Row(
             children: ['A', 'B', 'C'].map((g) {
@@ -1898,17 +2072,24 @@ class _FeedbackSheetState extends State<_FeedbackSheet> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: selected ? _gradeColor(g) : Colors.white,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                        borderRadius: BorderRadius.circular(
+                          AppTheme.radiusMedium,
+                        ),
                         border: Border.all(
-                          color: selected ? _gradeColor(g) : const Color(0xFFD9E0D6),
+                          color: selected
+                              ? _gradeColor(g)
+                              : const Color(0xFFD9E0D6),
                           width: 1.6,
                         ),
                       ),
-                      child: Text(g,
-                          style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              color: selected ? Colors.white : AppTheme.textDark)),
+                      child: Text(
+                        g,
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: selected ? Colors.white : AppTheme.textDark,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -1920,7 +2101,9 @@ class _FeedbackSheetState extends State<_FeedbackSheet> {
             onPressed: () => Navigator.pop(context, _picked),
             icon: const Icon(Icons.send_rounded),
             label: Text(GradingStrings.t('submit')),
-            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
           ),
         ],
       ),

@@ -5,6 +5,7 @@ import '../../config/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
 import '../../widgets/app_back_button.dart';
 import '../../widgets/farm_hills_background.dart';
+import 'auth_alternatives.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -193,6 +194,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
                         const _SecureLabel(),
+                        const SizedBox(height: 18),
+                        const SatelliteAuthAlternatives(
+                          phoneNextRoute: '/satellite/shell',
+                          googleNextRoute: '/satellite/shell',
+                        ),
                         const SizedBox(height: 18),
                         _HelpCard(
                           title: UiStrings.t('need_access'),

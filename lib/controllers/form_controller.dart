@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../controllers/farm_controller.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../controllers/survey_controller.dart';
 import '../config/offline_form_seed.dart';
+import '../config/ui_strings.dart';
 import '../models/form_config.dart';
 import '../services/form_config_service.dart';
 import '../services/location_service.dart';
@@ -16,6 +19,7 @@ import '../services/offline_survey_queue_service.dart';
 import '../services/secure_app_storage.dart';
 import '../services/sheets_sync_service.dart';
 import '../services/survey_service.dart';
+import '../utils/polygon_geometry.dart';
 
 const _incomeSourceOrder = [
   'farming',
@@ -979,12 +983,14 @@ class FormController extends GetxController {
       return false;
     }
 
-    final hasLocalGuest =
-        Get.isRegistered<MainAuthController>() &&
-        Get.find<MainAuthController>().hasLocalGuest.value;
-    if (!isEditMode &&
-        Supabase.instance.client.auth.currentUser == null &&
-        !hasLocalGuest) {
+    final authCtrl = Get.isRegistered<MainAuthController>()
+        ? Get.find<MainAuthController>()
+        : null;
+    final supabaseUser = Supabase.instance.client.auth.currentUser;
+    final hasSignedInUser =
+        authCtrl?.isAuthenticated ??
+        (supabaseUser != null && !supabaseUser.isAnonymous);
+    if (!isEditMode && !hasSignedInUser) {
       Get.snackbar(
         'Sign in required',
         'Please sign in before submitting a survey',
@@ -996,31 +1002,6 @@ class FormController extends GetxController {
     isSubmitting.value = true;
     try {
       final isOnline = await _offlineQueueService.isOnline();
-      if (!isEditMode &&
-          isOnline &&
-          Supabase.instance.client.auth.currentUser == null &&
-          hasLocalGuest &&
-          Get.isRegistered<MainAuthController>()) {
-        final ready = await Get.find<MainAuthController>()
-            .ensureRemoteGuestSession();
-        if (!ready) {
-          final json = _buildJson();
-          await _queueOfflineSubmission(
-            json,
-            kharifRows.toList(),
-            yearlyRows.toList(),
-            practiceRows.toList(),
-          );
-          isSubmitting.value = false;
-          if (popOnSuccess) Get.back();
-          Get.snackbar(
-            'Saved offline',
-            'Survey saved on this device and will sync when internet returns.',
-          );
-          return true;
-        }
-      }
-
       final json = _buildJson();
       if (!isEditMode) {
         json['client_uuid'] =
@@ -1088,6 +1069,9 @@ class FormController extends GetxController {
       if (Get.isRegistered<SurveyController>()) {
         Get.find<SurveyController>().loadSurveys();
       }
+      if (!isEditMode) {
+        await _syncSubmittedSurveyToFarmerFarm(json, syncedSurveyId);
+      }
 
       // Sync to Google Sheets in background (fire-and-forget)
       final sheetPayload = Map<String, dynamic>.from(json);
@@ -1115,6 +1099,85 @@ class FormController extends GetxController {
       return false;
     }
   }
+
+  Future<void> _syncSubmittedSurveyToFarmerFarm(
+    Map<String, dynamic> survey,
+    String? surveyId,
+  ) async {
+    if (!Get.isRegistered<MainAuthController>()) return;
+    final verifiedFarmer = Get.find<MainAuthController>().verifiedFarmer.value;
+    if (verifiedFarmer == null) return;
+
+    final points = _farmPolygonPoints(survey['farm_polygon']);
+    if (points.length < 3) return;
+
+    final farmCtrl = Get.isRegistered<FarmController>()
+        ? Get.find<FarmController>()
+        : Get.put(FarmController());
+    final farmerName = _stringValue(survey['farmer_name']).isNotEmpty
+        ? _stringValue(survey['farmer_name'])
+        : verifiedFarmer.farmerName;
+    final village = _stringValue(survey['village']);
+    final crop = _surveyCrop(survey);
+    final farmName = [
+      if (farmerName.isNotEmpty) farmerName,
+      if (crop.isNotEmpty) crop,
+      if (village.isNotEmpty) village,
+    ].join(' - ');
+
+    final saved = await farmCtrl.saveFarmRecord(
+      name: farmName.isEmpty ? 'Recorded farm' : farmName,
+      points: points,
+      showSnackbars: false,
+      waitForRemoteConfirmation: true,
+      metadata: {
+        if (crop.isNotEmpty) 'crop': crop,
+        if (surveyId != null && surveyId.trim().isNotEmpty)
+          'survey_id': surveyId.trim(),
+        if (village.isNotEmpty) 'village': village,
+        if (_stringValue(survey['main_crop_land_acre']).isNotEmpty)
+          'main_crop_land_acre': survey['main_crop_land_acre'],
+        if (_stringValue(survey['total_land_area_acre']).isNotEmpty)
+          'total_land_area_acre': survey['total_land_area_acre'],
+      },
+    );
+    if (saved != null) {
+      await farmCtrl.loadFarms(forceRefresh: true, preferredFarmId: saved.id);
+    } else if (farmCtrl.lastSaveErrorMessage.value.trim().isNotEmpty) {
+      Get.snackbar(
+        UiStrings.t('could_not_save_farm'),
+        farmCtrl.lastSaveErrorMessage.value,
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  List<LatLng> _farmPolygonPoints(dynamic polygon) {
+    if (polygon is! Map) return const [];
+    final coordinates = polygon['coordinates'];
+    if (coordinates is! List || coordinates.isEmpty) return const [];
+    final ring = coordinates.first;
+    if (ring is! List) return const [];
+    final points = <List<double>>[];
+    for (final point in ring) {
+      if (point is! List || point.length < 2) continue;
+      final lng = _toDouble(point[0]);
+      final lat = _toDouble(point[1]);
+      if (lat == null || lng == null) continue;
+      points.add([lng, lat]);
+    }
+    if (points.length < 3) return const [];
+    return PolygonGeometry.fromGeoJsonRing(points);
+  }
+
+  String _surveyCrop(Map<String, dynamic> survey) {
+    final mainCrop = _stringValue(survey['main_crop']);
+    if (mainCrop == 'other') return _stringValue(survey['main_crop_other']);
+    if (mainCrop.isEmpty) return '';
+    return localizedOptionLabel('main_crop_v2', mainCrop);
+  }
+
+  String _stringValue(dynamic value) => value?.toString().trim() ?? '';
 
   void _attachSheetChildSummaries(
     Map<String, dynamic> sheetPayload,

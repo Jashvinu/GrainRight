@@ -3,11 +3,13 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'config/runtime_config.dart';
 import 'config/supabase_config.dart';
+import 'firebase_options.dart';
 import 'services/offline_map_download_manager.dart';
 import 'services/local_notification_service.dart';
 import 'app.dart';
@@ -52,6 +54,14 @@ Future<_BootstrapResult> _bootstrapProductionApp() async {
 
   try {
     await RuntimeConfig.initialize();
+  } catch (error, stack) {
+    _reportUncaughtError(error, stack);
+  }
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (error, stack) {
     _reportUncaughtError(error, stack);
   }
