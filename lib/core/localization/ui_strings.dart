@@ -6758,6 +6758,120 @@ class UiStrings {
       'hi': 'FPO डैशबोर्ड',
       'mr': 'FPO डॅशबोर्ड',
     },
+    'farmer_to_fpc_workflow': {
+      'en': 'Farmer-to-FPC workflow',
+      'hi': 'किसान से FPC तक कार्यप्रवाह',
+      'mr': 'शेतकरी ते FPC कार्यप्रवाह',
+    },
+    'follow_produce_to_receiving': {
+      'en': 'Follow produce from seed handover to final receiving.',
+      'hi': 'बीज वितरण से अंतिम प्राप्ति तक उपज का अनुसरण करें।',
+      'mr': 'बियाणे वाटपापासून अंतिम प्राप्तीपर्यंत शेतमालाचा मागोवा घ्या.',
+    },
+    'farmer_produce_for_planning': {
+      'en': 'Farmer produce for planning',
+      'hi': 'योजना के लिए किसान उपज',
+      'mr': 'नियोजनासाठी शेतकरी उत्पादन',
+    },
+    'review_farmer_lots_for_buyback': {
+      'en': 'Review live farmer lots and save FPC buyback interest.',
+      'hi': 'लाइव किसान लॉट की समीक्षा करें और FPC खरीद रुचि सहेजें।',
+      'mr': 'चालू शेतकरी लॉट तपासा आणि FPC खरेदीची रुची जतन करा.',
+    },
+    'marketplace_data_unavailable': {
+      'en': 'Marketplace data unavailable',
+      'hi': 'मार्केटप्लेस डेटा उपलब्ध नहीं है',
+      'mr': 'मार्केटप्लेस डेटा उपलब्ध नाही',
+    },
+    'refresh_dashboard_to_retry': {
+      'en': 'Refresh the dashboard to retry.',
+      'hi': 'फिर प्रयास करने के लिए डैशबोर्ड रीफ्रेश करें।',
+      'mr': 'पुन्हा प्रयत्न करण्यासाठी डॅशबोर्ड रीफ्रेश करा.',
+    },
+    'no_farmer_lots_ready_yet': {
+      'en': 'No farmer lots ready yet',
+      'hi': 'अभी कोई किसान लॉट तैयार नहीं है',
+      'mr': 'अजून कोणताही शेतकरी लॉट तयार नाही',
+    },
+    'farmer_lots_after_inventory_sync': {
+      'en':
+          'Lots appear after farmer inventory is synced and listed for FPC buyers.',
+      'hi':
+          'किसान इन्वेंटरी सिंक होकर FPC खरीदारों के लिए सूचीबद्ध होने के बाद लॉट यहाँ दिखेंगे।',
+      'mr':
+          'शेतकरी साठा सिंक होऊन FPC खरेदीदारांसाठी सूचीबद्ध झाल्यानंतर लॉट येथे दिसतील.',
+    },
+    'fpc_actions': {'en': 'FPC actions', 'hi': 'FPC कार्य', 'mr': 'FPC कृती'},
+    'open_next_operational_step': {
+      'en': 'Open the next operational step.',
+      'hi': 'अगला संचालन चरण खोलें।',
+      'mr': 'पुढील कार्यवाहीची पायरी उघडा.',
+    },
+    'quality_queue': {
+      'en': 'Quality queue',
+      'hi': 'गुणवत्ता कतार',
+      'mr': 'गुणवत्ता रांग',
+    },
+    'lots_requiring_fpc_decision': {
+      'en': 'Lots requiring an FPC decision.',
+      'hi': 'वे लॉट जिन पर FPC निर्णय आवश्यक है।',
+      'mr': 'FPC निर्णय आवश्यक असलेले लॉट.',
+    },
+    'review_data_unavailable': {
+      'en': 'Review data unavailable',
+      'hi': 'समीक्षा डेटा उपलब्ध नहीं है',
+      'mr': 'पुनरावलोकन डेटा उपलब्ध नाही',
+    },
+    'open_review_queue_to_retry': {
+      'en': 'Open the review queue to retry.',
+      'hi': 'फिर प्रयास करने के लिए समीक्षा कतार खोलें।',
+      'mr': 'पुन्हा प्रयत्न करण्यासाठी पुनरावलोकन रांग उघडा.',
+    },
+    'no_review_pending': {
+      'en': 'No review pending',
+      'hi': 'कोई समीक्षा लंबित नहीं है',
+      'mr': 'कोणतेही पुनरावलोकन प्रलंबित नाही',
+    },
+    'new_grading_issues_appear_here': {
+      'en': 'New grading issues will appear here.',
+      'hi': 'नई ग्रेडिंग समस्याएं यहाँ दिखेंगी।',
+      'mr': 'नवीन ग्रेडिंग समस्या येथे दिसतील.',
+    },
+    'recently_received_produce': {
+      'en': 'Recently received produce',
+      'hi': 'हाल में प्राप्त उपज',
+      'mr': 'अलीकडे प्राप्त शेतमाल',
+    },
+    'latest_harvest_lots_in_fpc_ledger': {
+      'en': 'Latest harvest lots saved in this FPC ledger.',
+      'hi': 'इस FPC बही में सहेजे गए नवीनतम फसल लॉट।',
+      'mr': 'या FPC नोंदवहीत जतन केलेले नवीनतम कापणी लॉट.',
+    },
+    'receiving_data_unavailable': {
+      'en': 'Receiving data unavailable',
+      'hi': 'प्राप्ति डेटा उपलब्ध नहीं है',
+      'mr': 'प्राप्ती डेटा उपलब्ध नाही',
+    },
+    'no_produce_received_yet': {
+      'en': 'No produce received yet',
+      'hi': 'अभी कोई उपज प्राप्त नहीं हुई है',
+      'mr': 'अजून कोणताही शेतमाल प्राप्त झालेला नाही',
+    },
+    'scan_harvest_qr_for_first_receiving': {
+      'en':
+          'Scan an approved harvest QR in Receiver to create the first entry.',
+      'hi': 'पहली प्रविष्टि बनाने के लिए रिसीवर में स्वीकृत फसल QR स्कैन करें।',
+      'mr':
+          'पहिली नोंद तयार करण्यासाठी रिसीव्हरमध्ये मंजूर कापणी QR स्कॅन करा.',
+    },
+    'fpc_overview_description': {
+      'en':
+          'Track farmer produce, quality, buyback interest and receiving from one overview.',
+      'hi':
+          'एक ही अवलोकन में किसान उपज, गुणवत्ता, खरीद रुचि और प्राप्ति को ट्रैक करें।',
+      'mr':
+          'एका आढाव्यातून शेतकरी उत्पादन, गुणवत्ता, खरेदीची रुची आणि प्राप्तीचा मागोवा घ्या.',
+    },
     'pending_reviews': {
       'en': 'Pending reviews',
       'hi': 'लंबित समीक्षा',

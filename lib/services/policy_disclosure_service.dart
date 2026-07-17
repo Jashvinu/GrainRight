@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/ui_strings.dart';
+import '../core/localization/ui_strings.dart';
 
 class PolicyDisclosureService {
   static const _locationAcceptedKey = 'policy_location_disclosure_accepted';

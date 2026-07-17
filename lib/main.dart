@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
@@ -50,6 +51,8 @@ void _reportUncaughtError(Object error, StackTrace? stack) {
 
 Future<_BootstrapResult> _bootstrapProductionApp() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting();
 
   try {
     await RuntimeConfig.initialize();

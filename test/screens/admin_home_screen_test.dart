@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:kalsubai_farms/config/supabase_config.dart';
 import 'package:kalsubai_farms/controllers/admin_controller.dart';
 import 'package:kalsubai_farms/controllers/main_auth_controller.dart';
@@ -14,6 +15,7 @@ void main() {
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
+    await initializeDateFormatting();
     await Supabase.initialize(
       url: SupabaseConfig.url,
       anonKey: SupabaseConfig.anonKey,

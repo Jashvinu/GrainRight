@@ -5,7 +5,6 @@ import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../../widgets/farm_hills_background.dart';
-import 'auth_alternatives.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -218,11 +217,6 @@ class _SignupScreenState extends State<SignupScreen> {
                         ),
                         const SizedBox(height: 24),
                         const _SecureLabel(),
-                        const SizedBox(height: 18),
-                        const SatelliteAuthAlternatives(
-                          phoneNextRoute: '/satellite/draw-polygon',
-                          googleNextRoute: '/satellite/draw-polygon',
-                        ),
                         const SizedBox(height: 18),
                         _HelpCard(
                           title: UiStrings.t('already_registered'),
