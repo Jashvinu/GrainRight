@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/satellite_config.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class IndexSelector extends StatelessWidget {
@@ -16,17 +17,22 @@ class IndexSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: value,
-      decoration: const InputDecoration(
-        labelText: 'Index',
-        prefixIcon: Icon(Icons.layers_outlined),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: InputDecoration(
+        labelText: UiStrings.t('satellite_index'),
+        prefixIcon: const Icon(Icons.layers_outlined),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
       isExpanded: true,
       items: SatelliteConfig.allIndices.map((idx) {
         return DropdownMenuItem(
           value: idx,
           child: Text(
-            SatelliteConfig.indexLabels[idx] ?? idx.toUpperCase(),
+            UiStrings.option(
+              SatelliteConfig.indexLabels[idx] ?? idx.toUpperCase(),
+            ),
             style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
           ),
         );

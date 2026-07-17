@@ -131,7 +131,12 @@ class OfflineMapService {
     return label.isNotEmpty ? label : RuntimeConfig.offlineTileSourceLabel;
   }
 
-  Future<List<OfflinePlacePrediction>> searchPlaces(String input) async {
+  Future<List<OfflinePlacePrediction>> searchPlaces(
+    String input, {
+    String languageCode = 'en',
+    double? proximityLatitude,
+    double? proximityLongitude,
+  }) async {
     final query = input.trim();
     if (query.length < 2) return const [];
 
@@ -141,13 +146,28 @@ class OfflineMapService {
         'MapTiler search is not configured. Set MAPTILER_API_KEY.',
       );
     }
-    return _searchMapTilerPlaces(query, mapTilerKey);
+    return _searchMapTilerPlaces(
+      query,
+      mapTilerKey,
+      languageCode: languageCode,
+      proximityLatitude: proximityLatitude,
+      proximityLongitude: proximityLongitude,
+    );
   }
 
   Future<List<OfflinePlacePrediction>> _searchMapTilerPlaces(
     String query,
-    String apiKey,
-  ) async {
+    String apiKey, {
+    required String languageCode,
+    double? proximityLatitude,
+    double? proximityLongitude,
+  }) async {
+    final language = languageCode == 'hi' || languageCode == 'mr'
+        ? '$languageCode,en'
+        : 'en,hi,mr';
+    final proximity = proximityLatitude != null && proximityLongitude != null
+        ? '${proximityLongitude.toStringAsFixed(6)},${proximityLatitude.toStringAsFixed(6)}'
+        : null;
     final uri = Uri(
       scheme: 'https',
       host: 'api.maptiler.com',
@@ -155,10 +175,12 @@ class OfflineMapService {
       queryParameters: {
         'key': apiKey,
         'country': 'in',
-        'language': 'en,hi,mr',
+        'language': language,
         'limit': '8',
-        'types': 'place,locality,neighbourhood,municipality,address,poi',
+        'types':
+            'place,locality,neighbourhood,municipality,address,poi,region,subregion,postal_code',
         'autocomplete': 'true',
+        'proximity': ?proximity,
       },
     );
     final response = await _client.get(uri);

@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/satellite/timeline_entry_model.dart';
 
@@ -25,8 +26,10 @@ class TimeSeriesChart extends StatelessWidget {
       return SizedBox(
         height: height,
         child: Center(
-          child: Text('No data available',
-              style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+          child: Text(
+            UiStrings.t('no_data_available'),
+            style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+          ),
         ),
       );
     }
@@ -96,7 +99,9 @@ class TimeSeriesChart extends StatelessWidget {
                     child: Text(
                       dateStr.substring(5), // "MM-DD"
                       style: const TextStyle(
-                          fontSize: 10, color: AppTheme.textMuted),
+                        fontSize: 10,
+                        color: AppTheme.textMuted,
+                      ),
                     ),
                   );
                 },
@@ -109,36 +114,41 @@ class TimeSeriesChart extends StatelessWidget {
                 getTitlesWidget: (value, meta) => Text(
                   value.toStringAsFixed(2),
                   style: const TextStyle(
-                      fontSize: 10, color: AppTheme.textMuted),
+                    fontSize: 10,
+                    color: AppTheme.textMuted,
+                  ),
                 ),
               ),
             ),
             topTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
+              sideTitles: SideTitles(showTitles: false),
+            ),
             rightTitles: const AxisTitles(
-                sideTitles: SideTitles(showTitles: false)),
+              sideTitles: SideTitles(showTitles: false),
+            ),
           ),
           gridData: FlGridData(
             show: true,
             drawHorizontalLine: true,
             drawVerticalLine: false,
             horizontalInterval: (maxY - minY) / 4,
-            getDrawingHorizontalLine: (_) => FlLine(
-              color: Colors.grey.shade200,
-              strokeWidth: 1,
-            ),
+            getDrawingHorizontalLine: (_) =>
+                FlLine(color: Colors.grey.shade200, strokeWidth: 1),
           ),
           borderData: FlBorderData(show: false),
           lineTouchData: LineTouchData(
             touchTooltipData: LineTouchTooltipData(
               getTooltipItems: (spots) => spots
-                  .map((s) => LineTooltipItem(
-                        s.y.toStringAsFixed(3),
-                        const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600),
-                      ))
+                  .map(
+                    (s) => LineTooltipItem(
+                      s.y.toStringAsFixed(3),
+                      const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )
                   .toList(),
             ),
           ),

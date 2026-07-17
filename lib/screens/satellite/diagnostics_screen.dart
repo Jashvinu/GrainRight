@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../controllers/farm_controller.dart';
 import '../../controllers/satellite_controller.dart';
@@ -110,7 +111,9 @@ class DiagnosticsScreen extends StatelessWidget {
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
                                 label: Text(
-                                  SatelliteConfig.indexLabels[idx] ?? idx,
+                                  UiStrings.option(
+                                    SatelliteConfig.indexLabels[idx] ?? idx,
+                                  ),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: isSelected
@@ -150,8 +153,8 @@ class DiagnosticsScreen extends StatelessWidget {
                           : const Icon(Icons.biotech_outlined),
                       label: Text(
                         satCtrl.diagnosticsIsLoading.value
-                            ? 'Analysing…'
-                            : 'Run Diagnostics',
+                            ? UiStrings.t('analysing')
+                            : UiStrings.t('run_diagnostics'),
                       ),
                       onPressed: satCtrl.diagnosticsIsLoading.value
                           ? null
@@ -159,8 +162,8 @@ class DiagnosticsScreen extends StatelessWidget {
                               final farm = farmCtrl.selectedFarm.value;
                               if (farm == null) {
                                 Get.snackbar(
-                                  'No farm',
-                                  'Select a farm first',
+                                  UiStrings.t('no_farm'),
+                                  UiStrings.t('select_farm_first'),
                                   snackPosition: SnackPosition.BOTTOM,
                                 );
                                 return;
@@ -183,16 +186,17 @@ class DiagnosticsScreen extends StatelessWidget {
                       // Season + metadata
                       if (result.metadata.season.isNotEmpty)
                         _MetaBadge(
-                          label:
-                              'Season: ${result.metadata.season.toUpperCase()}',
+                          label: UiStrings.f('season_value', {
+                            'value': UiStrings.option(result.metadata.season),
+                          }),
                         ),
                       const SizedBox(height: 14),
 
                       // Problems
                       if (result.problems.isNotEmpty) ...[
-                        const Text(
-                          'Issues Detected',
-                          style: TextStyle(
+                        Text(
+                          UiStrings.t('issues_detected'),
+                          style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                             color: AppTheme.textDark,
@@ -204,9 +208,9 @@ class DiagnosticsScreen extends StatelessWidget {
                       ],
 
                       // Per-index stats
-                      const Text(
-                        'Index Statistics',
-                        style: TextStyle(
+                      Text(
+                        UiStrings.t('index_statistics'),
+                        style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: AppTheme.textDark,
@@ -217,9 +221,10 @@ class DiagnosticsScreen extends StatelessWidget {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: result.analysis.entries.map((entry) {
-                            final label =
-                                SatelliteConfig.indexLabels[entry.key] ??
-                                entry.key.toUpperCase();
+                            final label = UiStrings.option(
+                              SatelliteConfig.indexLabels[entry.key] ??
+                                  entry.key.toUpperCase(),
+                            );
                             return Padding(
                               padding: const EdgeInsets.only(right: 10),
                               child: _StatCard(
@@ -312,11 +317,11 @@ class _StatCard extends StatelessWidget {
           _StatRow(label: 'Max', value: analysis.max.toStringAsFixed(2)),
           _StatRow(label: 'σ', value: analysis.stdDev.toStringAsFixed(2)),
           if (analysis.belowThreshold)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text(
-                '⚠ Below threshold',
-                style: TextStyle(
+                '⚠ ${UiStrings.t('below_threshold')}',
+                style: const TextStyle(
                   fontSize: 10,
                   color: Colors.orange,
                   fontWeight: FontWeight.w600,
@@ -342,7 +347,7 @@ class _StatRow extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            label,
+            UiStrings.fromEnglish(label),
             style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
           ),
           Text(

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/retry.dart';
 
 import '../config/runtime_config.dart';
 import 'local_app_database.dart';
@@ -15,6 +16,7 @@ String get fieldImageryTileUrl {
   final satellite = RuntimeConfig.onlineSatelliteTileUrlTemplate.trim();
   return satellite.isNotEmpty ? satellite : openStreetMapTileUrl;
 }
+
 const String openStreetMapTileUrl = RuntimeConfig.onlineBaseTileUrlTemplate;
 const String fieldRoadsTileUrl =
     'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
@@ -31,34 +33,57 @@ List<Widget> fieldImageryTileLayers({
   String? offlineUrlTemplateOverride,
   int? maxOfflineNativeZoom,
   bool includeReferenceLabels = true,
+  int keepBuffer = 2,
+  int panBuffer = 1,
+  TileDisplay tileDisplay = const TileDisplay.fadeIn(),
 }) {
   final imageryTemplate = (urlTemplate?.trim().isNotEmpty ?? false)
       ? urlTemplate!.trim()
       : fieldImageryTileUrl;
   return [
     OfflineAwareTileLayer(
+      key: const ValueKey('field-imagery-base-layer'),
       urlTemplate: imageryTemplate,
       offlineUrlTemplateOverride: offlineUrlTemplateOverride,
       maxNativeZoom: fieldImageryMaxNativeZoom,
       maxOfflineNativeZoom: maxOfflineNativeZoom,
+      keepBuffer: keepBuffer,
+      panBuffer: panBuffer,
+      tileDisplay: tileDisplay,
     ),
     if (includeReferenceLabels &&
         shouldShowFieldReferenceLabels(imageryTemplate))
-      ...fieldReferenceTileLayers(),
+      ...fieldReferenceTileLayers(
+        keepBuffer: keepBuffer,
+        panBuffer: panBuffer,
+        tileDisplay: tileDisplay,
+      ),
   ];
 }
 
-List<Widget> fieldReferenceTileLayers() {
-  return const [
+List<Widget> fieldReferenceTileLayers({
+  int keepBuffer = 2,
+  int panBuffer = 1,
+  TileDisplay tileDisplay = const TileDisplay.fadeIn(),
+}) {
+  return [
     OfflineAwareTileLayer(
+      key: const ValueKey('field-roads-reference-layer'),
       urlTemplate: fieldRoadsTileUrl,
       maxNativeZoom: fieldReferenceMaxNativeZoom,
       preferOfflineTemplateWhenOffline: false,
+      keepBuffer: keepBuffer,
+      panBuffer: panBuffer,
+      tileDisplay: tileDisplay,
     ),
     OfflineAwareTileLayer(
+      key: const ValueKey('field-places-reference-layer'),
       urlTemplate: fieldPlacesTileUrl,
       maxNativeZoom: fieldReferenceMaxNativeZoom,
       preferOfflineTemplateWhenOffline: false,
+      keepBuffer: keepBuffer,
+      panBuffer: panBuffer,
+      tileDisplay: tileDisplay,
     ),
   ];
 }
@@ -78,6 +103,9 @@ class OfflineAwareTileLayer extends StatefulWidget {
   final String userAgentPackageName;
   final bool preferOfflineTemplateWhenOffline;
   final bool forceOfflineTemplateOverride;
+  final int keepBuffer;
+  final int panBuffer;
+  final TileDisplay tileDisplay;
 
   const OfflineAwareTileLayer({
     super.key,
@@ -88,6 +116,9 @@ class OfflineAwareTileLayer extends StatefulWidget {
     this.userAgentPackageName = 'grainright.wrkfarm',
     this.preferOfflineTemplateWhenOffline = true,
     this.forceOfflineTemplateOverride = false,
+    this.keepBuffer = 2,
+    this.panBuffer = 1,
+    this.tileDisplay = const TileDisplay.fadeIn(),
   });
 
   @override
@@ -101,10 +132,14 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
   bool _hasNetworkInterface = true;
   bool _online = true;
   String _offlineTemplate = RuntimeConfig.offlineTileUrlTemplate;
+  late final _CachedMapTileProvider _tileProvider;
 
   @override
   void initState() {
     super.initState();
+    _tileProvider = _CachedMapTileProvider(
+      userAgentPackageName: widget.userAgentPackageName,
+    );
     unawaited(_refreshConnectivity());
     unawaited(_refreshRuntimeConfig());
     _subscription = _networkStatusService.connectivityChanges.listen((_) {
@@ -129,8 +164,7 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
         await _refreshRuntimeConfig();
       }
       if (!mounted ||
-          (online == _online &&
-              hasNetworkInterface == _hasNetworkInterface)) {
+          (online == _online && hasNetworkInterface == _hasNetworkInterface)) {
         return;
       }
       setState(() {
@@ -172,38 +206,28 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
     }
     final maxNativeZoom =
         (usingOfflineTemplate
-                ? widget.maxOfflineNativeZoom ?? widget.maxNativeZoom
-                : widget.maxNativeZoom) ??
-            mapTileMaxNativeZoom;
+            ? widget.maxOfflineNativeZoom ?? widget.maxNativeZoom
+            : widget.maxNativeZoom) ??
+        mapTileMaxNativeZoom;
     final effectiveMaxNativeZoom = maxNativeZoom
         .clamp(0, mapTileMaxNativeZoom)
         .toInt();
-    if (!usingOfflineTemplate && canTryLiveTiles) {
-      return TileLayer(
-        urlTemplate: activeTemplate,
-        minZoom: mapTileMinZoom,
-        maxZoom: mapTileMaxZoom,
-        maxNativeZoom: effectiveMaxNativeZoom,
-        userAgentPackageName: widget.userAgentPackageName,
-        errorTileCallback: (tile, error, stackTrace) {
-          if (_looksOffline(error)) {
-            unawaited(_refreshConnectivity());
-          }
-        },
-      );
-    }
+    _tileProvider.configure(
+      sourceId: activeTemplate,
+      allowNetwork: canTryLiveTiles,
+      preferCache: usingOfflineTemplate || !canTryLiveTiles,
+      writeNetworkTiles: _online && usingOfflineTemplate,
+    );
     return TileLayer(
       urlTemplate: activeTemplate,
       minZoom: mapTileMinZoom,
       maxZoom: mapTileMaxZoom,
       maxNativeZoom: effectiveMaxNativeZoom,
       userAgentPackageName: widget.userAgentPackageName,
-      tileProvider: _CachedMapTileProvider(
-        sourceId: activeTemplate,
-        allowNetwork: canTryLiveTiles,
-        preferCache: usingOfflineTemplate || !canTryLiveTiles,
-        writeNetworkTiles: _online && usingOfflineTemplate,
-      ),
+      keepBuffer: widget.keepBuffer,
+      panBuffer: widget.panBuffer,
+      tileDisplay: widget.tileDisplay,
+      tileProvider: _tileProvider,
       errorTileCallback: (tile, error, stackTrace) {
         if (_looksOffline(error)) {
           unawaited(_refreshConnectivity());
@@ -325,32 +349,43 @@ class _OfflineMapGridPainter extends CustomPainter {
 }
 
 class _CachedMapTileProvider extends TileProvider {
-  static final http.Client _httpClient = http.Client();
+  static final http.BaseClient _httpClient = RetryClient(
+    http.Client(),
+    retries: 2,
+  );
 
-  final String sourceId;
-  final bool allowNetwork;
-  final bool preferCache;
-  final bool writeNetworkTiles;
+  String _sourceId = '';
+  bool _allowNetwork = true;
+  bool _preferCache = false;
+  bool _writeNetworkTiles = false;
 
-  _CachedMapTileProvider({
-    required this.sourceId,
-    required this.allowNetwork,
-    required this.preferCache,
-    required this.writeNetworkTiles,
-  }) : super(headers: {'User-Agent': 'grainright.wrkfarm'});
+  _CachedMapTileProvider({required String userAgentPackageName})
+    : super(headers: {'User-Agent': userAgentPackageName});
+
+  void configure({
+    required String sourceId,
+    required bool allowNetwork,
+    required bool preferCache,
+    required bool writeNetworkTiles,
+  }) {
+    _sourceId = sourceId;
+    _allowNetwork = allowNetwork;
+    _preferCache = preferCache;
+    _writeNetworkTiles = writeNetworkTiles;
+  }
 
   @override
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     return _CachedTileImageProvider(
       url: getTileUrl(coordinates, options),
-      sourceId: sourceId,
+      sourceId: _sourceId,
       z: coordinates.z,
       x: coordinates.x,
       y: coordinates.y,
       headers: headers,
-      allowNetwork: allowNetwork,
-      preferCache: preferCache,
-      writeNetworkTiles: writeNetworkTiles,
+      allowNetwork: _allowNetwork,
+      preferCache: _preferCache,
+      writeNetworkTiles: _writeNetworkTiles,
       httpClient: _httpClient,
     );
   }
@@ -371,7 +406,7 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   final bool allowNetwork;
   final bool preferCache;
   final bool writeNetworkTiles;
-  final http.Client httpClient;
+  final http.BaseClient httpClient;
 
   const _CachedTileImageProvider({
     required this.url,
@@ -505,15 +540,14 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(
-        url,
-        sourceId,
-        z,
-        x,
-        y,
-        allowNetwork,
-        preferCache,
-        writeNetworkTiles,
-      );
+  int get hashCode => Object.hash(
+    url,
+    sourceId,
+    z,
+    x,
+    y,
+    allowNetwork,
+    preferCache,
+    writeNetworkTiles,
+  );
 }

@@ -7,8 +7,30 @@ import ee from "npm:@google/earthengine@1.6.13";
  * Initialize Google Earth Engine using service account credentials from Deno environment
  */
 export async function initializeEarthEngine(): Promise<void> {
-  const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
-  const clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL");
+  let privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
+  let clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL");
+
+  const credentialsJson = Deno.env.get("GOOGLE_CREDENTIALS_JSON");
+  if (credentialsJson) {
+    try {
+      const credentials = JSON.parse(credentialsJson) as Record<
+        string,
+        unknown
+      >;
+      if (typeof credentials.private_key === "string") {
+        privateKey = credentials.private_key;
+      }
+      if (typeof credentials.client_email === "string") {
+        clientEmail = credentials.client_email;
+      }
+    } catch (error) {
+      throw new Error(
+        `Invalid GOOGLE_CREDENTIALS_JSON: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   if (!privateKey || !clientEmail) {
     throw new Error(

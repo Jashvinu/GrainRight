@@ -75,12 +75,21 @@ void main() {
     );
     addTearDown(service.dispose);
 
-    final predictions = await service.searchPlaces('Akole');
+    final predictions = await service.searchPlaces(
+      'Akole',
+      languageCode: 'mr',
+      proximityLatitude: 19.541,
+      proximityLongitude: 74.005,
+    );
     final place = await service.resolvePrediction(predictions.single);
 
     expect(requests.single.host, 'api.maptiler.com');
     expect(requests.single.path, '/geocoding/Akole.json');
     expect(requests.single.queryParameters['key'], 'test-maptiler-key');
+    expect(requests.single.queryParameters['country'], 'in');
+    expect(requests.single.queryParameters['language'], 'mr,en');
+    expect(requests.single.queryParameters['proximity'], '74.005000,19.541000');
+    expect(requests.single.queryParameters['types'], contains('postal_code'));
     expect(predictions.single.title, 'Akole');
     expect(place?.latitude, 19.541);
     expect(place?.longitude, 74.005);

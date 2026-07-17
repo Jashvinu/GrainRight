@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/satellite/satellite_date_model.dart';
 
@@ -17,10 +19,12 @@ class DateChipRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (dates.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('No dates available',
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 13)),
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(
+          UiStrings.t('no_dates_available'),
+          style: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+        ),
       );
     }
 
@@ -36,19 +40,19 @@ class DateChipRow extends StatelessWidget {
           return GestureDetector(
             onTap: () => onSelected(d),
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
                 color: isSelected ? AppTheme.green : Colors.white,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                    color: isSelected ? AppTheme.green : Colors.grey.shade300),
+                  color: isSelected ? AppTheme.green : Colors.grey.shade300,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    d.date.substring(5), // MM-DD
+                    _dateLabel(d.date),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -57,8 +61,10 @@ class DateChipRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 5),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? Colors.white.withValues(alpha: 0.25)
@@ -81,5 +87,12 @@ class DateChipRow extends StatelessWidget {
         },
       ),
     );
+  }
+
+  String _dateLabel(String value) {
+    final date = DateTime.tryParse(value);
+    return date == null
+        ? LocaleText.digits(value)
+        : LocaleText.date(date, pattern: 'dd MMM');
   }
 }

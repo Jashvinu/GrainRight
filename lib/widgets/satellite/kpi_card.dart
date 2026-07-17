@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class KpiCard extends StatelessWidget {
@@ -48,18 +49,18 @@ class KpiCard extends StatelessWidget {
                   TextSpan(
                     text: ' $unit',
                     style: const TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textMuted,
-                        fontWeight: FontWeight.w400),
+                      fontSize: 12,
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
               ],
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            label,
-            style: const TextStyle(
-                fontSize: 12, color: AppTheme.textMuted),
+            UiStrings.fromEnglish(label),
+            style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
           ),
         ],
       ),

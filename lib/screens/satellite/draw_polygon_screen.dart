@@ -11,6 +11,7 @@ import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../services/local_app_database.dart';
 import '../../services/map_tile_provider.dart';
 import '../../services/offline_map_service.dart';
+import '../../utils/polygon_geometry.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/farm_controller.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
@@ -204,10 +205,24 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
   }
 
   Future<void> _onSave() async {
-    if (_points.length < 3) {
+    final boundaryIssue = PolygonGeometry.boundaryIssue(_points);
+    if (boundaryIssue != null) {
       Get.snackbar(
-        UiStrings.t('too_few_points'),
-        UiStrings.t('draw_at_least_three_points'),
+        boundaryIssue == PolygonBoundaryIssue.tooFewDistinctPoints
+            ? UiStrings.t('too_few_points')
+            : UiStrings.t('invalid_farm_boundary'),
+        switch (boundaryIssue) {
+          PolygonBoundaryIssue.tooFewDistinctPoints => UiStrings.t(
+            'draw_at_least_three_points',
+          ),
+          PolygonBoundaryIssue.repeatedPoint => UiStrings.t(
+            'boundary_point_repeated',
+          ),
+          PolygonBoundaryIssue.selfIntersection => UiStrings.t(
+            'boundary_lines_cross',
+          ),
+          PolygonBoundaryIssue.zeroArea => UiStrings.t('boundary_has_no_area'),
+        },
         snackPosition: SnackPosition.BOTTOM,
       );
       return;
@@ -458,20 +473,15 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
                             _points.isEmpty
                                 ? UiStrings.t('tap_map_add_boundary_points')
                                 : _points.length >= 3
-                                    ? UiStrings.f(
-                                        'points_added_save_when_done',
-                                        {
-                                          'count': _points.length,
-                                          'plural':
-                                              _points.length == 1 ? '' : 's',
-                                        },
-                                      )
-                                    : UiStrings.f('points_added_add_more', {
-                                        'count': _points.length,
-                                        'plural':
-                                            _points.length == 1 ? '' : 's',
-                                        'remaining': 3 - _points.length,
-                                      }),
+                                ? UiStrings.f('points_added_save_when_done', {
+                                    'count': _points.length,
+                                    'plural': _points.length == 1 ? '' : 's',
+                                  })
+                                : UiStrings.f('points_added_add_more', {
+                                    'count': _points.length,
+                                    'plural': _points.length == 1 ? '' : 's',
+                                    'remaining': 3 - _points.length,
+                                  }),
                             style: const TextStyle(
                               fontSize: 13,
                               color: AppTheme.textDark,

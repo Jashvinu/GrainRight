@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../services/map_tile_provider.dart';
 
@@ -189,8 +190,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 },
               ),
               children: [
-                const OfflineMapBackground(
-                  message: 'Offline map\nSaved farm boundary visible',
+                OfflineMapBackground(
+                  message: UiStrings.t('offline_map_saved_boundary'),
                 ),
                 ...fieldImageryTileLayers(includeReferenceLabels: false),
                 if (widget.tileUrl != null && widget.tileUrl!.isNotEmpty)
@@ -238,7 +239,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 child: Column(
                   children: [
                     Tooltip(
-                      message: 'Zoom in',
+                      message: UiStrings.t('zoom_in'),
                       child: _ZoomControlButton(
                         icon: Icons.add,
                         onTap: _zoomIn,
@@ -246,7 +247,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                     ),
                     const SizedBox(height: 6),
                     Tooltip(
-                      message: 'Zoom out',
+                      message: UiStrings.t('zoom_out'),
                       child: _ZoomControlButton(
                         icon: Icons.remove,
                         onTap: _zoomOut,
@@ -254,7 +255,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                     ),
                     const SizedBox(height: 6),
                     Tooltip(
-                      message: 'Locate farm area',
+                      message: UiStrings.t('locate_farm_area'),
                       child: _ZoomControlButton(
                         icon: Icons.location_on,
                         onTap: _locate,
@@ -266,18 +267,18 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
             if (widget.isLoading)
               Container(
                 color: AppTheme.greenPale.withValues(alpha: 0.7),
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(
+                      const CircularProgressIndicator(
                         color: AppTheme.green,
                         strokeWidth: 2.5,
                       ),
-                      SizedBox(height: 10),
+                      const SizedBox(height: 10),
                       Text(
-                        'Loading satellite data…',
-                        style: TextStyle(
+                        UiStrings.t('loading_satellite_data'),
+                        style: const TextStyle(
                           fontSize: 12,
                           color: AppTheme.textMuted,
                         ),

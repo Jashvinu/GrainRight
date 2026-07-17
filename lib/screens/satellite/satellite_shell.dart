@@ -4,6 +4,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../controllers/auth_controller.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
 import 'dashboard_screen.dart';
 import 'yield_screen.dart';
 import 'advanced_screen.dart';
@@ -62,7 +63,9 @@ class _SatelliteShellState extends State<SatelliteShell> {
             Text(
               auth.currentUser.value?.email ?? '',
               style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: AppTheme.textDark),
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textDark,
+              ),
             ),
           ],
         ),
@@ -74,7 +77,7 @@ class _SatelliteShellState extends State<SatelliteShell> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              auth.logout();
+              AppLogoutFlow.run(context, onLogout: auth.logout);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: Text(UiStrings.t('logout')),
@@ -104,24 +107,35 @@ class _SatelliteShellState extends State<SatelliteShell> {
       body: IndexedStack(index: _index, children: _tabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
+        onDestinationSelected: (i) {
+          if (i == _index) return;
+          setState(() => _index = i);
+        },
         backgroundColor: Colors.white,
         indicatorColor: AppTheme.greenPale,
         destinations: [
           NavigationDestination(
             icon: const Icon(Icons.dashboard_outlined),
-            selectedIcon: const Icon(Icons.dashboard, color: AppTheme.greenDark),
+            selectedIcon: const Icon(
+              Icons.dashboard,
+              color: AppTheme.greenDark,
+            ),
             label: UiStrings.t('dashboard'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.bar_chart_outlined),
-            selectedIcon: const Icon(Icons.bar_chart, color: AppTheme.greenDark),
+            selectedIcon: const Icon(
+              Icons.bar_chart,
+              color: AppTheme.greenDark,
+            ),
             label: UiStrings.t('yield'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.analytics_outlined),
-            selectedIcon:
-                const Icon(Icons.analytics, color: AppTheme.greenDark),
+            selectedIcon: const Icon(
+              Icons.analytics,
+              color: AppTheme.greenDark,
+            ),
             label: UiStrings.t('advanced'),
           ),
           NavigationDestination(

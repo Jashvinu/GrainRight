@@ -7,11 +7,11 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/diagnostics_home_controller.dart';
 import '../models/satellite/diagnostics_model.dart';
+import '../models/satellite/farm_alert_model.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../widgets/satellite/problem_card.dart';
 import '../widgets/satellite/satellite_map_view.dart';
 
-// TODO(diagnostics-v2): wire Gemini advisory like web app.
 class DiagnosticsHomeScreen extends StatefulWidget {
   const DiagnosticsHomeScreen({super.key});
 
@@ -123,15 +123,23 @@ class _DiagnosticsHomeScreenState extends State<DiagnosticsHomeScreen> {
                 analysis: result.analysis[controller.selectedIndex.value],
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Issues Detected',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              _DiagnosticsAdvisory(
+                advice: controller.advice.value,
+                loading: controller.isAdviceLoading.value,
+                error: controller.adviceError.value,
+                onRetry: controller.loadAdvice,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                UiStrings.t('issues_detected'),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 10),
               if (result.problems.isEmpty)
-                const Text(
-                  'No major issues detected in the latest diagnostics run.',
-                ),
+                Text(UiStrings.t('no_major_diagnostic_issues')),
               for (final problem in result.problems)
                 ProblemCard(problem: problem),
             ],
@@ -181,6 +189,151 @@ class _DiagnosticsHomeScreenState extends State<DiagnosticsHomeScreen> {
   }
 }
 
+class _DiagnosticsAdvisory extends StatelessWidget {
+  final FarmAlertAdvice? advice;
+  final bool loading;
+  final String error;
+  final Future<void> Function() onRetry;
+
+  const _DiagnosticsAdvisory({
+    required this.advice,
+    required this.loading,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppTheme.greenPale,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.green.withValues(alpha: 0.22)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome_rounded, color: AppTheme.green),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    UiStrings.t('farm_guidance'),
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                if (loading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (loading && advice == null)
+              Text(UiStrings.t('preparing_farm_guidance'))
+            else if (error.isNotEmpty && advice == null) ...[
+              Text(UiStrings.t('farm_guidance_unavailable')),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(UiStrings.t('try_again')),
+              ),
+            ] else if (advice == null ||
+                (advice!.importantAlerts.isEmpty &&
+                    advice!.weatherAlerts.isEmpty &&
+                    advice!.nextActions.isEmpty))
+              Text(UiStrings.t('no_farm_guidance'))
+            else ...[
+              for (final alert in [
+                ...advice!.importantAlerts,
+                ...advice!.weatherAlerts,
+              ])
+                _AdvisoryAlertRow(alert: alert),
+              if (advice!.nextActions.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  UiStrings.t('next_actions'),
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                for (var index = 0; index < advice!.nextActions.length; index++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '${index + 1}. ${advice!.nextActions[index]}',
+                      style: const TextStyle(height: 1.35),
+                    ),
+                  ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdvisoryAlertRow extends StatelessWidget {
+  final FarmAlertItem alert;
+
+  const _AdvisoryAlertRow({required this.alert});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (alert.severity.toLowerCase()) {
+      'high' => AppTheme.error,
+      'low' => AppTheme.green,
+      _ => const Color(0xFFE07800),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 3),
+            child: Icon(Icons.circle, size: 9, color: color),
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  alert.title,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 2),
+                Text(alert.detail, style: const TextStyle(height: 1.35)),
+                if (alert.action.trim().isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    alert.action,
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _IndexStats extends StatelessWidget {
   final String index;
   final IndexAnalysis? analysis;
@@ -206,9 +359,12 @@ class _IndexStats extends StatelessWidget {
               label: SatelliteConfig.indexLabels[index] ?? index.toUpperCase(),
               value: data.mean,
             ),
-            _Stat(label: 'Min', value: data.min),
-            _Stat(label: 'Max', value: data.max),
-            _Stat(label: 'Std dev', value: data.stdDev),
+            _Stat(label: UiStrings.t('minimum_short'), value: data.min),
+            _Stat(label: UiStrings.t('maximum_short'), value: data.max),
+            _Stat(
+              label: UiStrings.t('standard_deviation_short'),
+              value: data.stdDev,
+            ),
           ],
         ),
       ),

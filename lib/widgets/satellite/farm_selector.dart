@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/satellite/farm_model.dart';
 
@@ -20,29 +21,36 @@ class FarmSelector extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: selected?.id,
-      decoration: const InputDecoration(
-        labelText: 'Farm',
-        prefixIcon: Icon(Icons.grass_outlined),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: InputDecoration(
+        labelText: UiStrings.t('farm'),
+        prefixIcon: const Icon(Icons.grass_outlined),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
       isExpanded: true,
       items: [
-        ...farms.map((f) => DropdownMenuItem(
-              value: f.id,
-              child: Text(
-                f.name,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
-              ),
-            )),
-        const DropdownMenuItem(
+        ...farms.map(
+          (f) => DropdownMenuItem(
+            value: f.id,
+            child: Text(
+              f.name,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
+            ),
+          ),
+        ),
+        DropdownMenuItem(
           value: '__add__',
           child: Row(
             children: [
-              Icon(Icons.add, size: 18, color: AppTheme.green),
-              SizedBox(width: 6),
-              Text('Add Farm',
-                  style: TextStyle(color: AppTheme.green, fontSize: 14)),
+              const Icon(Icons.add, size: 18, color: AppTheme.green),
+              const SizedBox(width: 6),
+              Text(
+                UiStrings.t('add_farm'),
+                style: const TextStyle(color: AppTheme.green, fontSize: 14),
+              ),
             ],
           ),
         ),

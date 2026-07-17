@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../controllers/farm_controller.dart';
 import '../../controllers/satellite_controller.dart';
@@ -54,15 +55,6 @@ class DashboardScreen extends StatelessWidget {
                 selected: farmCtrl.selectedFarm.value,
                 onChanged: farmCtrl.selectFarm,
                 onAddFarm: () => Get.toNamed('/satellite/draw-polygon'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => Get.toNamed('/farms/manage'),
-                icon: const Icon(Icons.delete_outline_rounded),
-                label: const Text('Manage farms'),
               ),
             ),
             const SizedBox(height: 10),
@@ -217,7 +209,7 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      text,
+      UiStrings.fromEnglish(text),
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
