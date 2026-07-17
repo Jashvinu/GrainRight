@@ -120,6 +120,12 @@ function buildPrompt(body: Record<string, unknown>, knowledge: string) {
   const sowingWeek = Number.isFinite(daysAfterSowing)
     ? Math.floor(daysAfterSowing / 7) + 1
     : null;
+  const languageCode = String(body.language ?? "en").trim().toLowerCase();
+  const responseLanguage = languageCode === "mr"
+    ? "Marathi (Devanagari script)"
+    : languageCode === "hi"
+    ? "Hindi (Devanagari script)"
+    : "English";
   const focusCell = body.focus_cell != null && typeof body.focus_cell === "object"
     ? body.focus_cell as Record<string, unknown>
     : null;
@@ -132,6 +138,8 @@ function buildPrompt(body: Record<string, unknown>, knowledge: string) {
     "- Do not recommend pesticide brands, chemical doses, exact fertilizer rates, yield, or income claims.",
     "- Treat satellite disease screening as a risk pre-screen, not a confirmed disease diagnosis.",
     "- Keep language plain and action-oriented.",
+    `- Write every alert title, detail, action and next_actions entry in ${responseLanguage}.`,
+    "- Keep only severity and confidence enum values in English: high, medium, or low.",
     "- Prefer scout/verify/drain/cover/delay/monitor actions before treatment advice.",
     "- Ground alerts and actions in the reference knowledge below (symptoms, IDM, resistant varieties, stage and district notes) when it is relevant to the supplied data.",
     "- Relate weather risk to the crop's week after sowing: the same rain or leaf wetness means different risk at germination vs tillering vs grain filling.",

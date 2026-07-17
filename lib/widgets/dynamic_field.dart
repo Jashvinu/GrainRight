@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
-import '../config/translations.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 import '../models/form_config.dart';
@@ -33,11 +34,7 @@ class DynamicField extends StatelessWidget {
     return _buildField(context, c);
   }
 
-  String _trLabel(String label) {
-    final lang = Get.find<LanguageController>();
-    if (!lang.isMarathi) return label;
-    return AppTranslations.translate(label);
-  }
+  String _trLabel(String label) => UiStrings.fromEnglish(label);
 
   String _label(BuildContext context) => config.localizedLabel(context);
 
@@ -63,15 +60,15 @@ class DynamicField extends StatelessWidget {
         'text' => CustomTextField(
           label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
-          hintText: config.localizedHint(context),
-          suffixText: config.suffixText,
+          hintText: _localizedHint(context),
+          suffixText: _localizedSuffix(),
           validator: _buildValidator(),
         ),
         'textarea' => CustomTextField(
           label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
-          hintText: config.localizedHint(context),
-          suffixText: config.suffixText,
+          hintText: _localizedHint(context),
+          suffixText: _localizedSuffix(),
           maxLines: 4,
           validator: _buildValidator(),
         ),
@@ -79,8 +76,8 @@ class DynamicField extends StatelessWidget {
           label: _translatedLabel(context),
           controller: c.textController(config.fieldKey),
           numeric: true,
-          hintText: config.localizedHint(context),
-          suffixText: config.suffixText,
+          hintText: _localizedHint(context),
+          suffixText: _localizedSuffix(),
           validator: _buildValidator(),
         ),
         'currency' => _buildCurrencyField(context, c),
@@ -142,8 +139,18 @@ class DynamicField extends StatelessWidget {
   }
 
   String _translatedLabel(BuildContext context) {
-    final label = _label(context);
+    final label = UiStrings.fromEnglish(_label(context));
     return config.isRequired ? '$label *' : label;
+  }
+
+  String? _localizedHint(BuildContext context) {
+    final hint = config.localizedHint(context);
+    return hint == null ? null : UiStrings.fromEnglish(hint);
+  }
+
+  String? _localizedSuffix() {
+    final suffix = config.suffixText;
+    return suffix == null ? null : UiStrings.fromEnglish(suffix);
   }
 
   Widget _buildCurrencyField(BuildContext context, FormController c) {
@@ -155,8 +162,8 @@ class DynamicField extends StatelessWidget {
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[\d.]'))],
         decoration: InputDecoration(
           labelText: _translatedLabel(context),
-          prefixText: 'Rs  ',
-          suffixText: config.suffixText,
+          prefixText: '${UiStrings.t('currency_rs')}  ',
+          suffixText: _localizedSuffix(),
           suffixStyle: TextStyle(
             color: Colors.grey[500],
             fontSize: 13,
@@ -384,7 +391,8 @@ class DynamicField extends StatelessWidget {
         ],
         decoration: InputDecoration(
           labelText: _label(context),
-          hintText: config.localizedHint(context) ?? 'XXXX XXXX XXXX',
+          hintText:
+              _localizedHint(context) ?? UiStrings.t('aadhaar_input_hint'),
         ),
         validator: (v) {
           if (v != null && v.isNotEmpty) {
@@ -415,7 +423,7 @@ class DynamicField extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              _label(context),
+              UiStrings.fromEnglish(_label(context)),
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -423,7 +431,9 @@ class DynamicField extends StatelessWidget {
               ),
             ),
             Text(
-              'Rs ${rx.value.toStringAsFixed(2)}',
+              UiStrings.f('rs_value', {
+                'value': LocaleText.number(rx.value, fractionDigits: 2),
+              }),
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
@@ -446,16 +456,23 @@ class DynamicField extends StatelessWidget {
       final rules = config.validation;
       if (rules.containsKey('min_length')) {
         final minLen = rules['min_length'] as int;
-        if (v.length < minLen) return 'Minimum $minLen characters';
+        if (v.length < minLen) {
+          return UiStrings.f('minimum_characters', {'count': minLen});
+        }
       }
       if (rules.containsKey('max_length')) {
         final maxLen = rules['max_length'] as int;
-        if (v.length > maxLen) return 'Maximum $maxLen characters';
+        if (v.length > maxLen) {
+          return UiStrings.f('maximum_characters', {'count': maxLen});
+        }
       }
       if (rules.containsKey('regex')) {
         final regex = RegExp(rules['regex'] as String);
         if (!regex.hasMatch(v)) {
-          return (rules['regex_message'] as String?) ?? 'Invalid format';
+          return UiStrings.fromEnglish(
+            (rules['regex_message'] as String?) ??
+                UiStrings.t('invalid_format'),
+          );
         }
       }
       return null;

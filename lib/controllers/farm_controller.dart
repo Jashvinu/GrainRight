@@ -19,7 +19,6 @@ class FarmController extends GetxController {
   final isLoading = false.obs;
   final hasError = false.obs;
   final errorMessage = ''.obs;
-  final lastSaveErrorMessage = ''.obs;
   String? _farmSessionCacheKey;
   List<Farm> _cachedSessionFarms = const [];
   bool _cacheLoadedForSession = false;
@@ -29,11 +28,24 @@ class FarmController extends GetxController {
   String? _pendingSavedFarmSessionKey;
   final Map<String, Farm> _pendingSavedFarmsById = {};
   int _loadRequestId = 0;
+  Future<void>? _loadFarmsInFlight;
   bool _lastLoadUsedCachedFallback = false;
   bool _lastLoadRemoteConfirmed = false;
 
   bool get lastLoadUsedCachedFallback => _lastLoadUsedCachedFallback;
   bool get lastLoadRemoteConfirmed => _lastLoadRemoteConfirmed;
+  bool get hasPendingSavedFarms => _pendingSavedFarmsById.isNotEmpty;
+  Set<String> get pendingSavedFarmIds =>
+      Set<String>.unmodifiable(_pendingSavedFarmsById.keys);
+  List<Farm> get visibleFarmsWithoutPending {
+    final pendingIds = _pendingSavedFarmsById.keys.toSet();
+    return farms.where((farm) => !pendingIds.contains(farm.id)).toList();
+  }
+
+  List<Farm> get confirmedRemoteFarms {
+    if (!_lastLoadRemoteConfirmed) return const <Farm>[];
+    return visibleFarmsWithoutPending;
+  }
 
   @override
   void onInit() {
@@ -65,8 +77,7 @@ class FarmController extends GetxController {
     if (!Get.isRegistered<MainAuthController>()) return null;
     final phone = Get.find<MainAuthController>().verifiedFarmer.value?.phone;
     final digits = phone?.replaceAll(RegExp(r'\D'), '');
-    if (digits == null || digits.isEmpty) return null;
-    return digits.length <= 10 ? digits : digits.substring(digits.length - 10);
+    return digits == null || digits.isEmpty ? null : digits;
   }
 
   String? get _verifiedFarmerId {
@@ -114,36 +125,6 @@ class FarmController extends GetxController {
       final authCtrl = Get.isRegistered<AuthController>()
           ? Get.find<AuthController>()
           : Get.put(AuthController());
-      final controllerToken = authCtrl.accessToken.value.trim();
-      final controllerUserId = authCtrl.currentUser.value?.id.trim();
-      if (controllerToken.isNotEmpty &&
-          controllerUserId != null &&
-          controllerUserId.isNotEmpty) {
-        return;
-      }
-
-      final backendEmail = RuntimeConfig.backendAuthEmail.trim();
-      final backendPassword = RuntimeConfig.backendAuthPassword.trim();
-      if (backendEmail.isNotEmpty && backendPassword.isNotEmpty) {
-        try {
-          await authCtrl.ensureBackendAccountSession(
-            email: backendEmail,
-            password: backendPassword,
-          );
-          final restoredToken = authCtrl.accessToken.value.trim();
-          final restoredUserId = authCtrl.currentUser.value?.id.trim();
-          if (restoredToken.isNotEmpty &&
-              restoredUserId != null &&
-              restoredUserId.isNotEmpty) {
-            return;
-          }
-        } catch (error) {
-          Get.log(
-            'Backend bridge session restore before farm save failed: $error',
-          );
-        }
-      }
-
       final supabaseAuth = Supabase.instance.client.auth;
       final session = supabaseAuth.currentSession;
       final user = supabaseAuth.currentUser;
@@ -205,6 +186,30 @@ class FarmController extends GetxController {
   }
 
   Future<void> loadFarms({
+    bool forceRefresh = false,
+    String? preferredFarmId,
+  }) async {
+    final inFlight = _loadFarmsInFlight;
+    if (inFlight != null && !forceRefresh) {
+      await inFlight;
+      return;
+    }
+
+    final load = _loadFarmsOnce(
+      forceRefresh: forceRefresh,
+      preferredFarmId: preferredFarmId,
+    );
+    _loadFarmsInFlight = load;
+    try {
+      await load;
+    } finally {
+      if (identical(_loadFarmsInFlight, load)) {
+        _loadFarmsInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _loadFarmsOnce({
     bool forceRefresh = false,
     String? preferredFarmId,
   }) async {
@@ -285,7 +290,14 @@ class FarmController extends GetxController {
       );
       if (!_isLatestFarmLoad(requestId)) return;
       if (restrictToVerifiedFarmer) {
+        final pendingBeforeMerge = _pendingSavedFarmsById.keys.toSet();
         result = _mergePendingSavedFarms(result);
+        final hasUnconfirmedPendingFarm = pendingBeforeMerge.any(
+          _pendingSavedFarmsById.containsKey,
+        );
+        if (hasUnconfirmedPendingFarm) {
+          _lastLoadUsedCachedFallback = true;
+        }
         if (result.isEmpty && previousVisibleFarms.isNotEmpty) {
           result = previousVisibleFarms;
           _lastLoadUsedCachedFallback = true;
@@ -315,7 +327,7 @@ class FarmController extends GetxController {
         _lastLoadRemoteConfirmed = true;
       }
       _selectFreshFarmFrom(farms, preferredFarmId: preferredFarmId);
-      if (restrictToVerifiedFarmer) {
+      if (restrictToVerifiedFarmer && _lastLoadRemoteConfirmed) {
         await _cacheVerifiedFarmerFarms();
       }
     } on Exception catch (e) {
@@ -398,10 +410,17 @@ class FarmController extends GetxController {
     }
     if (requireRemoteConfirmation) return null;
     await loadFarms(forceRefresh: true, preferredFarmId: preferredId);
+    if (_verifiedFarmerPhone != null &&
+        (!_lastLoadRemoteConfirmed ||
+            _pendingSavedFarmsById.containsKey(preferredId))) {
+      return null;
+    }
     for (final farm in farms) {
       if (farm.id == preferredId) {
         selectFarm(farm);
-        await _cacheVerifiedFarmerFarms();
+        if (_lastLoadRemoteConfirmed) {
+          await _cacheVerifiedFarmerFarms();
+        }
         return farm;
       }
     }
@@ -463,10 +482,9 @@ class FarmController extends GetxController {
       _farmSessionCacheKey = _activeVerifiedSessionKey;
       _lastPhoneOwnerFallbackSessionKey = _farmSessionCacheKey;
       _cachedSessionFarms = List<Farm>.from(farms, growable: false);
-      _cachedSessionRemoteConfirmed = true;
-      _lastLoadUsedCachedFallback = false;
-      _lastLoadRemoteConfirmed = true;
-      _markVerifiedFarmSyncReady();
+      _cachedSessionRemoteConfirmed = false;
+      _lastLoadUsedCachedFallback = true;
+      _lastLoadRemoteConfirmed = false;
     }
   }
 
@@ -478,72 +496,18 @@ class FarmController extends GetxController {
     farms.assignAll(merged);
     _selectFreshFarmFrom(farms, preferredFarmId: preferredFarmId);
     if (_verifiedFarmerPhone != null) {
+      final hasUnconfirmedPendingFarm = _pendingSavedFarmsById.isNotEmpty;
       _cacheLoadedForSession = true;
       _farmSessionCacheKey = _activeVerifiedSessionKey;
       _lastPhoneOwnerFallbackSessionKey = _farmSessionCacheKey;
       _cachedSessionFarms = List<Farm>.from(farms, growable: false);
-      _cachedSessionRemoteConfirmed = true;
-      _lastLoadUsedCachedFallback = false;
-      _lastLoadRemoteConfirmed = true;
+      _cachedSessionRemoteConfirmed = !hasUnconfirmedPendingFarm;
+      _lastLoadUsedCachedFallback = hasUnconfirmedPendingFarm;
+      _lastLoadRemoteConfirmed = !hasUnconfirmedPendingFarm;
       _markVerifiedFarmSyncReady();
     }
-    unawaited(_cacheVerifiedFarmerFarms());
-  }
-
-  Future<bool> deleteFarm(Farm farm, {bool showSnackbars = true}) async {
-    final farmId = farm.id.trim();
-    if (farmId.isEmpty) return false;
-    await _ensureSatelliteSessionFromMainAuth();
-    final jwt = _jwt;
-    if (jwt.trim().isEmpty) {
-      if (showSnackbars) {
-        Get.snackbar(
-          UiStrings.t('login_required'),
-          'Sign in again before deleting a farm.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
-      return false;
-    }
-
-    isLoading.value = true;
-    hasError.value = false;
-    try {
-      await _service.deleteFarm(farmId, jwt);
-      _pendingSavedFarmsById.remove(farmId);
-      farms.removeWhere((item) => item.id == farmId);
-      if (selectedFarm.value?.id == farmId) {
-        _selectFreshFarmFrom(farms);
-      }
-      if (_verifiedFarmerPhone != null) {
-        _cachedSessionFarms = List<Farm>.from(farms, growable: false);
-        _cachedSessionRemoteConfirmed = true;
-        _lastLoadUsedCachedFallback = false;
-        _lastLoadRemoteConfirmed = true;
-        _markVerifiedFarmSyncReady();
-        await _cacheVerifiedFarmerFarms();
-      }
-      if (showSnackbars) {
-        Get.snackbar(
-          'Farm deleted',
-          '${farm.name} was removed from the database.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
-      return true;
-    } on Exception catch (error) {
-      hasError.value = true;
-      errorMessage.value = error.toString();
-      if (showSnackbars) {
-        Get.snackbar(
-          'Could not delete farm',
-          'Refresh and try again.',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
-      return false;
-    } finally {
-      isLoading.value = false;
+    if (_lastLoadRemoteConfirmed) {
+      unawaited(_cacheVerifiedFarmerFarms());
     }
   }
 
@@ -677,6 +641,7 @@ class FarmController extends GetxController {
             !_phoneOwnerFallbackAttempted &&
             _activeVerifiedSessionKey == _lastPhoneOwnerFallbackSessionKey) {
           _phoneOwnerFallbackAttempted = true;
+          _lastLoadUsedCachedFallback = true;
           return await _service.getFarms(jwt, ownerUserId: ownerUserId);
         }
         rethrow;
@@ -687,12 +652,6 @@ class FarmController extends GetxController {
         return phoneFarms;
       }
 
-      if (ownerUserId != null &&
-          !_phoneOwnerFallbackAttempted &&
-          _activeVerifiedSessionKey == _lastPhoneOwnerFallbackSessionKey) {
-        _phoneOwnerFallbackAttempted = true;
-        return await _service.getFarms(jwt, ownerUserId: ownerUserId);
-      }
       return phoneFarms;
     }
 
@@ -951,17 +910,29 @@ class FarmController extends GetxController {
     bool showSnackbars = true,
     bool waitForRemoteConfirmation = false,
   }) async {
-    lastSaveErrorMessage.value = '';
     try {
       await _ensureSatelliteSessionFromMainAuth();
-      if (points.length < 3) {
-        lastSaveErrorMessage.value = UiStrings.t(
-          'add_boundary_points_before_save',
-        );
+      final boundaryIssue = PolygonGeometry.boundaryIssue(points);
+      if (boundaryIssue != null) {
         if (showSnackbars) {
           Get.snackbar(
-            UiStrings.t('too_few_points'),
-            UiStrings.t('add_boundary_points_before_save'),
+            boundaryIssue == PolygonBoundaryIssue.tooFewDistinctPoints
+                ? UiStrings.t('too_few_points')
+                : UiStrings.t('invalid_farm_boundary'),
+            switch (boundaryIssue) {
+              PolygonBoundaryIssue.tooFewDistinctPoints => UiStrings.t(
+                'add_boundary_points_before_save',
+              ),
+              PolygonBoundaryIssue.repeatedPoint => UiStrings.t(
+                'boundary_point_repeated',
+              ),
+              PolygonBoundaryIssue.selfIntersection => UiStrings.t(
+                'boundary_lines_cross',
+              ),
+              PolygonBoundaryIssue.zeroArea => UiStrings.t(
+                'boundary_has_no_area',
+              ),
+            },
             snackPosition: SnackPosition.BOTTOM,
           );
         }
@@ -975,24 +946,9 @@ class FarmController extends GetxController {
 
       final bounds = PolygonGeometry.bounds(points);
       final areaHa = PolygonGeometry.areaHectares(points);
-      if (areaHa <= 0) {
-        lastSaveErrorMessage.value = UiStrings.t(
-          'add_boundary_points_before_save',
-        );
-        if (showSnackbars) {
-          Get.snackbar(
-            UiStrings.t('too_few_points'),
-            UiStrings.t('add_boundary_points_before_save'),
-            snackPosition: SnackPosition.BOTTOM,
-          );
-        }
-        return null;
-      }
-
       final userId = _currentUserId;
       final jwt = _jwt;
       if (jwt.trim().isEmpty || userId == null || userId.trim().isEmpty) {
-        lastSaveErrorMessage.value = UiStrings.t('farm_link_login_required');
         if (showSnackbars) {
           Get.snackbar(
             UiStrings.t('login_required'),
@@ -1073,11 +1029,10 @@ class FarmController extends GetxController {
       return farm;
     } catch (e) {
       Get.log('Farm save failed: $e');
-      lastSaveErrorMessage.value = _farmSaveErrorMessage(e);
       if (showSnackbars) {
         Get.snackbar(
           UiStrings.t('error'),
-          lastSaveErrorMessage.value,
+          _farmSaveErrorMessage(e),
           snackPosition: SnackPosition.BOTTOM,
         );
       }

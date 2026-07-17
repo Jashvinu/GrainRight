@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/form_config.dart';
 import '../../services/map_tile_provider.dart';
@@ -36,9 +37,9 @@ class PolygonPromptWidget extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 19),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Pan to the farm and mark the boundary points on the map.',
-              style: TextStyle(fontSize: 16),
+            Text(
+              UiStrings.t('pan_to_farm_mark_boundary'),
+              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 14),
             SizedBox(
@@ -56,7 +57,7 @@ class PolygonPromptWidget extends StatelessWidget {
                   ),
                 ),
                 icon: const Icon(Icons.edit_location_alt_rounded, size: 22),
-                label: const Text('Draw farm boundary'),
+                label: Text(UiStrings.t('draw_farm_boundary')),
               ),
             ),
             if (onSkip != null) ...[
@@ -72,7 +73,7 @@ class PolygonPromptWidget extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  child: const Text('Skip — I will do this later'),
+                  child: Text(UiStrings.t('skip_boundary_for_now')),
                 ),
               ),
             ],

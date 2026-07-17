@@ -4,6 +4,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../services/local_app_database.dart';
 import '../services/location_service.dart';
@@ -11,7 +13,6 @@ import '../services/map_tile_cache_service.dart';
 import '../services/map_tile_provider.dart';
 import '../services/network_status_service.dart';
 import '../services/offline_map_service.dart';
-import '../services/policy_disclosure_service.dart';
 
 class PolygonMapField extends StatefulWidget {
   final String label;
@@ -105,18 +106,6 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
   }
 
   Future<void> _loadLocation() async {
-    final canUseLocation = await PolicyDisclosureService.confirmLocationUse(
-      context,
-    );
-    if (!mounted) return;
-    if (!canUseLocation) {
-      final fallbackRegion = await _preferredOfflineRegion(_downloadedRegions);
-      if (fallbackRegion != null) {
-        _focusOfflineRegion(fallbackRegion, showSnack: false);
-      }
-      return;
-    }
-
     final quickLocation = await _locationService.getLastKnownLocation();
     if (!mounted) return;
     if (quickLocation != null) {
@@ -177,10 +166,10 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
             itemBuilder: (context, index) {
               if (index == 0) {
-                return const Padding(
+                return Padding(
                   padding: EdgeInsets.only(bottom: 4),
                   child: Text(
-                    'Select downloaded field map',
+                    UiStrings.t('select_downloaded_field_map'),
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                   ),
                 );
@@ -303,7 +292,13 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
     setState(() => _searching = true);
     _searchDebounce = Timer(const Duration(milliseconds: 300), () async {
       try {
-        final predictions = await _mapSearchService.searchPlaces(query);
+        final proximity = _mapReady ? _controller.camera.center : _center;
+        final predictions = await _mapSearchService.searchPlaces(
+          query,
+          languageCode: LocaleText.languageCode(),
+          proximityLatitude: proximity.latitude,
+          proximityLongitude: proximity.longitude,
+        );
         if (!mounted || generation != _searchGeneration) return;
         setState(() => _predictions = predictions);
       } catch (e) {
@@ -443,8 +438,8 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                     },
                   ),
                   children: [
-                    const OfflineMapBackground(
-                      message: 'Offline map\nTap points to mark boundary',
+                    OfflineMapBackground(
+                      message: UiStrings.t('offline_map_tap_boundary'),
                     ),
                     OfflineAwareTileLayer(
                       urlTemplate: fieldImageryTileUrl,
@@ -505,7 +500,9 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                                 controller: _searchController,
                                 onChanged: _searchPlaces,
                                 decoration: InputDecoration(
-                                  hintText: 'Search location...',
+                                  hintText: UiStrings.t(
+                                    'search_village_field_area',
+                                  ),
                                   border: InputBorder.none,
                                   prefixIcon: const Icon(
                                     Icons.search,
@@ -553,7 +550,7 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
                             borderRadius: BorderRadius.circular(8),
                             elevation: 2,
                             child: IconButton(
-                              tooltip: 'Downloaded maps',
+                              tooltip: UiStrings.t('downloaded_maps'),
                               onPressed: _loadingDownloadedMaps
                                   ? null
                                   : _selectDownloadedMap,
@@ -686,11 +683,11 @@ class _PolygonMapFieldState extends State<PolygonMapField> {
           ),
         ),
         if (widget.hasError)
-          const Padding(
-            padding: EdgeInsets.only(top: 8.0, left: 12.0),
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0, left: 12.0),
             child: Text(
-              'Location matching farm is required',
-              style: TextStyle(color: Colors.red, fontSize: 12),
+              UiStrings.t('farm_location_required'),
+              style: const TextStyle(color: Colors.red, fontSize: 12),
             ),
           ),
         const SizedBox(height: 14),
@@ -723,13 +720,13 @@ class _MapZoomControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Zoom in',
+            tooltip: UiStrings.t('zoom_in'),
             onPressed: onZoomIn,
             icon: const Icon(Icons.add_rounded),
           ),
           const Divider(height: 1),
           IconButton(
-            tooltip: 'Zoom out',
+            tooltip: UiStrings.t('zoom_out'),
             onPressed: onZoomOut,
             icon: const Icon(Icons.remove_rounded),
           ),

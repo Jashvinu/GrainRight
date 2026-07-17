@@ -44,6 +44,20 @@ const SCOUT_ZONE_MAX = 5; // max scout zones returned per scan
 const HOTSPOT_DIST_M = 90; // Getis-Ord Gi* neighbourhood distance band
 const HOTSPOT_Z_SIG = 1.96; // |z| > 1.96 ≈ 95% significant hot cluster
 
+function cropFamily(value: unknown): "rice" | "millet" {
+  const crop = text(value).toLowerCase();
+  if (
+    crop.includes("millet") ||
+    crop.includes("bajra") ||
+    crop.includes("ragi") ||
+    crop.includes("jowar") ||
+    crop.includes("sorghum")
+  ) {
+    return "millet";
+  }
+  return "rice";
+}
+
 function createSupabaseClient(req: Request) {
   const url = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -371,13 +385,23 @@ function buildSentinelCollection(
   eeGeometry: any,
   startDate: string,
   endDate: string,
+  maxCloudPercentage = 85,
 ): any {
   return ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
     .filterBounds(eeGeometry)
     .filterDate(startDate, endDate)
-    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 30))
+    .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", maxCloudPercentage))
+    .sort("system:time_start", false)
+    .limit(12)
     .map((img: any) => {
-      return img.select(
+      const scl = img.select("SCL");
+      const clearPixelMask = scl.neq(1)
+        .and(scl.neq(3))
+        .and(scl.neq(8))
+        .and(scl.neq(9))
+        .and(scl.neq(10))
+        .and(scl.neq(11));
+      return img.updateMask(clearPixelMask).select(
         ["B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B11", "B12"],
         [
           "blue",
@@ -411,9 +435,7 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const farmId = String(body.farm_id ?? "");
-    const crop = String(body.crop ?? "rice").toLowerCase() === "millet"
-      ? "millet"
-      : "rice" as "rice" | "millet";
+    const crop = cropFamily(body.crop ?? "rice");
     const season = String(body.season ?? "kharif").toLowerCase() === "rabi"
       ? "rabi"
       : "kharif" as "kharif" | "rabi";
@@ -453,19 +475,20 @@ Deno.serve(async (req) => {
     await initializeEarthEngine();
     const eeGeometry = ee.Geometry(geometry);
 
-    // Build date window (14 days)
+    // Use recent clear pixels instead of rejecting a whole monsoon scene.
+    // The median is capped to the latest 12 scenes in this lookback.
     const requestedStartDate = text(body.start_date);
     const endDate = text(body.end_date) || scanDate;
     let startDate = requestedStartDate.length > 0
       ? requestedStartDate
-      : new Date(new Date(endDate).getTime() - 14 * 86400000)
+      : new Date(new Date(endDate).getTime() - 90 * 86400000)
         .toISOString().split("T")[0];
 
     // Load Sentinel-2 harmonized collection
     let s2Collection = buildSentinelCollection(eeGeometry, startDate, endDate);
     let imageCount: number = await evaluate(s2Collection.size());
     if (imageCount === 0 && requestedStartDate.length === 0) {
-      startDate = new Date(new Date(endDate).getTime() - 60 * 86400000)
+      startDate = new Date(new Date(endDate).getTime() - 180 * 86400000)
         .toISOString().split("T")[0];
       s2Collection = buildSentinelCollection(eeGeometry, startDate, endDate);
       imageCount = await evaluate(s2Collection.size());
@@ -498,15 +521,31 @@ Deno.serve(async (req) => {
     const baselineCollection = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
       .filterBounds(eeGeometry)
       .filterDate(baselineStart, startDate)
-      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 30))
-      .map((img: any) =>
-        img.select(["B4", "B8"], ["red", "nir"]).multiply(0.0001)
-          .normalizedDifference(["nir", "red"]).rename("NDVI")
-      );
-    const baselineMean = baselineCollection.mean().rename("NDVI_baseline");
-    const baselineSd = baselineCollection.reduce(ee.Reducer.stdDev()).rename(
-      "NDVI_baseline_sd",
-    );
+      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 85))
+      .map((img: any) => {
+        const scl = img.select("SCL");
+        const clearPixelMask = scl.neq(1)
+          .and(scl.neq(3))
+          .and(scl.neq(8))
+          .and(scl.neq(9))
+          .and(scl.neq(10))
+          .and(scl.neq(11));
+        return img.updateMask(clearPixelMask)
+          .select(["B4", "B8"], ["red", "nir"])
+          .multiply(0.0001)
+          .normalizedDifference(["nir", "red"]).rename("NDVI");
+      })
+      .sort("system:time_start", false)
+      .limit(12);
+    const baselineCount: number = await evaluate(baselineCollection.size());
+    const baselineMean = baselineCount > 0
+      ? baselineCollection.mean().rename("NDVI_baseline")
+      : diseaseIndices.ndviImage.rename("NDVI_baseline");
+    const baselineSd = baselineCount > 0
+      ? baselineCollection.reduce(ee.Reducer.stdDev()).rename(
+        "NDVI_baseline_sd",
+      )
+      : ee.Image.constant(0.1).rename("NDVI_baseline_sd");
 
     // Thermal water-stress proxy (Landsat/MODIS LST) for confounder reduction
     const thermalStressImage = await computeThermalStress(
@@ -694,8 +733,9 @@ Deno.serve(async (req) => {
 
       // upsert in batches of 100
       for (let i = 0; i < rows.length; i += 100) {
-        const { error } = await supabase.from("disease_risk_cells").insert(
+        const { error } = await supabase.from("disease_risk_cells").upsert(
           rows.slice(i, i + 100),
+          { onConflict: "farm_id,scan_date,cell_lat,cell_lng" },
         );
         if (error) {
           throw new Error(
@@ -724,21 +764,24 @@ Deno.serve(async (req) => {
       for (let i = 0; i < scoutZones.length; i++) {
         const { data: zoneRow, error: insertZoneError } = await supabase
           .from("disease_scout_zones")
-          .insert({
-            farm_id: farmId,
-            scan_date: scanDate,
-            zone_rank: i + 1,
-            centroid_lat: scoutZones[i].centroid_lat,
-            centroid_lng: scoutZones[i].centroid_lng,
-            radius_meters: scoutZones[i].radius_meters,
-            disease_candidates: scoutZones[i].disease_candidates,
-            max_risk_score: scoutZones[i].max_risk_score,
-            cell_count: scoutZones[i].cell_count,
-            hotspot_z: scoutZones[i].hotspot_z,
-            significance: scoutZones[i].significance,
-            crop,
-            growth_stage: body.growth_stage ?? growthStage,
-          })
+          .upsert(
+            {
+              farm_id: farmId,
+              scan_date: scanDate,
+              zone_rank: i + 1,
+              centroid_lat: scoutZones[i].centroid_lat,
+              centroid_lng: scoutZones[i].centroid_lng,
+              radius_meters: scoutZones[i].radius_meters,
+              disease_candidates: scoutZones[i].disease_candidates,
+              max_risk_score: scoutZones[i].max_risk_score,
+              cell_count: scoutZones[i].cell_count,
+              hotspot_z: scoutZones[i].hotspot_z,
+              significance: scoutZones[i].significance,
+              crop,
+              growth_stage: body.growth_stage ?? growthStage,
+            },
+            { onConflict: "farm_id,scan_date,zone_rank" },
+          )
           .select()
           .maybeSingle();
         if (insertZoneError) {

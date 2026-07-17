@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../controllers/form_controller.dart';
 import 'acre_input.dart';
@@ -36,8 +38,8 @@ class MilletLandPickerField extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'How to enter millet land area?',
-                  style: TextStyle(
+                  UiStrings.t('how_enter_millet_land'),
+                  style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppTheme.greenDark,
@@ -47,7 +49,7 @@ class MilletLandPickerField extends StatelessWidget {
                 Row(
                   children: [
                     _ModeChip(
-                      label: 'One total area',
+                      label: UiStrings.t('one_total_area'),
                       icon: Icons.straighten_rounded,
                       selected: mode == 'total',
                       onTap: () {
@@ -58,7 +60,7 @@ class MilletLandPickerField extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
                     _ModeChip(
-                      label: 'Per millet type',
+                      label: UiStrings.t('per_millet_type'),
                       icon: Icons.grid_view_rounded,
                       selected: mode == 'per_type',
                       onTap: () {
@@ -91,7 +93,7 @@ class MilletLandPickerField extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      'Select millet types above first',
+                      UiStrings.t('select_millet_types_first'),
                       style: TextStyle(fontSize: 13, color: Colors.orange[700]),
                     ),
                   ],
@@ -100,7 +102,9 @@ class MilletLandPickerField extends StatelessWidget {
             else
               for (final millet in selectedMillets)
                 AcreInput(
-                  label: 'Land under $millet',
+                  label: UiStrings.f('land_under_crop', {
+                    'crop': c.localizedOptionLabel('millet_seed_type', millet),
+                  }),
                   controller: c.milletLandController(millet),
                 ),
 
@@ -123,15 +127,17 @@ class MilletLandPickerField extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Total land under millet',
-                      style: TextStyle(
+                      UiStrings.t('total_land_under_millet'),
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.greenDark,
                       ),
                     ),
                     Text(
-                      '${total.toStringAsFixed(2)} ac',
+                      UiStrings.f('acres_value', {
+                        'value': LocaleText.number(total, fractionDigits: 2),
+                      }),
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,

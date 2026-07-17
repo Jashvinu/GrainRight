@@ -555,6 +555,84 @@ class _MarketplacePageState extends State<MarketplacePage> {
       final lots = _visibleLots;
       final farmerListings = _visibleFarmerListings;
       final buyerListings = _visibleBuyerListings;
+      final marketActions = <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: Center(child: _buildLanguageSelector(compact: true)),
+        ),
+      ];
+      final marketBody = SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(
+                  18,
+                  10,
+                  18,
+                  widget.buyerMode ? 28 : 150,
+                ),
+                children: [
+                  _CropFilterBar(
+                    crops: _cropOptions,
+                    selected: _selectedCrop,
+                    onSelected: (crop) => setState(() => _selectedCrop = crop),
+                  ),
+                  const SizedBox(height: 14),
+                  _ApmcSaleWindowCard(
+                    selectedCrop: _selectedCrop,
+                    modalRate: _bestRate,
+                  ),
+                  const SizedBox(height: 14),
+                  if (widget.buyerMode) ...[
+                    ..._buildBuyerListingSection(buyerListings),
+                    const SizedBox(height: 6),
+                    ..._buildRateSection(rates),
+                  ] else ...[
+                    ..._buildRateSection(rates),
+                    const SizedBox(height: 6),
+                    ..._buildSellableProductSections(lots),
+                    const SizedBox(height: 6),
+                    ..._buildFarmerListingSection(farmerListings),
+                  ],
+                  const SizedBox(height: 6),
+                  _SectionHeader(
+                    icon: Icons.place_rounded,
+                    title: UiStrings.t('nearby_market_choices'),
+                    actionLabel: UiStrings.t('route_plan'),
+                  ),
+                  const SizedBox(height: 10),
+                  _NearbyMarketPanel(),
+                  const SizedBox(height: 14),
+                  _ApmcChecklistPanel(),
+                ],
+              ),
+            ),
+            if (!widget.buyerMode)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+                  child: FarmerFloatingBottomNav(
+                    selectedItem: FarmerBottomNavItem.marketplace,
+                    onSelected: _handleBottomNav,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+
+      if (widget.buyerMode) {
+        return FpcWorkspaceScaffold(
+          current: FpcNavTab.marketplace,
+          title: UiStrings.t('apmc_market'),
+          actions: marketActions,
+          body: marketBody,
+        );
+      }
 
       return Scaffold(
         extendBody: true,
@@ -568,73 +646,9 @@ class _MarketplacePageState extends State<MarketplacePage> {
           leadingWidth: appBackButtonLeadingWidth,
           leading: appBackButtonLeading(context),
           title: const BrandText(fontSize: 21),
-          actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Center(child: _buildLanguageSelector(compact: true)),
-            ),
-          ],
+          actions: marketActions,
         ),
-        body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 150),
-                  children: [
-                    _CropFilterBar(
-                      crops: _cropOptions,
-                      selected: _selectedCrop,
-                      onSelected: (crop) =>
-                          setState(() => _selectedCrop = crop),
-                    ),
-                    const SizedBox(height: 14),
-                    _ApmcSaleWindowCard(
-                      selectedCrop: _selectedCrop,
-                      modalRate: _bestRate,
-                    ),
-                    const SizedBox(height: 14),
-                    if (widget.buyerMode) ...[
-                      ..._buildBuyerListingSection(buyerListings),
-                      const SizedBox(height: 6),
-                      ..._buildRateSection(rates),
-                    ] else ...[
-                      ..._buildRateSection(rates),
-                      const SizedBox(height: 6),
-                      ..._buildSellableProductSections(lots),
-                      const SizedBox(height: 6),
-                      ..._buildFarmerListingSection(farmerListings),
-                    ],
-                    const SizedBox(height: 6),
-                    _SectionHeader(
-                      icon: Icons.place_rounded,
-                      title: UiStrings.t('nearby_market_choices'),
-                      actionLabel: UiStrings.t('route_plan'),
-                    ),
-                    const SizedBox(height: 10),
-                    _NearbyMarketPanel(),
-                    const SizedBox(height: 14),
-                    _ApmcChecklistPanel(),
-                  ],
-                ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-                  child: widget.buyerMode
-                      ? const FpcBottomNavBar(current: FpcNavTab.marketplace)
-                      : FarmerFloatingBottomNav(
-                          selectedItem: FarmerBottomNavItem.marketplace,
-                          onSelected: _handleBottomNav,
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        body: marketBody,
       );
     }
 

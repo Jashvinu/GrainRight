@@ -352,6 +352,10 @@ class _FarmerFarmSetupChatScreenState extends State<FarmerFarmSetupChatScreen> {
     }
 
     final ring = PolygonGeometry.fromGeoJsonRing(polygon);
+    if (!PolygonGeometry.isValidBoundary(ring)) {
+      _appendMessage(UiStrings.t('invalid_farm_boundary'), isUser: false);
+      return;
+    }
     final hectares = PolygonGeometry.areaHectares(ring);
     final acres = hectares * 2.47105;
     _polygon

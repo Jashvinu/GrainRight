@@ -49,7 +49,7 @@ function pick(series: WeatherSeries | undefined, key: string, index: number) {
 }
 
 function sum(values: unknown[]): number {
-  return values.reduce((total, value) => {
+  return values.reduce<number>((total, value) => {
     const n = Number(value);
     return total + (Number.isFinite(n) ? n : 0);
   }, 0);
