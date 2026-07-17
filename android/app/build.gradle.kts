@@ -78,9 +78,9 @@ gradle.taskGraph.whenReady {
 }
 
 android {
-    namespace = "grainright.wrkfarm"
+    namespace = "kalsubai.wrkfarm"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -139,6 +139,14 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            // GrainRight only uses the legacy SharedPreferences API. DataStore's
+            // unused r20 prebuilt is excluded until AndroidX ships an r28 build.
+            excludes += "**/libdatastore_shared_counter.so"
+        }
+    }
+
     buildTypes {
         debug {
             manifestPlaceholders["appLabel"] = "Kalsubai Farms"
@@ -147,6 +155,12 @@ android {
             if (keyPropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
@@ -156,7 +170,12 @@ flutter {
 }
 
 dependencies {
+    implementation("androidx.activity:activity:1.13.0")
     implementation("androidx.core:core:1.18.0")
+    implementation("androidx.datastore:datastore-preferences:1.2.1")
+    implementation("androidx.window:window:1.5.1")
+    implementation("androidx.window:window-java:1.5.1")
+    implementation("com.razorpay:checkout:1.6.41")
 }
 
 kotlin {

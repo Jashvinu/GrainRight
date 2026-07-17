@@ -1,4 +1,4 @@
-package grainright.wrkfarm
+package kalsubai.wrkfarm
 
 import android.Manifest
 import android.app.Notification
@@ -13,11 +13,11 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import androidx.core.view.WindowCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     private val configChannel = "grainright.wrkfarm/config"
     private val notificationChannel = "grainright.wrkfarm/notifications"
     private val notificationChannelId = "farmer_alerts"
@@ -27,8 +27,8 @@ class MainActivity : FlutterActivity() {
     private var pendingNotificationPayload: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        WindowCompat.enableEdgeToEdge(window)
         super.onCreate(savedInstanceState)
+        WindowCompat.enableEdgeToEdge(window)
         captureNotificationPayload(intent)
     }
 
