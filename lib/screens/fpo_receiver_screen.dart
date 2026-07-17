@@ -7,7 +7,7 @@ import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../services/fpc_procurement_service.dart';
-import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import '../services/fpc_preferences_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoReceiverScreen extends StatefulWidget {
@@ -76,7 +76,9 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
 
   void _onDetect(BarcodeCapture capture) {
     if (_scanLocked) return;
-    final value = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
+    final value = capture.barcodes.isEmpty
+        ? null
+        : capture.barcodes.first.rawValue;
     if (value == null || value.trim().isEmpty) return;
     _scanLocked = true;
     unawaited(_scanner.stop());
@@ -91,6 +93,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
         _error = null;
         _scannerVisible = false;
       });
+      unawaited(FpcPreferences.playScannerFeedbackIfEnabled());
     } on FpcProcurementException catch (e) {
       setState(() {
         _trace = null;
@@ -100,7 +103,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
     } catch (_) {
       setState(() {
         _trace = null;
-      _error = UiStrings.t('could_not_read_harvest_qr');
+        _error = UiStrings.t('could_not_read_harvest_qr');
         _scanLocked = false;
       });
     }
@@ -161,16 +164,9 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      extendBody: true,
-      bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.receiver),
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leadingWidth: appBackButtonLeadingWidth,
-        leading: appBackButtonLeading(context),
-        title: Text(UiStrings.t('fpc_receiver')),
-      ),
+    return FpcWorkspaceScaffold(
+      current: FpcNavTab.receiver,
+      title: UiStrings.t('fpc_receiver'),
       body: RefreshIndicator(
         onRefresh: _loadRecords,
         child: ListView(
@@ -297,7 +293,11 @@ class _ScannerFrame extends StatelessWidget {
           border: Border.all(color: Colors.white, width: 3),
         ),
         child: const Center(
-          child: Icon(Icons.inventory_2_rounded, color: Colors.white70, size: 56),
+          child: Icon(
+            Icons.inventory_2_rounded,
+            color: Colors.white70,
+            size: 56,
+          ),
         ),
       ),
     );
@@ -428,7 +428,10 @@ class _TraceReceiveCard extends StatelessWidget {
                   label: UiStrings.t('village'),
                   value: _text(trace, 'village'),
                 ),
-                _ReceiveRow(label: UiStrings.t('crop'), value: _text(trace, 'crop')),
+                _ReceiveRow(
+                  label: UiStrings.t('crop'),
+                  value: _text(trace, 'crop'),
+                ),
                 _ReceiveRow(
                   label: UiStrings.t('product'),
                   value: _text(trace, 'product'),
@@ -437,7 +440,10 @@ class _TraceReceiveCard extends StatelessWidget {
                   label: UiStrings.t('variety'),
                   value: _text(trace, 'variety'),
                 ),
-                _ReceiveRow(label: UiStrings.t('bags'), value: _bagLabel(trace)),
+                _ReceiveRow(
+                  label: UiStrings.t('bags'),
+                  value: _bagLabel(trace),
+                ),
                 _ReceiveRow(label: UiStrings.t('quantity'), value: quantity),
                 _ReceiveRow(label: UiStrings.t('moisture'), value: moisture),
                 _ReceiveRow(
@@ -469,7 +475,9 @@ class _TraceReceiveCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: priceController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
                   decoration: InputDecoration(
                     labelText: UiStrings.t('price_per_kg'),
                     prefixIcon: const Icon(Icons.currency_rupee),
@@ -763,7 +771,11 @@ class _ReceiverError extends StatelessWidget {
   }
 }
 
-String _text(Map<String, dynamic> source, String key, [String fallback = '--']) {
+String _text(
+  Map<String, dynamic> source,
+  String key, [
+  String fallback = '--',
+]) {
   final value = source[key];
   final text = value == null ? '' : '$value'.trim();
   if (text.isEmpty || text == '--' || text.toLowerCase() == 'unknown') {
@@ -809,7 +821,9 @@ String _bagLabel(Map<String, dynamic> source) {
 String _percentLabel(Map<String, dynamic> source, String key) {
   final value = _text(source, key);
   if (value == '--') return value;
-  return value.endsWith('%') ? LocaleText.digits(value) : '${LocaleText.digits(value)}%';
+  return value.endsWith('%')
+      ? LocaleText.digits(value)
+      : '${LocaleText.digits(value)}%';
 }
 
 String _dateTimeLabel(Map<String, dynamic> source) {

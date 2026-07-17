@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -7,7 +6,8 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
-import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import '../services/fpc_procurement_service.dart';
+import '../services/fpc_preferences_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoFarmerQrScanScreen extends StatefulWidget {
@@ -18,7 +18,6 @@ class FpoFarmerQrScanScreen extends StatefulWidget {
 }
 
 class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
-  final _payloadCtrl = TextEditingController();
   final _scanner = MobileScannerController(
     formats: const [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.noDuplicates,
@@ -30,45 +29,39 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
 
   @override
   void dispose() {
-    _payloadCtrl.dispose();
     _scanner.dispose();
     super.dispose();
   }
 
   void _onDetect(BarcodeCapture capture) {
     if (_scanLocked) return;
-    final value = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
+    final value = capture.barcodes.isEmpty
+        ? null
+        : capture.barcodes.first.rawValue;
     if (value == null || value.trim().isEmpty) return;
     _scanLocked = true;
     unawaited(_scanner.stop());
-    _payloadCtrl.text = value;
-    _scanPayload(value, fromCamera: true);
+    _scanPayload(value);
   }
 
-  void _scanPayload(String payload, {bool fromCamera = false}) {
+  void _scanPayload(String payload) {
     try {
-      final decoded = jsonDecode(payload);
-      if (decoded is! Map) {
-        throw FormatException(UiStrings.t('invalid_farmer_qr'));
-      }
-      final farmer = Map<String, dynamic>.from(decoded);
-      if (farmer['type'] != 'farmer_profile' ||
-          farmer['allowedRole'] != 'fpo_fpc') {
-        throw FormatException(UiStrings.t('farmer_qr_not_fpo_access'));
-      }
+      final farmer = FarmerProfileQrParser.parse(payload);
       setState(() {
         _farmer = farmer;
         _error = null;
         _scannerVisible = false;
       });
+      unawaited(FpcPreferences.playScannerFeedbackIfEnabled());
     } catch (error) {
-      final message = error is FormatException && error.message.isNotEmpty
+      final message =
+          error is FpcProcurementException && error.message.isNotEmpty
           ? error.message
           : UiStrings.t('farmer_qr_scan_failed');
       setState(() {
         _farmer = null;
         _error = message;
-        if (!fromCamera) _scanLocked = false;
+        _scanLocked = false;
       });
     }
   }
@@ -84,16 +77,9 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      extendBody: true,
-      bottomNavigationBar: const FpcBottomNavBar(current: FpcNavTab.farmerScan),
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leadingWidth: appBackButtonLeadingWidth,
-        leading: appBackButtonLeading(context),
-        title: Text(UiStrings.t('scan_farmer_qr')),
-      ),
+    return FpcWorkspaceScaffold(
+      current: FpcNavTab.farmerScan,
+      title: UiStrings.t('scan_farmer_qr'),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 128),
         children: [
@@ -102,8 +88,6 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
             scannerVisible: _scannerVisible,
             onDetect: _onDetect,
             onRestart: _restartScanner,
-            payloadController: _payloadCtrl,
-            onVerify: () => _scanPayload(_payloadCtrl.text.trim()),
           ),
           if (_error != null) ...[
             const SizedBox(height: 16),
@@ -124,16 +108,12 @@ class _ScannerCard extends StatelessWidget {
   final bool scannerVisible;
   final void Function(BarcodeCapture capture) onDetect;
   final Future<void> Function() onRestart;
-  final TextEditingController payloadController;
-  final VoidCallback onVerify;
 
   const _ScannerCard({
     required this.controller,
     required this.scannerVisible,
     required this.onDetect,
     required this.onRestart,
-    required this.payloadController,
-    required this.onVerify,
   });
 
   @override
@@ -195,22 +175,6 @@ class _ScannerCard extends StatelessWidget {
                     label: Text(UiStrings.t('open_camera_scanner')),
                   ),
           ),
-          const SizedBox(height: 18),
-          TextField(
-            controller: payloadController,
-            minLines: 3,
-            maxLines: 5,
-            decoration: InputDecoration(
-              labelText: UiStrings.t('qr_payload'),
-              hintText: UiStrings.t('paste_farmer_qr_payload'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: onVerify,
-            icon: const Icon(Icons.verified_user_outlined),
-            label: Text(UiStrings.t('verify_farmer')),
-          ),
         ],
       ),
     );
@@ -264,7 +228,10 @@ class _ScanError extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(onPressed: onRetry, child: Text(UiStrings.t('scan_again'))),
+          TextButton(
+            onPressed: onRetry,
+            child: Text(UiStrings.t('scan_again')),
+          ),
         ],
       ),
     );
@@ -284,7 +251,11 @@ class _FarmerResultCard extends StatelessWidget {
     final crop = _text(currentCrop, 'crop', _text(farmer, 'crop'));
     final variety = _text(currentCrop, 'variety', _text(farmer, 'variety'));
     final grade = _text(farmer, 'lastGrade', _text(currentCrop, 'grade'));
-    final yield = _text(farmer, 'lastYield', _text(currentCrop, 'expectedYield'));
+    final yield = _text(
+      farmer,
+      'lastYield',
+      _text(currentCrop, 'expectedYield'),
+    );
     final rating = _text(farmer, 'fpcRating', UiStrings.t('not_rated'));
 
     return Container(
@@ -351,14 +322,23 @@ class _FarmerResultCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _ResultRow(label: UiStrings.t('phone'), value: _text(farmer, 'phone')),
-          _ResultRow(label: UiStrings.t('village'), value: _text(farmer, 'village')),
+          _ResultRow(
+            label: UiStrings.t('phone'),
+            value: _text(farmer, 'phone'),
+          ),
+          _ResultRow(
+            label: UiStrings.t('village'),
+            value: _text(farmer, 'village'),
+          ),
           _ResultRow(
             label: UiStrings.t('primary_farm'),
             value: _text(farmer, 'primaryFarm'),
           ),
           _ResultRow(label: UiStrings.t('area'), value: _text(farmer, 'area')),
-          _ResultRow(label: UiStrings.t('detail'), value: _text(farmer, 'detail')),
+          _ResultRow(
+            label: UiStrings.t('detail'),
+            value: _text(farmer, 'detail'),
+          ),
           const SizedBox(height: 12),
           _DetailSection(
             title: UiStrings.t('current_crop'),
@@ -377,7 +357,10 @@ class _FarmerResultCard extends StatelessWidget {
                 label: UiStrings.t('grade'),
                 value: _text(currentCrop, 'grade', grade),
               ),
-              _ResultRow(label: UiStrings.t('detail'), value: _text(currentCrop, 'detail')),
+              _ResultRow(
+                label: UiStrings.t('detail'),
+                value: _text(currentCrop, 'detail'),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -441,9 +424,21 @@ class _FarmerResultCard extends StatelessWidget {
       ),
       'fpcCustomerName': farmerName,
       'farmId': _text(farmer, 'farmId', farmerId),
-      'farmName': _text(farmer, 'primaryFarm', UiStrings.t('fpc_customer_farm')),
-      'crop': _text(currentCrop, 'crop', _text(farmer, 'crop', 'Finger Millet')),
-      'variety': _text(currentCrop, 'variety', _text(farmer, 'variety', 'Local')),
+      'farmName': _text(
+        farmer,
+        'primaryFarm',
+        UiStrings.t('fpc_customer_farm'),
+      ),
+      'crop': _text(
+        currentCrop,
+        'crop',
+        _text(farmer, 'crop', 'Finger Millet'),
+      ),
+      'variety': _text(
+        currentCrop,
+        'variety',
+        _text(farmer, 'variety', 'Local'),
+      ),
       'village': _text(farmer, 'village'),
       'product': _text(farmer, 'product'),
     };
@@ -557,44 +552,44 @@ class _HistorySection extends StatelessWidget {
               ),
             ]
           : rows
-              .map(
-                (row) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        fields
-                            .take(2)
-                            .map((field) => _text(row, field))
-                            .where((value) => value != '--')
-                            .map(UiStrings.label)
-                            .join(' - '),
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w900,
+                .map(
+                  (row) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fields
+                              .take(2)
+                              .map((field) => _text(row, field))
+                              .where((value) => value != '--')
+                              .map(UiStrings.label)
+                              .join(' - '),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        fields
-                            .skip(2)
-                            .map((field) => _text(row, field))
-                            .where((value) => value != '--')
-                            .map(UiStrings.label)
-                            .join(' - '),
-                        style: const TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
+                        const SizedBox(height: 4),
+                        Text(
+                          fields
+                              .skip(2)
+                              .map((field) => _text(row, field))
+                              .where((value) => value != '--')
+                              .map(UiStrings.label)
+                              .join(' - '),
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            height: 1.35,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              )
-              .toList(),
+                )
+                .toList(),
     );
   }
 }
@@ -652,7 +647,11 @@ List<Map<String, dynamic>> _listValue(Object? raw) {
       .toList(growable: false);
 }
 
-String _text(Map<String, dynamic> source, String key, [String fallback = '--']) {
+String _text(
+  Map<String, dynamic> source,
+  String key, [
+  String fallback = '--',
+]) {
   final value = source[key];
   final text = value == null ? '' : '$value'.trim();
   return text.isEmpty ? fallback : text;

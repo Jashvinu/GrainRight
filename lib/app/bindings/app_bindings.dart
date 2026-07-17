@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 
+import '../../controllers/admin_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/connectivity_sync_controller.dart';
 import '../../controllers/farm_controller.dart';
@@ -64,6 +65,12 @@ class AppBindings {
   static void bindStakeholder() {
     if (!Get.isRegistered<StakeholderController>()) {
       Get.put(StakeholderController());
+    }
+  }
+
+  static void bindAdmin() {
+    if (!Get.isRegistered<AdminController>()) {
+      Get.put(AdminController());
     }
   }
 }

@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
-
-import '../config/supabase_config.dart';
-import 'backend_bridge_session.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FpcProcurementException implements Exception {
   final String message;
@@ -79,7 +76,7 @@ class HarvestTraceParser {
       throw const FpcProcurementException('Scan a valid harvest QR first.');
     }
     if (value.startsWith('{')) {
-      return _decodeJson(value);
+      return ensureHarvestTrace(_decodeJson(value));
     }
 
     final token = _extractTraceToken(value);
@@ -90,10 +87,62 @@ class HarvestTraceParser {
     }
     final normalized = _padBase64(token);
     try {
-      return _decodeJson(utf8.decode(base64Url.decode(normalized)));
+      return ensureHarvestTrace(
+        _decodeJson(utf8.decode(base64Url.decode(normalized))),
+      );
+    } on FpcProcurementException {
+      rethrow;
     } catch (_) {
       throw const FpcProcurementException('Harvest QR payload is invalid.');
     }
+  }
+
+  static Map<String, dynamic> ensureHarvestTrace(Map<String, dynamic> payload) {
+    if (_text(payload, 'type') == 'farmer_profile') {
+      throw const FpcProcurementException(
+        'This is a farmer profile QR. Use the farmer scanner for farmer profile QR.',
+      );
+    }
+    if (_text(payload, 'brand') != 'Kalsubai Farms' ||
+        _text(payload, 'traceType') != 'harvest' ||
+        _toInt(payload['traceVersion']) != 2) {
+      throw const FpcProcurementException(
+        'This is not an original Kalsubai harvest QR.',
+      );
+    }
+    const requiredFields = [
+      'analysisId',
+      'batchId',
+      'farm',
+      'farmId',
+      'farmerId',
+      'farmerName',
+      'crop',
+      'grade',
+      'score',
+      'bagSizeKg',
+      'bagCount',
+      'totalKg',
+      'moisture',
+    ];
+    final missing = requiredFields
+        .where((field) => _isBlankTraceValue(payload[field]))
+        .toList(growable: false);
+    if (missing.isNotEmpty) {
+      throw const FpcProcurementException(
+        'Harvest QR is missing required production data. Generate it again from the app.',
+      );
+    }
+    final batchId = _text(payload, 'batchId');
+    final reviewStatus = _text(payload, 'reviewStatus').toLowerCase();
+    if (batchId == 'KF-HV-20260606-001' ||
+        reviewStatus == 'pending' ||
+        reviewStatus == 'missing') {
+      throw const FpcProcurementException(
+        'This harvest QR is not ready for FPC receiving. Generate the final approved QR.',
+      );
+    }
+    return payload;
   }
 
   static Map<String, dynamic> _decodeJson(String source) {
@@ -121,38 +170,73 @@ class HarvestTraceParser {
   }
 }
 
-class FpcProcurementService {
-  static const _restBase = '${SupabaseConfig.url}/rest/v1';
+class FarmerProfileQrParser {
+  static Map<String, dynamic> parse(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty) {
+      throw const FpcProcurementException('Scan a valid farmer QR first.');
+    }
+    final decoded = _decodeJson(value);
+    if (_text(decoded, 'type') != 'farmer_profile' ||
+        _text(decoded, 'allowedRole') != 'fpo_fpc' ||
+        _text(decoded, 'brand') != 'Kalsubai Farms' ||
+        _text(decoded, 'source') != 'remote_supabase' ||
+        decoded['verified'] != true) {
+      throw const FpcProcurementException(
+        'This is not an original Kalsubai farmer QR.',
+      );
+    }
+    const requiredFields = [
+      'farmerId',
+      'farmerName',
+      'phone',
+      'village',
+      'primaryFarm',
+      'crop',
+    ];
+    final missing = requiredFields
+        .where((field) => _isBlankTraceValue(decoded[field]))
+        .toList(growable: false);
+    if (missing.isNotEmpty || !_isValidPhone(_text(decoded, 'phone'))) {
+      throw const FpcProcurementException(
+        'Farmer QR is missing verified farmer details. Open the farmer profile and generate it again.',
+      );
+    }
+    return decoded;
+  }
 
-  Future<BackendBridgeSession> _session() async {
+  static Map<String, dynamic> _decodeJson(String source) {
     try {
-      return await ensureBackendBridgeSession();
+      final decoded = jsonDecode(source);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
     } catch (_) {
+      throw const FpcProcurementException('Farmer QR payload is invalid.');
+    }
+    throw const FpcProcurementException('Farmer QR payload is invalid.');
+  }
+}
+
+class FpcProcurementService {
+  SupabaseClient get _client => Supabase.instance.client;
+
+  String get _uid {
+    final id = _client.auth.currentUser?.id;
+    if (id == null || id.isEmpty) {
       throw const FpcProcurementException(
         'Login as FPC before receiving product.',
       );
     }
-  }
-
-  Map<String, String> _headers(String token, {bool jsonBody = false}) {
-    return {
-      'apikey': SupabaseConfig.anonKey,
-      'Authorization': 'Bearer $token',
-      if (jsonBody) 'Content-Type': 'application/json',
-    };
+    return id;
   }
 
   Future<List<FpcProcurementRecord>> fetchRecords() async {
-    final session = await _session();
-    final uri = Uri.parse(
-      '$_restBase/fpc_procurement_records'
-      '?select=*&fpc_id=eq.${Uri.encodeQueryComponent(session.userId)}'
-      '&order=received_at.desc&limit=100',
-    );
-    final response = await http
-        .get(uri, headers: _headers(session.accessToken))
-        .timeout(const Duration(seconds: 25));
-    final rows = _decodeList(response);
+    final rows = await _client
+        .from('fpc_procurement_records')
+        .select()
+        .eq('fpc_id', _uid)
+        .order('received_at', ascending: false)
+        .limit(100);
     return rows
         .whereType<Map>()
         .map(
@@ -168,115 +252,72 @@ class FpcProcurementService {
     int? fpcRating,
     String notes = '',
   }) async {
-    final session = await _session();
-    final userId = session.userId;
-    final batchId = _text(trace, 'batchId');
+    final strictTrace = HarvestTraceParser.ensureHarvestTrace(trace);
+    final userId = _uid;
+    final batchId = _text(strictTrace, 'batchId');
     if (batchId.isEmpty) {
       throw const FpcProcurementException(
         'Harvest QR is missing batch ID. Generate the harvest QR again.',
       );
     }
-    final quantity = _toDouble(trace['totalKg']);
+    final quantity = _toDouble(strictTrace['totalKg']);
     final totalValue = quantity != null && pricePerKg != null
         ? quantity * pricePerKg
         : null;
-    final analysisId = _uuidOrNull(_text(trace, 'analysisId'));
+    final analysisId = _uuidOrNull(_text(strictTrace, 'analysisId'));
     final payload = {
       'fpc_id': userId,
-      'farmer_id': _text(trace, 'farmerId'),
-      'farm_id': _text(trace, 'farmId'),
+      'farmer_id': _text(strictTrace, 'farmerId'),
+      'farm_id': _text(strictTrace, 'farmId'),
       'analysis_id': analysisId,
       'batch_id': batchId,
       'customer_name': _text(
-        trace,
+        strictTrace,
         'farmerName',
-        _text(trace, 'fpcCustomerName'),
+        _text(strictTrace, 'fpcCustomerName'),
       ),
-      'crop_type': _text(trace, 'crop'),
-      'variety': _text(trace, 'variety'),
+      'crop_type': _text(strictTrace, 'crop'),
+      'variety': _text(strictTrace, 'variety'),
       'quantity_kg': quantity,
-      'grade': _text(trace, 'grade'),
+      'grade': _text(strictTrace, 'grade'),
       'price_per_kg': pricePerKg,
       'total_value': totalValue,
       'delivery_status': 'received',
       'fpc_rating': fpcRating,
       'rating_notes': notes,
-      'trace_payload': trace,
+      'trace_payload': strictTrace,
       'received_at': DateTime.now().toUtc().toIso8601String(),
     };
 
-    final existing = await _existingRecord(session, batchId);
-    final response = existing == null
-        ? await http
-              .post(
-                Uri.parse('$_restBase/fpc_procurement_records'),
-                headers: {
-                  ..._headers(session.accessToken, jsonBody: true),
-                  'Prefer': 'return=representation',
-                },
-                body: jsonEncode(payload),
-              )
-              .timeout(const Duration(seconds: 25))
-        : await http
-              .patch(
-                Uri.parse(
-                  '$_restBase/fpc_procurement_records?id=eq.${Uri.encodeQueryComponent(existing)}',
-                ),
-                headers: {
-                  ..._headers(session.accessToken, jsonBody: true),
-                  'Prefer': 'return=representation',
-                },
-                body: jsonEncode(payload),
-              )
-              .timeout(const Duration(seconds: 25));
-    final rows = _decodeList(response);
-    if (rows.isEmpty) {
-      throw const FpcProcurementException('Received lot was not saved.');
-    }
-    return FpcProcurementRecord.fromJson(rows.first);
-  }
-
-  Future<String?> _existingRecord(
-    BackendBridgeSession session,
-    String batchId,
-  ) async {
-    if (batchId.isEmpty) return null;
-    final uri = Uri.parse(
-      '$_restBase/fpc_procurement_records'
-      '?select=id&fpc_id=eq.${Uri.encodeQueryComponent(session.userId)}'
-      '&batch_id=eq.${Uri.encodeQueryComponent(batchId)}&limit=1',
+    final existing = await _existingRecord(userId, batchId);
+    final saved = existing == null
+        ? await _client
+              .from('fpc_procurement_records')
+              .insert(payload)
+              .select()
+              .single()
+        : await _client
+              .from('fpc_procurement_records')
+              .update(payload)
+              .eq('id', existing)
+              .select()
+              .single();
+    return FpcProcurementRecord.fromJson(
+      Map<String, dynamic>.from(saved as Map),
     );
-    final response = await http
-        .get(uri, headers: _headers(session.accessToken))
-        .timeout(const Duration(seconds: 20));
-    final rows = _decodeList(response);
-    if (rows.isEmpty) return null;
-    final row = rows.first;
-    return '${row['id'] ?? ''}'.trim().isEmpty ? null : '${row['id']}';
   }
 
-  List<Map<String, dynamic>> _decodeList(http.Response response) {
-    dynamic body;
-    try {
-      body = response.body.isEmpty ? <dynamic>[] : jsonDecode(response.body);
-    } catch (_) {
-      body = response.body;
-    }
-    if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (body is List) {
-        return body
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList(growable: false);
-      }
-      return const [];
-    }
-    final message = body is Map
-        ? '${body['message'] ?? body['error'] ?? 'HTTP ${response.statusCode}'}'
-        : body is String && body.isNotEmpty
-        ? body
-        : 'HTTP ${response.statusCode}';
-    throw FpcProcurementException(message);
+  Future<String?> _existingRecord(String userId, String batchId) async {
+    if (batchId.isEmpty) return null;
+    final rows = await _client
+        .from('fpc_procurement_records')
+        .select('id')
+        .eq('fpc_id', userId)
+        .eq('batch_id', batchId)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final row = Map<String, dynamic>.from(rows.first as Map);
+    return '${row['id'] ?? ''}'.trim().isEmpty ? null : '${row['id']}';
   }
 }
 
@@ -300,6 +341,20 @@ int? _toInt(Object? raw) {
   if (raw is int) return raw;
   if (raw is num) return raw.round();
   return int.tryParse('${raw ?? ''}');
+}
+
+bool _isBlankTraceValue(Object? raw) {
+  final text = raw == null ? '' : '$raw'.trim();
+  if (text.isEmpty || text == '--') return true;
+  final normalized = text.toLowerCase();
+  return normalized == 'unknown' ||
+      normalized == 'pending' ||
+      normalized == 'null';
+}
+
+bool _isValidPhone(String value) {
+  final digits = value.replaceAll(RegExp(r'\D'), '');
+  return RegExp(r'^[6-9][0-9]{9}$').hasMatch(digits);
 }
 
 Map<String, dynamic> _toMap(Object? raw) {
