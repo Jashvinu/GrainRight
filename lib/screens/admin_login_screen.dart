@@ -6,16 +6,18 @@ import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../widgets/role_login_shell.dart';
 
-class FpcLoginScreen extends StatefulWidget {
-  const FpcLoginScreen({super.key});
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({super.key});
 
   @override
-  State<FpcLoginScreen> createState() => _FpcLoginScreenState();
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
 }
 
-class _FpcLoginScreenState extends State<FpcLoginScreen> {
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController(
+    text: MainAuthController.adminLoginEmail,
+  );
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
 
@@ -29,10 +31,9 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
-    await Get.find<MainAuthController>().loginFpc(
+    await Get.find<MainAuthController>().loginAdmin(
       _emailCtrl.text.trim(),
       _passwordCtrl.text,
-      nextRoute: '/fpo',
     );
   }
 
@@ -51,16 +52,12 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
 
     return Obx(() {
       return RoleLoginShell(
-        title: UiStrings.t('fpc_login'),
-        subtitle: UiStrings.t('fpc_login_desc'),
+        title: UiStrings.t('admin_login'),
+        subtitle: UiStrings.t('admin_login_subtitle'),
         languageCode: language.language.value,
         onLanguageChanged: language.setLanguage,
         onBack: _goBack,
-        fallbackIcon: Icons.groups_2_outlined,
-        info: RoleLoginInfoStrip(
-          icon: Icons.verified_user_outlined,
-          text: UiStrings.t('fpc_login_info'),
-        ),
+        fallbackIcon: Icons.admin_panel_settings_outlined,
         form: Form(
           key: _formKey,
           child: Column(
@@ -70,16 +67,17 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
                 decoration: InputDecoration(
-                  labelText: UiStrings.t('email_address'),
-                  hintText: UiStrings.t('enter_registered_fpc_email'),
+                  labelText: UiStrings.t('admin_email'),
+                  hintText: MainAuthController.adminLoginEmail.isNotEmpty
+                      ? MainAuthController.adminLoginEmail
+                      : UiStrings.t('admin_email_hint'),
                   prefixIcon: const Icon(Icons.email_outlined),
                 ),
                 validator: (value) {
                   final text = (value ?? '').trim();
-                  final valid = RegExp(
-                    r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                  ).hasMatch(text);
-                  return valid ? null : UiStrings.t('enter_valid_email');
+                  return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)
+                      ? null
+                      : UiStrings.t('enter_valid_email');
                 },
               ),
               const SizedBox(height: 14),
@@ -90,7 +88,7 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                 onFieldSubmitted: (_) => _submit(),
                 decoration: InputDecoration(
                   labelText: UiStrings.t('password'),
-                  hintText: UiStrings.t('enter_fpc_login_password'),
+                  hintText: UiStrings.t('enter_password'),
                   prefixIcon: const Icon(Icons.lock_outline_rounded),
                   suffixIcon: IconButton(
                     tooltip: _obscure
@@ -108,6 +106,11 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
                     ? null
                     : UiStrings.t('password_min_six_chars'),
               ),
+              const SizedBox(height: 14),
+              RoleLoginInfoStrip(
+                icon: Icons.verified_user_rounded,
+                text: UiStrings.t('admin_login_note'),
+              ),
             ],
           ),
         ),
@@ -117,22 +120,24 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
             RoleLoginButton(
               loading: auth.isLoading.value,
               onPressed: _submit,
-              label: UiStrings.t('login_to_fpc_dashboard'),
-              loadingLabel: UiStrings.t('verifying'),
+              label: UiStrings.t('admin_login_cta'),
+              loadingLabel: UiStrings.t('admin_login_verifying'),
             ),
             const SizedBox(height: 10),
             TextButton.icon(
               onPressed: auth.isLoading.value
                   ? null
-                  : () => Get.offAllNamed('/fpc/signup'),
+                  : () => Get.offAllNamed('/admin/signup'),
               icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: Text(UiStrings.t('create_fpc_account')),
+              label: Text(UiStrings.t('create_admin_account')),
             ),
           ],
         ),
         error: auth.errorMessage.isEmpty
             ? null
-            : RoleLoginErrorText(message: auth.errorMessage.value),
+            : RoleLoginErrorText(
+                message: UiStrings.authError(auth.errorMessage.value),
+              ),
       );
     });
   }

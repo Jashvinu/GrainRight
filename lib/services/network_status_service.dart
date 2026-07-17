@@ -86,6 +86,9 @@ class NetworkStatusService {
       final online = response.statusCode >= 200 && response.statusCode < 500;
       _rememberProbeResult(online);
       return online;
+    } on TimeoutException {
+      _rememberProbeResult(true);
+      return true;
     } catch (e) {
       debugPrint('[NetworkStatusService.isOnline] $e');
       _rememberProbeResult(false);

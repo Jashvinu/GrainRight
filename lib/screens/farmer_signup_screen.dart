@@ -44,9 +44,6 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
     super.initState();
     final args = Get.arguments;
     final rawPhone = args is Map ? '${args['phone'] ?? ''}' : '';
-    final rawCountryDialCode = args is Map
-        ? '${args['countryDialCode'] ?? ''}'.trim()
-        : '';
     _phone = rawPhone.replaceAll(RegExp(r'\D'), '');
     final rawNextRoute = args is Map ? '${args['nextRoute'] ?? ''}'.trim() : '';
     if (rawNextRoute.isNotEmpty) {
@@ -72,6 +69,17 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
 
   String get _aadhaarMasked =>
       _aadhaarLast4.isEmpty ? '' : 'XXXX XXXX $_aadhaarLast4';
+
+  bool get _hasManualIdentityDetails =>
+      _nameController.text.trim().isNotEmpty &&
+      _aadhaarDigits.length == 12;
+
+  String get _identitySource {
+    if (_documentPath.trim().isEmpty) return 'manual_entry';
+    return _documentOcrFailed
+        ? 'manual_after_ocr_failure'
+        : 'agri_record_document';
+  }
 
   Future<void> _pickDocument(ImageSource source) async {
     if (_documentBusy) return;
@@ -160,103 +168,34 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
 
   Future<void> _submit() async {
     if (_documentBusy) return;
-    if (_documentPath.isEmpty) {
-      if (_documentBytes == null) {
-        setState(() {
-          _documentMessage = UiStrings.t('farmer_identity_document_required');
-        });
-        return;
-      }
-      await _readDocument();
-      if (!mounted || _documentPath.isEmpty) return;
-    }
     if (!_formKey.currentState!.validate()) return;
-    final auth = Get.find<MainAuthController>();
-    if (!auth.isFarmerPhoneVerifiedForSignup(
-      _phone,
-      countryDialCode: _countryDialCode,
-    )) {
-      setState(() => _otpError = 'Verify this mobile number first');
+    if (_documentPath.isEmpty && !_hasManualIdentityDetails) {
+      setState(() {
+        _documentMessage = UiStrings.t('farmer_identity_document_required');
+      });
       return;
     }
+    if (_documentPath.isEmpty && mounted) {
+      setState(() {
+        _documentMessage = UiStrings.t('manual_identity_details_ready');
+      });
+    }
     FocusScope.of(context).unfocus();
-    await auth.registerFarmerProfile(
+    await Get.find<MainAuthController>().registerFarmerProfile(
       phone: _phone,
       farmerName: _nameController.text,
       defaultLocation: _locationController.text.trim().isEmpty
           ? 'Kalsubai Farms'
           : _locationController.text,
       agriRecordId: _agriRecordController.text,
+      aadhaarNumber: _aadhaarDigits,
       aadhaarMasked: _aadhaarMasked,
       aadhaarLast4: _aadhaarLast4,
       identityDocumentPath: _documentPath,
+      identitySource: _identitySource,
       identityOcrConfidence: _documentConfidence,
       nextRoute: _nextRoute,
     );
-  }
-
-  Future<void> _sendCode() async {
-    final auth = Get.find<MainAuthController>();
-    if (auth.isLoading.value) return;
-    setState(() => _otpError = null);
-    FocusScope.of(context).unfocus();
-    await auth.sendFarmerPhoneCode(
-      _phone,
-      verifyOnly: true,
-      countryDialCode: _countryDialCode,
-    );
-  }
-
-  Future<void> _verifyCode() async {
-    final auth = Get.find<MainAuthController>();
-    if (auth.isLoading.value) return;
-    final code = _otpController.text.replaceAll(RegExp(r'\D'), '');
-    if (code.length < 4) {
-      setState(() => _otpError = 'Enter the SMS verification code');
-      return;
-    }
-    FocusScope.of(context).unfocus();
-    await auth.verifyFarmerPhoneCode(
-      code,
-      verifyOnly: true,
-      countryDialCode: _countryDialCode,
-    );
-  }
-
-  Future<void> _primaryAction() async {
-    final auth = Get.find<MainAuthController>();
-    if (auth.isFarmerPhoneVerifiedForSignup(
-      _phone,
-      countryDialCode: _countryDialCode,
-    )) {
-      await _submit();
-      return;
-    }
-    if (auth.isFarmerPhoneCodeSentFor(
-      _phone,
-      countryDialCode: _countryDialCode,
-    )) {
-      await _verifyCode();
-      return;
-    }
-    await _sendCode();
-  }
-
-  String _buttonLabel(MainAuthController auth) {
-    if (auth.isLoading.value) return UiStrings.t('creating_profile');
-    if (auth.isFarmerPhoneVerifiedForSignup(
-      _phone,
-      countryDialCode: _countryDialCode,
-    )) {
-      return UiStrings.t('continue_to_farm_setup');
-    }
-    if (auth.isFarmerPhoneCodeSentFor(
-      _phone,
-      countryDialCode: _countryDialCode,
-    )) {
-      return 'Verify SMS code';
-    }
-    return 'Send SMS code';
   }
 
   void _goBack() {
@@ -272,6 +211,8 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
   Widget _buildIdentityDocumentSection() {
     final hasImage = _documentBytes != null;
     final status = _documentMessage.trim();
+    final manualReady = _documentPath.isEmpty && _hasManualIdentityDetails;
+    final hasAcceptedProof = _documentPath.isNotEmpty || manualReady;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -349,28 +290,23 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              if (_documentBusy)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(
-                  _documentPath.isEmpty || _documentOcrFailed
-                      ? Icons.info_outline
-                      : Icons.check_circle_outline,
-                  color: _documentPath.isEmpty
-                      ? Colors.red.shade700
-                      : AppTheme.green,
-                  size: 20,
-                ),
+              Icon(
+                _documentBusy
+                    ? Icons.document_scanner_outlined
+                    : !hasAcceptedProof || _documentOcrFailed
+                    ? Icons.info_outline
+                    : Icons.check_circle_outline,
+                color: !hasAcceptedProof && !_documentBusy
+                    ? Colors.red.shade700
+                    : AppTheme.green,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   status,
                   style: TextStyle(
-                    color: _documentPath.isEmpty
+                    color: !hasAcceptedProof
                         ? Colors.red.shade700
                         : AppTheme.textMuted,
                     fontSize: 12,
@@ -505,37 +441,7 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              _ReadOnlyPhone(
-                                phone: _phone,
-                                countryDialCode: _countryDialCode,
-                              ),
-                              const SizedBox(height: 16),
-                              Obx(() {
-                                final isVerified = auth
-                                    .isFarmerPhoneVerifiedForSignup(
-                                      _phone,
-                                      countryDialCode: _countryDialCode,
-                                    );
-                                final codeSent = auth.isFarmerPhoneCodeSentFor(
-                                  _phone,
-                                  countryDialCode: _countryDialCode,
-                                );
-                                return _SignupOtpStep(
-                                  verified: isVerified,
-                                  codeSent: codeSent,
-                                  controller: _otpController,
-                                  errorText: _otpError,
-                                  onChanged: (_) {
-                                    if (_otpError != null) {
-                                      setState(() => _otpError = null);
-                                    }
-                                  },
-                                  onSubmitted: (_) => _primaryAction(),
-                                  onResend: auth.isLoading.value
-                                      ? null
-                                      : _sendCode,
-                                );
-                              }),
+                              _ReadOnlyPhone(phone: _phone),
                               const SizedBox(height: 16),
                               TextFormField(
                                 controller: _nameController,
@@ -578,21 +484,13 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                                     TextCapitalization.characters,
                                 decoration: InputDecoration(
                                   labelText: UiStrings.t(
-                                    'farmer_agri_record_id',
+                                    'farmer_agri_record_id_optional',
                                   ),
                                   hintText: UiStrings.t('enter_agri_record_id'),
                                   prefixIcon: const Icon(
                                     Icons.assignment_ind_outlined,
                                   ),
                                 ),
-                                validator: (value) {
-                                  if ((value ?? '').trim().isEmpty) {
-                                    return UiStrings.t(
-                                      'enter_agri_record_id_error',
-                                    );
-                                  }
-                                  return null;
-                                },
                               ),
                               const SizedBox(height: 16),
                               TextFormField(
@@ -642,26 +540,13 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                         ),
                         const SizedBox(height: 18),
                         Obx(
-                          () => _SignupSyncStatus(
-                            visible:
-                                auth.isLoading.value ||
-                                auth.farmerLoginSyncStatusKey.value.isNotEmpty,
-                            phone: auth.farmerLoginSyncPhone.value.isEmpty
-                                ? _phone
-                                : auth.farmerLoginSyncPhone.value,
-                            statusKey: auth.farmerLoginSyncStatusKey.value,
-                            farmCount: auth.farmerLoginSyncedFarmCount.value,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        Obx(
                           () => SizedBox(
                             height: 56,
                             child: ElevatedButton.icon(
                               onPressed: auth.isLoading.value || _documentBusy
                                   ? null
                                   : _submit,
-                              icon: auth.isLoading.value || _documentBusy
+                              icon: _documentBusy || auth.isLoading.value
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
@@ -671,15 +556,9 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
                                       ),
                                     )
                                   : const Icon(Icons.arrow_forward_rounded),
-                              label: Text(
-                                _documentBusy
-                                    ? UiStrings.t(
-                                        'reading_agri_record_document',
-                                      )
-                                    : auth.isLoading.value
-                                    ? UiStrings.t('creating_profile')
-                                    : UiStrings.t('continue_to_farm_setup'),
-                              ),
+                              label: _documentBusy || auth.isLoading.value
+                                  ? const SizedBox.shrink()
+                                  : Text(UiStrings.t('continue_to_farm_setup')),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.greenDark,
                                 foregroundColor: Colors.white,
@@ -709,169 +588,10 @@ class _FarmerSignupScreenState extends State<FarmerSignupScreen> {
   }
 }
 
-class _SignupOtpStep extends StatelessWidget {
-  final bool verified;
-  final bool codeSent;
-  final TextEditingController controller;
-  final String? errorText;
-  final ValueChanged<String> onChanged;
-  final ValueChanged<String> onSubmitted;
-  final VoidCallback? onResend;
-
-  const _SignupOtpStep({
-    required this.verified,
-    required this.codeSent,
-    required this.controller,
-    required this.errorText,
-    required this.onChanged,
-    required this.onSubmitted,
-    required this.onResend,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (verified) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.greenPale.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-          border: Border.all(color: const Color(0xFFC9E4C5)),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.verified_rounded, color: AppTheme.green),
-            SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Mobile number verified',
-                style: TextStyle(
-                  color: AppTheme.greenDark,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          codeSent
-              ? 'Enter the SMS code sent to this mobile number'
-              : 'Verify this mobile number before creating the profile',
-          style: const TextStyle(
-            color: AppTheme.textMuted,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            height: 1.3,
-          ),
-        ),
-        if (codeSent) ...[
-          const SizedBox(height: 10),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            textInputAction: TextInputAction.done,
-            maxLength: 6,
-            onChanged: onChanged,
-            onSubmitted: onSubmitted,
-            decoration: InputDecoration(
-              counterText: '',
-              errorText: errorText,
-              labelText: 'SMS code',
-              hintText: 'Enter SMS code',
-              prefixIcon: const Icon(Icons.lock_outline_rounded),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onResend,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Resend code'),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _SignupSyncStatus extends StatelessWidget {
-  final bool visible;
-  final String phone;
-  final String statusKey;
-  final int? farmCount;
-
-  const _SignupSyncStatus({
-    required this.visible,
-    required this.phone,
-    required this.statusKey,
-    required this.farmCount,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!visible) return const SizedBox.shrink();
-    final key = statusKey.trim().isEmpty
-        ? 'creating_farmer_profile'
-        : statusKey;
-    final message = UiStrings.t(key).replaceAll('{count}', '${farmCount ?? 0}');
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-        border: Border.all(color: const Color(0xFFD7E8D2)),
-      ),
-      child: Row(
-        children: [
-          const SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(strokeWidth: 2.4),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  phone.length == 10
-                      ? '${UiStrings.t('mobile_number')}: +91 $phone'
-                      : UiStrings.t('mobile_number'),
-                  style: const TextStyle(
-                    color: AppTheme.greenDark,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  message,
-                  style: const TextStyle(
-                    color: AppTheme.textMuted,
-                    fontWeight: FontWeight.w700,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ReadOnlyPhone extends StatelessWidget {
   final String phone;
-  final String countryDialCode;
 
-  const _ReadOnlyPhone({required this.phone, required this.countryDialCode});
+  const _ReadOnlyPhone({required this.phone});
 
   @override
   Widget build(BuildContext context) {
@@ -900,7 +620,7 @@ class _ReadOnlyPhone extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$countryDialCode $phone',
+                  '+91 $phone',
                   style: const TextStyle(
                     color: AppTheme.textDark,
                     fontSize: 16,

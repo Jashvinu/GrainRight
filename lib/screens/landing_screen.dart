@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import 'package:kalsubai_farms/core/widgets/brand_text.dart';
@@ -34,9 +35,9 @@ class LandingScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Kalsubai Farms Platform',
-                style: TextStyle(
+              Text(
+                UiStrings.t('kalsubai_farms_platform'),
+                style: const TextStyle(
                   fontSize: 14,
                   color: AppTheme.textMuted,
                   fontWeight: FontWeight.w400,
@@ -44,8 +45,8 @@ class LandingScreen extends StatelessWidget {
               ),
               const SizedBox(height: 48),
               Text(
-                'Choose a module',
-                style: TextStyle(
+                UiStrings.t('choose_module'),
+                style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                   color: AppTheme.textDark,
@@ -55,8 +56,8 @@ class LandingScreen extends StatelessWidget {
               const SizedBox(height: 16),
               _ModuleCard(
                 icon: Icons.assignment_outlined,
-                title: 'Survey Form',
-                subtitle: 'Collect farmer baseline data',
+                title: UiStrings.t('survey_form'),
+                subtitle: UiStrings.t('collect_farmer_baseline_data'),
                 color: AppTheme.green,
                 onTap: () => Get.toNamed('/surveys'),
               ),

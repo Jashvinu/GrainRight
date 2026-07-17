@@ -7,9 +7,11 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
 
 class FarmerProfileScreen extends StatelessWidget {
-  final dynamic profile; // Using dynamic for now to match the local _FarmerProfile
+  final dynamic
+  profile; // Using dynamic for now to match the local _FarmerProfile
   final dynamic farm;
   final String avatarAsset;
 
@@ -107,13 +109,30 @@ class FarmerProfileScreen extends StatelessWidget {
           const SizedBox(height: 8),
           _RevealSection(
             delayMs: 140,
-            child: _InfoCard(items: [
-              _InfoItem(label: UiStrings.t('farmer_id'), value: profile.farmerId),
-              _InfoItem(label: UiStrings.t('phone_number'), value: profile.phone),
-              _InfoItem(label: UiStrings.t('location'), value: '${profile.location ?? profile.village}'),
-              _InfoItem(label: UiStrings.t('gender'), value: UiStrings.t('male')),
-              _InfoItem(label: UiStrings.t('age'), value: '42 ${UiStrings.t('years')}'),
-            ]),
+            child: _InfoCard(
+              items: [
+                _InfoItem(
+                  label: UiStrings.t('farmer_id'),
+                  value: profile.farmerId,
+                ),
+                _InfoItem(
+                  label: UiStrings.t('phone_number'),
+                  value: profile.phone,
+                ),
+                _InfoItem(
+                  label: UiStrings.t('location'),
+                  value: '${profile.location ?? profile.village}',
+                ),
+                _InfoItem(
+                  label: UiStrings.t('gender'),
+                  value: UiStrings.t('male'),
+                ),
+                _InfoItem(
+                  label: UiStrings.t('age'),
+                  value: '42 ${UiStrings.t('years')}',
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           _RevealSection(
@@ -128,7 +147,10 @@ class FarmerProfileScreen extends StatelessWidget {
                 _InfoItem(label: UiStrings.t('primary_farm'), value: farm.name),
                 _InfoItem(label: UiStrings.t('total_area'), value: '4.0 acres'),
                 _InfoItem(label: UiStrings.t('current_crop'), value: farm.crop),
-                _InfoItem(label: UiStrings.t('soil_health'), value: UiStrings.t('excellent')),
+                _InfoItem(
+                  label: UiStrings.t('soil_health'),
+                  value: UiStrings.t('excellent'),
+                ),
               ],
             ),
           ),
@@ -181,7 +203,8 @@ class FarmerProfileScreen extends StatelessWidget {
                   icon: Icons.logout_rounded,
                   title: UiStrings.t('logout'),
                   color: Colors.redAccent,
-                  onTap: auth.logout,
+                  onTap: () =>
+                      AppLogoutFlow.run(context, onLogout: auth.logout),
                 ),
               ],
             ),
@@ -259,7 +282,11 @@ class _ProfileHeader extends StatelessWidget {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(Icons.verified_rounded, color: AppTheme.green, size: 16),
+                    const Icon(
+                      Icons.verified_rounded,
+                      color: AppTheme.green,
+                      size: 16,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       UiStrings.t('verified_farmer'),
@@ -304,7 +331,10 @@ class _ProfileHeaderBlock extends StatelessWidget {
           ),
           const Icon(Icons.verified_user_outlined, color: AppTheme.green),
           const SizedBox(width: 6),
-          Text(UiStrings.t('trusted_profile'), style: const TextStyle(color: AppTheme.green)),
+          Text(
+            UiStrings.t('trusted_profile'),
+            style: const TextStyle(color: AppTheme.green),
+          ),
         ],
       ),
     );
@@ -486,7 +516,11 @@ class _RewardBadge extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 12),
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+            ),
           ),
         ],
       ),

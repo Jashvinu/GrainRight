@@ -26,12 +26,11 @@ class RuntimeConfig {
   static const _publicTraceBaseUrlFallback = String.fromEnvironment(
     'PUBLIC_TRACE_BASE_URL',
   );
-  static const _backendAuthEmailFallback = String.fromEnvironment(
-    'BACKEND_AUTH_EMAIL',
-    defaultValue: 'jashvinu@wrkfarm.com',
+  static const _privacyPolicyUrlFallback = String.fromEnvironment(
+    'PRIVACY_POLICY_URL',
   );
-  static const _backendAuthPasswordFallback = String.fromEnvironment(
-    'BACKEND_AUTH_PASSWORD',
+  static const _accountDeletionUrlFallback = String.fromEnvironment(
+    'ACCOUNT_DELETION_URL',
   );
 
   static Map<String, String> _localConfig = const {};
@@ -94,17 +93,20 @@ class RuntimeConfig {
     return '$publicTraceBaseUrl/#/trace/$token';
   }
 
-  static String get backendAuthEmail {
-    final fallback = _backendAuthEmailFallback.trim();
-    if (_isUsable(fallback)) return fallback;
-    final local = _localConfigValue('BACKEND_AUTH_EMAIL');
-    return local.isEmpty ? 'jashvinu@wrkfarm.com' : local;
+  static String get privacyPolicyUrl {
+    final override = _privacyPolicyUrlFallback.trim();
+    if (_isUsable(override)) return override;
+    final local = _localConfigValue('PRIVACY_POLICY_URL');
+    if (local.isNotEmpty) return local;
+    return '$publicTraceBaseUrl/privacy';
   }
 
-  static String get backendAuthPassword {
-    final fallback = _backendAuthPasswordFallback.trim();
-    if (_isUsable(fallback)) return fallback;
-    return _localConfigValue('BACKEND_AUTH_PASSWORD');
+  static String get accountDeletionUrl {
+    final override = _accountDeletionUrlFallback.trim();
+    if (_isUsable(override)) return override;
+    final local = _localConfigValue('ACCOUNT_DELETION_URL');
+    if (local.isNotEmpty) return local;
+    return '$publicTraceBaseUrl/account-deletion';
   }
 
   static Future<String> mapTilerApiKeyRuntime() {

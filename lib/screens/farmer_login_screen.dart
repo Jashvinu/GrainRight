@@ -35,10 +35,7 @@ class FarmerLoginScreen extends StatefulWidget {
 
 class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
   final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  String _countryDialCode = '+91';
   String? _phoneError;
-  String? _otpError;
 
   @override
   void initState() {
@@ -46,13 +43,9 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
     final args = Get.arguments;
     if (args is Map) {
       final phone = '${args['phone'] ?? ''}'.replaceAll(RegExp(r'\D'), '');
-      final countryDialCode = '${args['countryDialCode'] ?? ''}'.trim();
       final message = '${args['message'] ?? ''}'.trim();
       if (phone.length == 10) {
         _phoneController.text = phone;
-      }
-      if (countryDialCode == '+1' || countryDialCode == '+91') {
-        _countryDialCode = countryDialCode;
       }
       if (message.isNotEmpty) {
         _phoneError = message;
@@ -69,7 +62,6 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
   @override
   void dispose() {
     _phoneController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
@@ -77,24 +69,6 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
     final auth = Get.find<MainAuthController>();
     if (auth.isLoading.value) return;
     final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (auth.isFarmerPhoneCodeSentFor(
-      digits,
-      countryDialCode: _countryDialCode,
-    )) {
-      final code = _otpController.text.replaceAll(RegExp(r'\D'), '');
-      if (code.length < 4) {
-        setState(() => _otpError = 'Enter the SMS verification code');
-        return;
-      }
-      FocusScope.of(context).unfocus();
-      await auth.verifyFarmerPhoneCode(
-        code,
-        nextRoute: '/farmer',
-        countryDialCode: _countryDialCode,
-      );
-      return;
-    }
-
     if (digits.length != 10) {
       setState(() => _phoneError = 'Enter a valid 10 digit mobile number');
       return;
@@ -378,99 +352,28 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                     errorText: _phoneError == null
                                         ? null
                                         : UiStrings.authError(_phoneError!),
-                                    prefixIcon: _CountryDialCodePicker(
-                                      value: _countryDialCode,
-                                      enabled: !auth.isLoading.value,
-                                      onChanged: (value) {
-                                        if (value == null) return;
-                                        setState(() {
-                                          _countryDialCode = value;
-                                          _phoneError = null;
-                                          _otpError = null;
-                                        });
-                                      },
+                                    prefixIcon: const Padding(
+                                      padding: EdgeInsets.only(
+                                        left: 14,
+                                        right: 8,
+                                      ),
+                                      child: Center(
+                                        widthFactor: 1,
+                                        child: Text(
+                                          '+91',
+                                          style: TextStyle(
+                                            color: AppTheme.textDark,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                     hintText: UiStrings.t('enter_mobile'),
                                     suffixIcon: const Icon(
                                       Icons.phone_outlined,
                                     ),
                                   ),
-                                ),
-                                Obx(
-                                  () =>
-                                      auth.isFarmerPhoneCodeSentFor(
-                                        _phoneController.text,
-                                        countryDialCode: _countryDialCode,
-                                      )
-                                      ? Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 14,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                'SMS code',
-                                                style: TextStyle(
-                                                  color: AppTheme.greenDark,
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w800,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 10),
-                                              TextField(
-                                                controller: _otpController,
-                                                keyboardType:
-                                                    TextInputType.number,
-                                                textInputAction:
-                                                    TextInputAction.done,
-                                                maxLength: 6,
-                                                onSubmitted: (_) => _continue(),
-                                                onChanged: (_) {
-                                                  if (_otpError != null) {
-                                                    setState(
-                                                      () => _otpError = null,
-                                                    );
-                                                  }
-                                                },
-                                                decoration: InputDecoration(
-                                                  counterText: '',
-                                                  errorText: _otpError,
-                                                  hintText: 'Enter SMS code',
-                                                  suffixIcon: const Icon(
-                                                    Icons.lock_outline_rounded,
-                                                  ),
-                                                ),
-                                              ),
-                                              Align(
-                                                alignment:
-                                                    Alignment.centerRight,
-                                                child: TextButton.icon(
-                                                  onPressed:
-                                                      auth.isLoading.value
-                                                      ? null
-                                                      : () => auth
-                                                            .sendFarmerPhoneCode(
-                                                              _phoneController
-                                                                  .text,
-                                                              nextRoute:
-                                                                  '/farmer',
-                                                              countryDialCode:
-                                                                  _countryDialCode,
-                                                            ),
-                                                  icon: const Icon(
-                                                    Icons.refresh_rounded,
-                                                  ),
-                                                  label: const Text(
-                                                    'Resend code',
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        )
-                                      : const SizedBox.shrink(),
                                 ),
                                 const SizedBox(height: 14),
                                 _LoginNote(noteKey: widget.loginNoteKey),
@@ -495,11 +398,11 @@ class _FarmerLoginScreenState extends State<FarmerLoginScreen> {
                                         ),
                                       )
                                     : const Icon(Icons.arrow_forward_rounded),
-                                label: Text(
-                                  auth.isLoading.value
-                                      ? UiStrings.t('please_wait')
-                                      : UiStrings.t(widget.continueLabelKey),
-                                ),
+                                label: auth.isLoading.value
+                                    ? const SizedBox.shrink()
+                                    : Text(
+                                        UiStrings.t(widget.continueLabelKey),
+                                      ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppTheme.greenDark,
                                   shape: RoundedRectangleBorder(
@@ -1395,44 +1298,6 @@ class _SignupPrompt extends StatelessWidget {
             child: Text(UiStrings.t('sign_up')),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CountryDialCodePicker extends StatelessWidget {
-  final String value;
-  final bool enabled;
-  final ValueChanged<String?> onChanged;
-
-  const _CountryDialCodePicker({
-    required this.value,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 12, right: 4),
-      child: Center(
-        widthFactor: 1,
-        child: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: value,
-            onChanged: enabled ? onChanged : null,
-            borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-            items: const [
-              DropdownMenuItem(value: '+91', child: Text('+91 IN')),
-              DropdownMenuItem(value: '+1', child: Text('+1 US')),
-            ],
-            style: const TextStyle(
-              color: AppTheme.textDark,
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
-          ),
-        ),
       ),
     );
   }

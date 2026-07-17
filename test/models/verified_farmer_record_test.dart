@@ -9,6 +9,7 @@ void main() {
       'farmerName': 'Test Farmer',
       'defaultLocation': 'Rajur',
       'agri_record_id': 'AGR-456',
+      'aadhaar_number': '123456781234',
       'aadhaar_masked': 'XXXX XXXX 1234',
       'aadhaar_last4': '1234',
       'identity_document_path': 'user-id/document.jpg',
@@ -17,6 +18,7 @@ void main() {
     expect(record.phone, '9876543210');
     expect(record.farmerId, 'FMR-123');
     expect(record.agriRecordId, 'AGR-456');
+    expect(record.aadhaarNumber, '123456781234');
     expect(record.aadhaarMasked, 'XXXX XXXX 1234');
     expect(record.aadhaarLast4, '1234');
     expect(record.identityDocumentPath, 'user-id/document.jpg');

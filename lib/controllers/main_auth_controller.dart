@@ -1,18 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart' as firebase;
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../config/runtime_config.dart';
 import '../models/verified_farmer_record.dart';
 import '../services/local_app_database.dart';
 import '../services/network_status_service.dart';
-import '../services/satellite_service.dart';
 import '../services/secure_app_storage.dart';
+import 'admin_controller.dart';
 import 'auth_controller.dart';
 import 'farm_controller.dart';
 import 'farmer_inventory_controller.dart';
+import 'stakeholder_controller.dart';
 import 'survey_controller.dart';
 
 enum FarmerLoginState {
@@ -55,22 +53,34 @@ class FarmerServiceException extends FarmerVerificationException {
   String toString() => '$code: $message';
 }
 
+class RoleAccountSignupException implements Exception {
+  final String message;
+  final String code;
+
+  const RoleAccountSignupException(this.message, {this.code = ''});
+
+  @override
+  String toString() => code.isEmpty ? message : '$code: $message';
+}
+
 class MainAuthController extends GetxController {
   static const _localGuestIdKey = 'local_guest_id';
   static const _lastFarmerLoginKey = 'last_farmer_login_summary';
-  static const _lastLoginRoleKey = 'last_login_role';
+  static const adminLoginEmail = String.fromEnvironment(
+    'ADMIN_LOGIN_EMAIL',
+    defaultValue: 'kalsubaifarms@gmail.com',
+  );
+  static const _fpcServerRoles = {'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'};
 
   final _auth = Supabase.instance.client.auth;
   final _client = Supabase.instance.client;
   final _networkStatusService = NetworkStatusService();
   final _secureStorage = SecureAppStorage();
-  final _satelliteService = SatelliteService();
-  final _firebaseAuth = firebase.FirebaseAuth.instance;
 
   final isLoggedIn = false.obs;
   final hasLocalGuest = false.obs;
   final isLoading = false.obs;
-  final isSmsCodeSent = false.obs;
+  final isLoggingOut = false.obs;
   final errorMessage = ''.obs;
   final Rxn<FarmerLoginState> farmerLoginState = Rxn<FarmerLoginState>();
   final farmerLoginSyncStatusKey = ''.obs;
@@ -86,23 +96,14 @@ class MainAuthController extends GetxController {
   final lastFarmerLoginSyncAt = Rxn<DateTime>();
   final farmerLoginAnalyticsEvents = <Map<String, dynamic>>[].obs;
   final Rxn<VerifiedFarmerRecord> verifiedFarmer = Rxn<VerifiedFarmerRecord>();
-  final lastLoginRole = ''.obs;
   bool _farmerSessionLinkInProgress = false;
-  firebase.ConfirmationResult? _farmerPhoneConfirmationResult;
-  String? _firebaseVerificationId;
-  int? _firebaseResendToken;
-  String? _pendingVerifiedPhone;
-  String? _pendingVerifiedDialCode;
-  String? _pendingVerifiedE164;
-  String? _verifiedSignupPhone;
-  String? _verifiedSignupE164;
+  Future<void>? _farmerDataSyncInFlight;
 
   @override
   void onInit() {
     super.onInit();
-    isLoggedIn.value = _hasUserSupabaseSession;
-    unawaited(_clearLocalGuest());
-    unawaited(_loadLastLoginRole());
+    isLoggedIn.value = _auth.currentSession != null;
+    unawaited(_refreshLocalGuestState());
     unawaited(_loadLastFarmerLoginSummary());
     unawaited(_refreshVerifiedProfile());
     _auth.onAuthStateChange.listen((data) {
@@ -113,41 +114,27 @@ class MainAuthController extends GetxController {
         }
       }
       isLoggedIn.value =
-          _hasUserSupabaseSession ||
-          verifiedFarmer.value != null ||
-          _hasFirebaseFpcSession;
+          data.session != null ||
+          hasLocalGuest.value ||
+          verifiedFarmer.value != null;
     });
   }
 
   bool get isAuthenticated =>
-      _hasUserSupabaseSession ||
-      verifiedFarmer.value != null ||
-      _hasFirebaseFpcSession;
-  bool get isAnonymous => _auth.currentUser?.isAnonymous ?? false;
+      _auth.currentSession != null ||
+      hasLocalGuest.value ||
+      verifiedFarmer.value != null;
+  bool get isAnonymous =>
+      (_auth.currentUser?.isAnonymous ?? false) || hasLocalGuest.value;
   String? get userEmail => _auth.currentUser?.email;
   String? get remoteUserId => _auth.currentUser?.id;
-  bool get _hasFirebaseFpcSession =>
-      _firebaseAuth.currentUser != null && _isFpcRole(lastLoginRole.value);
-  String? get _backendAuthToken {
-    if (!Get.isRegistered<AuthController>()) return null;
-    final token = Get.find<AuthController>().accessToken.value.trim();
-    return token.isEmpty ? null : token;
-  }
-
-  String? get _backendAuthUserId {
-    if (!Get.isRegistered<AuthController>()) return null;
-    final userId = Get.find<AuthController>().currentUser.value?.id.trim();
-    return userId == null || userId.isEmpty ? null : userId;
-  }
-
   bool get farmerLoginHealthFarmerVerified =>
       verifiedFarmer.value != null || lastFarmerLoginPhone.value.length == 10;
   bool get farmerLoginHealthSessionLinked =>
       farmerLoginState.value == FarmerLoginState.linked ||
       farmerLoginState.value == FarmerLoginState.farmsSynced ||
       farmerLoginState.value == FarmerLoginState.ready ||
-      _auth.currentSession != null ||
-      _backendAuthToken != null;
+      _auth.currentSession != null;
   bool get farmerLoginHealthFarmSynced =>
       farmerLoginSyncedFarmCount.value != null ||
       lastFarmerLoginFarmCount.value != null;
@@ -159,34 +146,36 @@ class MainAuthController extends GetxController {
       farmerLoginLastSyncAt.value ?? lastFarmerLoginSyncAt.value;
 
   Future<bool> hasAnySession() async {
-    await _clearLocalGuest();
+    await _refreshLocalGuestState();
     await _refreshVerifiedProfile();
-    return _hasUserSupabaseSession || verifiedFarmer.value != null;
+    return _auth.currentSession != null ||
+        hasLocalGuest.value ||
+        verifiedFarmer.value != null;
   }
 
   Future<bool> ensureOfflineSessionWhenOffline() async {
-    await _clearLocalGuest();
+    await _refreshLocalGuestState();
     await _refreshVerifiedProfile();
-    if (_hasUserSupabaseSession || verifiedFarmer.value != null) {
+    if (_auth.currentSession != null ||
+        hasLocalGuest.value ||
+        verifiedFarmer.value != null) {
       return true;
     }
-    return false;
+    if (await _networkStatusService.hasNetworkInterface()) {
+      return false;
+    }
+    await _startLocalGuest();
+    return true;
   }
 
   Future<void> login(String email, String password) async {
     isLoading.value = true;
     errorMessage.value = '';
     try {
-      await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      await _ensureBackendAuthSession();
+      await _auth.signInWithPassword(email: email, password: password);
       await _afterSignIn('/home');
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-    } on FarmerVerificationException catch (e) {
-      errorMessage.value = _farmerLoginErrorMessage(e);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
     } catch (_) {
       errorMessage.value = 'Login failed. Check your connection.';
     } finally {
@@ -204,14 +193,10 @@ class MainAuthController extends GetxController {
     verifiedFarmer.value = null;
     try {
       await _clearLocalGuest();
-      await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-      await _ensureBackendAuthSession();
+      await _auth.signInWithPassword(email: email, password: password);
       final record =
           await _loadRemoteFarmerProfile() ??
-          _createFarmerProfileFromFirebaseUser(email);
+          await _createFarmerProfileFromCurrentUser(email);
       verifiedFarmer.value = record;
       await _rememberLocalFarmerProfile(record: record);
 
@@ -223,10 +208,8 @@ class MainAuthController extends GetxController {
 
       isLoggedIn.value = true;
       await _afterSignIn(nextRoute);
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-    } on FarmerVerificationException catch (e) {
-      errorMessage.value = _farmerLoginErrorMessage(e);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
     } catch (_) {
       errorMessage.value = 'Could not login farmer profile.';
     } finally {
@@ -243,19 +226,28 @@ class MainAuthController extends GetxController {
     errorMessage.value = '';
     verifiedFarmer.value = null;
     try {
+      final normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.isEmpty || password.isEmpty) {
+        errorMessage.value = 'Enter the FPC email and password.';
+        return;
+      }
       await _clearLocalGuest();
-      await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
+      if (_auth.currentSession != null) {
+        await _auth.signOut();
+      }
+      await _auth.signInWithPassword(
+        email: normalizedEmail,
         password: password,
       );
-      await _rememberLastLoginRole('fpo_fpc');
-      await _primeBackendBridgeForFpc();
+      if (!_hasServerRole(_auth.currentUser, _fpcServerRoles)) {
+        await _auth.signOut();
+        errorMessage.value = 'This account is not enabled for FPC login.';
+        return;
+      }
       isLoggedIn.value = true;
       await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-    } on FarmerVerificationException catch (e) {
-      errorMessage.value = _farmerLoginErrorMessage(e);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
     } catch (_) {
       errorMessage.value = 'Could not login FPC account.';
     } finally {
@@ -263,204 +255,283 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<void> signupFpc(
-    String email,
-    String password, {
+  Future<void> signupAdmin({
+    required String email,
+    required String password,
+    required String displayName,
+    required String organizationName,
+    required String phone,
+    String nextRoute = '/admin',
+  }) {
+    return _signupRoleAccount(
+      role: 'admin',
+      email: email,
+      password: password,
+      displayName: displayName,
+      organizationName: organizationName,
+      phone: phone,
+      allowedRoles: const {'admin'},
+      nextRoute: nextRoute,
+    );
+  }
+
+  Future<void> signupFpc({
+    required String email,
+    required String password,
+    required String displayName,
+    required String organizationName,
+    required String phone,
     String nextRoute = '/fpo',
-    String? organizationName,
+  }) {
+    return _signupRoleAccount(
+      role: 'fpc',
+      email: email,
+      password: password,
+      displayName: displayName,
+      organizationName: organizationName,
+      phone: phone,
+      allowedRoles: _fpcServerRoles,
+      nextRoute: nextRoute,
+    );
+  }
+
+  Future<void> _signupRoleAccount({
+    required String role,
+    required String email,
+    required String password,
+    required String displayName,
+    required String organizationName,
+    required String phone,
+    required Set<String> allowedRoles,
+    required String nextRoute,
   }) async {
+    if (isLoading.value) return;
+    final normalizedEmail = email.trim().toLowerCase();
+    final name = displayName.trim();
+    final organization = organizationName.trim();
+    final phoneDigits = phone.replaceAll(RegExp(r'\D'), '');
+    final accountLabel = role == 'admin' ? 'admin' : 'FPC';
+
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(normalizedEmail)) {
+      errorMessage.value = 'Enter a valid email.';
+      return;
+    }
+    if (password.length < 6) {
+      errorMessage.value = 'Password must be at least 6 characters.';
+      return;
+    }
+    if (name.isEmpty) {
+      errorMessage.value = 'Enter your name.';
+      return;
+    }
+    if (organization.isEmpty) {
+      errorMessage.value = role == 'admin'
+          ? 'Enter organization name.'
+          : 'Enter FPC name.';
+      return;
+    }
+    if (phoneDigits.length < 10) {
+      errorMessage.value = 'Enter a valid mobile number.';
+      return;
+    }
+
     isLoading.value = true;
     errorMessage.value = '';
     verifiedFarmer.value = null;
     try {
       await _clearLocalGuest();
-      final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: email,
+      if (_auth.currentSession != null) {
+        await _auth.signOut();
+      }
+      final response = await _client.functions.invoke(
+        'role-account-signup',
+        body: {
+          'role': role,
+          'email': normalizedEmail,
+          'password': password,
+          'displayName': name,
+          'organizationName': organization,
+          'phone': phoneDigits,
+        },
+      );
+      final data = _responseMap(response.data);
+      if (data['success'] == false) {
+        throw RoleAccountSignupException(
+          '${data['error'] ?? 'Could not create $accountLabel account.'}',
+          code: '${data['code'] ?? ''}'.trim(),
+        );
+      }
+      await _auth.signInWithPassword(
+        email: normalizedEmail,
         password: password,
       );
-      final name = organizationName?.trim();
-      if (name != null && name.isNotEmpty) {
-        await credential.user?.updateDisplayName(name);
+      if (!_hasServerRole(_auth.currentUser, allowedRoles)) {
+        await _auth.signOut();
+        errorMessage.value =
+            'Account created, but $accountLabel access was not enabled. Contact support.';
+        return;
       }
-      await credential.user?.getIdToken(true);
-      await _rememberLastLoginRole('fpo_fpc');
-      await _primeBackendBridgeForFpc();
       isLoggedIn.value = true;
       await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-    } on FarmerVerificationException catch (e) {
-      errorMessage.value = _farmerLoginErrorMessage(e);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
+    } on RoleAccountSignupException catch (e) {
+      errorMessage.value = _roleAccountSignupErrorMessage(e, accountLabel);
+    } catch (e) {
+      errorMessage.value = _roleAccountSignupErrorMessage(e, accountLabel);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> loginAdmin(
+    String email,
+    String password, {
+    String nextRoute = '/admin',
+  }) async {
+    isLoading.value = true;
+    errorMessage.value = '';
+    verifiedFarmer.value = null;
+    try {
+      final normalizedEmail = email.trim().toLowerCase();
+      if (normalizedEmail.isEmpty || password.isEmpty) {
+        errorMessage.value = 'Enter the admin email and password.';
+        return;
+      }
+      await _clearLocalGuest();
+      if (_auth.currentSession != null) {
+        await _auth.signOut();
+      }
+      await _auth.signInWithPassword(
+        email: normalizedEmail,
+        password: password,
+      );
+      if (!_hasServerRole(_auth.currentUser, const {'admin'})) {
+        await _auth.signOut();
+        errorMessage.value = 'This account is not enabled for admin login.';
+        return;
+      }
+      isLoggedIn.value = true;
+      await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
+    } on AuthException catch (e) {
+      errorMessage.value = e.message;
     } catch (_) {
-      errorMessage.value = 'Could not create FPC account.';
+      errorMessage.value = 'Could not login admin account.';
     } finally {
       isLoading.value = false;
     }
   }
 
   Future<void> continueAsGuest({String nextRoute = '/home'}) async {
-    await _clearLocalGuest();
-    errorMessage.value =
-        'Guest access has been removed. Please sign in as a Farmer or FPO/FPC.';
-  }
-
-  Future<bool> sendFarmerPhoneCode(
-    String phone, {
-    String nextRoute = '/farmer',
-    bool verifyOnly = false,
-    String countryDialCode = '+91',
-  }) async {
-    if (isLoading.value) return false;
-    final digits = _normalizePhone(phone);
-    final dialCode = _normalizeDialCode(countryDialCode);
-    final e164Phone = '$dialCode$digits';
-    if (digits.length != 10) {
-      errorMessage.value = 'Enter a valid 10 digit mobile number';
-      _clearFarmerLoginSyncStatus();
-      return false;
-    }
-
     isLoading.value = true;
     errorMessage.value = '';
-    _pendingVerifiedPhone = digits;
-    _pendingVerifiedDialCode = dialCode;
-    _pendingVerifiedE164 = e164Phone;
-    isSmsCodeSent.value = false;
-
+    verifiedFarmer.value = null;
     try {
-      await _startFreshPhoneAuthAttempt();
-      if (kIsWeb) {
-        _farmerPhoneConfirmationResult = await _firebaseAuth
-            .signInWithPhoneNumber(e164Phone);
-        isSmsCodeSent.value = true;
-        return true;
-      }
-
-      final completer = Completer<bool>();
-      await _firebaseAuth.verifyPhoneNumber(
-        phoneNumber: e164Phone,
-        timeout: const Duration(seconds: 60),
-        forceResendingToken: _firebaseResendToken,
-        verificationCompleted: (credential) async {
-          try {
-            await _firebaseAuth.signInWithCredential(credential);
-            if (verifyOnly) {
-              _verifiedSignupPhone = digits;
-              _verifiedSignupE164 = e164Phone;
-              _resetPhoneVerification();
-              if (!completer.isCompleted) completer.complete(true);
-              isLoading.value = false;
-              return;
-            }
-            _resetPhoneVerification();
-            if (!completer.isCompleted) completer.complete(true);
-            isLoading.value = false;
-            await continueAsVerifiedFarmer(
-              digits,
-              nextRoute: nextRoute,
-              countryDialCode: dialCode,
-            );
-          } on firebase.FirebaseAuthException catch (e) {
-            errorMessage.value = _firebaseAuthErrorMessage(e);
-            if (!completer.isCompleted) completer.complete(false);
-          } catch (_) {
-            errorMessage.value = 'Could not verify farmer profile.';
-            if (!completer.isCompleted) completer.complete(false);
-          }
-        },
-        verificationFailed: (e) {
-          errorMessage.value = _firebaseAuthErrorMessage(e);
-          if (!completer.isCompleted) completer.complete(false);
-        },
-        codeSent: (verificationId, resendToken) {
-          _firebaseVerificationId = verificationId;
-          _firebaseResendToken = resendToken;
-          isSmsCodeSent.value = true;
-          if (!completer.isCompleted) completer.complete(true);
-        },
-        codeAutoRetrievalTimeout: (verificationId) {
-          _firebaseVerificationId = verificationId;
-        },
-      );
-
-      return completer.future.timeout(
-        const Duration(seconds: 20),
-        onTimeout: () => isSmsCodeSent.value,
-      );
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-      return false;
-    } catch (_) {
-      errorMessage.value = 'Could not send verification code.';
-      return false;
-    } finally {
-      if (isSmsCodeSent.value || _firebaseAuth.currentUser == null) {
-        isLoading.value = false;
-      }
-    }
-  }
-
-  Future<void> verifyFarmerPhoneCode(
-    String smsCode, {
-    String nextRoute = '/farmer',
-    bool verifyOnly = false,
-    String countryDialCode = '+91',
-  }) async {
-    if (isLoading.value) return;
-    final phone = _pendingVerifiedPhone;
-    final code = smsCode.trim();
-    if (phone == null || phone.length != 10) {
-      errorMessage.value = 'Send the verification code first.';
-      return;
-    }
-    if (code.length < 4) {
-      errorMessage.value = 'Enter the SMS verification code.';
-      return;
-    }
-
-    isLoading.value = true;
-    errorMessage.value = '';
-    try {
-      if (kIsWeb) {
-        final confirmation = _farmerPhoneConfirmationResult;
-        if (confirmation == null) {
-          errorMessage.value = 'Send the verification code first.';
-          return;
-        }
-        await confirmation.confirm(code);
-      } else {
-        final verificationId = _firebaseVerificationId;
-        if (verificationId == null) {
-          errorMessage.value = 'Send the verification code first.';
-          return;
-        }
-        final credential = firebase.PhoneAuthProvider.credential(
-          verificationId: verificationId,
-          smsCode: code,
-        );
-        await _firebaseAuth.signInWithCredential(credential);
-      }
-      if (verifyOnly) {
-        _verifiedSignupPhone = phone;
-        _verifiedSignupE164 = _pendingVerifiedE164;
-        _resetPhoneVerification();
-        isLoading.value = false;
+      if (!await _networkStatusService.hasNetworkInterface()) {
+        await _startLocalGuest();
+        await _afterSignIn(nextRoute);
         return;
       }
-      _resetPhoneVerification();
-      isLoading.value = false;
-      await continueAsVerifiedFarmer(
-        phone,
-        nextRoute: nextRoute,
-        countryDialCode: countryDialCode,
-      );
-    } on firebase.FirebaseAuthException catch (e) {
-      errorMessage.value = _firebaseAuthErrorMessage(e);
-    } catch (_) {
-      errorMessage.value = 'Could not verify farmer profile.';
+      await _auth.signInAnonymously();
+      await _afterSignIn(nextRoute);
+    } on AuthException catch (e) {
+      if (_networkStatusService.looksOffline(e)) {
+        await _startLocalGuest();
+        await _afterSignIn(nextRoute);
+        return;
+      }
+      errorMessage.value = e.message;
+    } catch (e) {
+      if (_networkStatusService.looksOffline(e)) {
+        await _startLocalGuest();
+        await _afterSignIn(nextRoute);
+        return;
+      }
+      errorMessage.value = 'Could not continue as guest.';
     } finally {
-      if (isLoading.value) isLoading.value = false;
+      isLoading.value = false;
     }
+  }
+
+  Future<bool> _openOfflineFarmerFallback({
+    required String phone,
+    required String nextRoute,
+    required bool requireAgriRecord,
+  }) async {
+    _setFarmerLoginSyncStatus('offline_cached_session');
+    _setFarmerLoginSyncStatusCode('network_issue');
+    final opened = await _openCachedFarmerSessionIfAvailable(
+      phone,
+      nextRoute,
+      requireAgriRecord: requireAgriRecord,
+    );
+    if (!opened) {
+      errorMessage.value = requireAgriRecord
+          ? 'Network issue. Connect to internet so we can confirm stakeholder access.'
+          : 'You are offline. Last saved farm data will open when available.';
+      farmerLoginState.value = null;
+      _trackFarmerLoginEvent('farm_sync_failed', {
+        'phone': phone,
+        'reason': 'offline_no_cached_session',
+      });
+    }
+    return opened;
+  }
+
+  Future<void> _runVerifiedFarmerRemoteLogin({
+    required String phone,
+    required String nextRoute,
+    required bool requireAgriRecord,
+  }) async {
+    await _clearLocalGuest();
+    await _clearFarmerRemoteSession();
+    final record = await _signInAndSyncRemoteFarmer(
+      phone,
+      requireAgriRecord: requireAgriRecord,
+    );
+    verifiedFarmer.value = record;
+    await _rememberLocalFarmerProfile(record: record);
+    isLoggedIn.value = true;
+    farmerLoginState.value = FarmerLoginState.ready;
+    farmerLoginSyncStatusKey.value = '';
+    farmerLoginSyncStatusCode.value = '';
+    _trackFarmerLoginEvent('dashboard_opened', {'phone': phone});
+    _startBackgroundFarmerDataSync(record: record, phone: phone, mode: 'login');
+    await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
+  }
+
+  bool _shouldUseOfflineFarmerFallback(Object error) {
+    if (_networkStatusService.looksOffline(error)) return true;
+    return error is FarmerVerificationException &&
+        error.code == 'network_issue';
+  }
+
+  Future<void> _handleVerifiedFarmerLoginFailure(
+    Object error, {
+    required String phone,
+    required String nextRoute,
+    required bool requireAgriRecord,
+  }) async {
+    if (_shouldUseOfflineFarmerFallback(error) &&
+        await _openOfflineFarmerFallback(
+          phone: phone,
+          nextRoute: nextRoute,
+          requireAgriRecord: requireAgriRecord,
+        )) {
+      return;
+    }
+    if (error is FarmerVerificationException) {
+      throw error;
+    }
+    if (_networkStatusService.looksOffline(error)) {
+      throw FarmerVerificationException(
+        requireAgriRecord
+            ? 'Network issue. Connect to internet so we can confirm stakeholder access.'
+            : 'Network issue. Check internet and try again.',
+        code: 'network_issue',
+      );
+    }
+    throw error;
   }
 
   Future<void> continueAsVerifiedFarmer(
@@ -487,83 +558,35 @@ class MainAuthController extends GetxController {
     _trackFarmerLoginEvent('login_started', {'phone': digits});
     _farmerSessionLinkInProgress = true;
     try {
-      final online = await _networkStatusService.isOnline();
-      if (!online) {
-        _setFarmerLoginSyncStatus('offline_cached_session');
-        _setFarmerLoginSyncStatusCode('network_issue');
-        final opened = await _openCachedFarmerSessionIfAvailable(
-          digits,
-          nextRoute,
+      if (!await _networkStatusService.hasNetworkInterface()) {
+        await _openOfflineFarmerFallback(
+          phone: digits,
+          nextRoute: nextRoute,
           requireAgriRecord: requireAgriRecord,
         );
-        if (!opened) {
-          errorMessage.value = requireAgriRecord
-              ? 'Network issue. Connect to internet so we can confirm stakeholder access.'
-              : 'You are offline. Last saved farm data will open when available.';
-          farmerLoginState.value = null;
-          _trackFarmerLoginEvent('farm_sync_failed', {
-            'phone': digits,
-            'reason': 'offline_no_cached_session',
-          });
-        }
         return;
       }
-      await _clearLocalGuest();
-      await _clearFarmerRemoteSession();
-      final record = await _signInAndSyncRemoteFarmer(
-        digits,
-        requireAgriRecord: requireAgriRecord,
-      );
-      verifiedFarmer.value = record;
-      await _rememberLocalFarmerProfile(record: record);
-      isLoggedIn.value = true;
-      _setFarmerLoginSyncStatus('syncing_farm_records');
-      final farmCount = await _syncFarmerFarmDataForLogin();
-      final farmCtrl = Get.isRegistered<FarmController>()
-          ? Get.find<FarmController>()
-          : null;
-      final usedCachedFarmFallback =
-          farmCtrl?.lastLoadUsedCachedFallback == true && farmCount > 0;
-      farmerLoginSyncedFarmCount.value = farmCount;
-      final syncedAt = DateTime.now().toUtc();
-      farmerLoginLastSyncAt.value = syncedAt;
-      await _rememberFarmerLogin(
-        record: record,
-        farmCount: farmCount,
-        syncedAt: syncedAt,
-      );
-      _setFarmerLoginSyncStatus(
-        usedCachedFarmFallback
-            ? 'offline_cached_session'
-            : farmCount > 0
-            ? 'farm_records_synced'
-            : 'no_farm_records_found',
-        code: usedCachedFarmFallback
-            ? 'network_issue'
-            : farmCount > 0
-            ? 'farms_synced'
-            : 'farms_not_found',
-      );
-      _trackFarmerLoginEvent('farm_sync_success', {
-        'phone': digits,
-        'farmCount': farmCount,
-        'cachedFallback': usedCachedFarmFallback,
-      });
-      farmerLoginState.value = FarmerLoginState.farmsSynced;
-      _setFarmerLoginSyncStatus('opening_farmer_dashboard');
-      farmerLoginState.value = FarmerLoginState.ready;
-      _trackFarmerLoginEvent('dashboard_opened', {'phone': digits});
-      await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
+      try {
+        await _runVerifiedFarmerRemoteLogin(
+          phone: digits,
+          nextRoute: nextRoute,
+          requireAgriRecord: requireAgriRecord,
+        );
+      } catch (e) {
+        await _handleVerifiedFarmerLoginFailure(
+          e,
+          phone: digits,
+          nextRoute: nextRoute,
+          requireAgriRecord: requireAgriRecord,
+        );
+      }
     } on FarmerProfileNotFoundException {
       await _clearFarmerRemoteSession();
       _clearFarmerLoginSyncStatus();
       farmerLoginAnalyticsEvents.clear();
       errorMessage.value = '';
       farmerLoginState.value = FarmerLoginState.needsSignup;
-      Get.offNamed(
-        '/farmer/signup',
-        arguments: {'phone': digits, 'countryDialCode': countryDialCode},
-      );
+      Get.offNamed('/farmer/signup', arguments: {'phone': digits});
     } on FarmerProfileAlreadyExistsException catch (e) {
       await _clearFarmerRemoteSession();
       farmerLoginState.value = FarmerLoginState.ready;
@@ -627,20 +650,25 @@ class MainAuthController extends GetxController {
     required String farmerName,
     required String defaultLocation,
     required String agriRecordId,
+    required String aadhaarNumber,
     required String aadhaarMasked,
     required String aadhaarLast4,
     required String identityDocumentPath,
+    String identitySource = 'agri_record_document',
     double? identityOcrConfidence,
     String nextRoute = '/farmer',
-    String countryDialCode = '+91',
   }) async {
     final digits = _normalizePhone(phone);
     final name = farmerName.trim();
     final location = defaultLocation.trim();
     final recordId = agriRecordId.trim();
+    final aadhaarDigits = aadhaarNumber.replaceAll(RegExp(r'\D'), '');
     final maskedAadhaar = aadhaarMasked.trim();
     final aadhaarLastDigits = aadhaarLast4.replaceAll(RegExp(r'\D'), '');
     final documentPath = identityDocumentPath.trim();
+    final proofSource = identitySource.trim().isEmpty
+        ? (documentPath.isEmpty ? 'manual_entry' : 'agri_record_document')
+        : identitySource.trim();
     if (digits.length != 10) {
       errorMessage.value = 'Enter a valid 10 digit mobile number';
       return;
@@ -649,16 +677,10 @@ class MainAuthController extends GetxController {
       errorMessage.value = 'Enter farmer name';
       return;
     }
-    if (recordId.isEmpty) {
-      errorMessage.value = 'Enter farmer agri record ID';
-      return;
-    }
-    if (aadhaarLastDigits.length != 4 || maskedAadhaar.isEmpty) {
+    if (aadhaarDigits.length != 12 ||
+        aadhaarLastDigits.length != 4 ||
+        maskedAadhaar.isEmpty) {
       errorMessage.value = 'Enter a 12 digit Aadhaar number';
-      return;
-    }
-    if (documentPath.isEmpty) {
-      errorMessage.value = 'Upload agri record document';
       return;
     }
 
@@ -701,56 +723,37 @@ class MainAuthController extends GetxController {
         farmerName: name,
         defaultLocation: location.isEmpty ? 'Kalsubai Farms' : location,
         agriRecordId: recordId,
+        aadhaarNumber: aadhaarDigits,
         aadhaarMasked: maskedAadhaar,
         aadhaarLast4: aadhaarLastDigits,
         identityDocumentPath: documentPath,
+        identitySource: proofSource,
         identityOcrConfidence: identityOcrConfidence,
       );
 
       verifiedFarmer.value = record;
       farmerLoginState.value = FarmerLoginState.verified;
       await _rememberLocalFarmerProfile(record: record);
-      _setFarmerLoginSyncStatus('syncing_farm_records');
-      final farmCount = await _syncFarmerFarmDataForLogin();
-      final farmCtrl = Get.isRegistered<FarmController>()
-          ? Get.find<FarmController>()
-          : null;
-      final usedCachedFarmFallback =
-          farmCtrl?.lastLoadUsedCachedFallback == true && farmCount > 0;
-      farmerLoginSyncedFarmCount.value = farmCount;
-      final syncedAt = DateTime.now().toUtc();
-      farmerLoginLastSyncAt.value = syncedAt;
-      await _rememberFarmerLogin(
-        record: record,
-        farmCount: farmCount,
-        syncedAt: syncedAt,
+      _setFarmerLoginSyncStatus('syncing_farmer_session');
+      await _syncSatelliteSession(
+        session,
+        user,
+        user.email ?? 'farmer-$digits@anonymous.local',
       );
-      _setFarmerLoginSyncStatus(
-        usedCachedFarmFallback
-            ? 'offline_cached_session'
-            : farmCount > 0
-            ? 'farm_records_synced'
-            : 'no_farm_records_found',
-        code: usedCachedFarmFallback
-            ? 'network_issue'
-            : farmCount > 0
-            ? 'farms_synced'
-            : 'farms_not_found',
-      );
-      _trackFarmerLoginEvent('farm_sync_success', {
-        'phone': digits,
-        'farmCount': farmCount,
-        'mode': 'signup',
-        'cachedFallback': usedCachedFarmFallback,
-      });
-      farmerLoginState.value = FarmerLoginState.farmsSynced;
       isLoggedIn.value = true;
-      _setFarmerLoginSyncStatus('opening_farmer_dashboard');
       farmerLoginState.value = FarmerLoginState.ready;
+      farmerLoginSyncStatusKey.value = '';
+      farmerLoginSyncStatusCode.value = '';
       _trackFarmerLoginEvent('dashboard_opened', {
         'phone': digits,
         'mode': 'signup',
       });
+      _startBackgroundFarmerDataSync(
+        record: record,
+        phone: digits,
+        mode: 'signup',
+        retryEmptyFarmCache: false,
+      );
       await _afterSignIn(
         nextRoute,
         arguments: {'showFirstFarmGuide': true, 'newFarmerPhone': digits},
@@ -785,8 +788,37 @@ class MainAuthController extends GetxController {
     }
   }
 
-  Future<void> syncFarmerData({bool forceRefresh = false}) async {
-    isLoading.value = true;
+  Future<void> syncFarmerData({
+    bool forceRefresh = false,
+    bool showLoading = true,
+  }) async {
+    final inFlight = _farmerDataSyncInFlight;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final sync = _syncFarmerDataOnce(
+      forceRefresh: forceRefresh,
+      showLoading: showLoading,
+    );
+    _farmerDataSyncInFlight = sync;
+    try {
+      await sync;
+    } finally {
+      if (identical(_farmerDataSyncInFlight, sync)) {
+        _farmerDataSyncInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _syncFarmerDataOnce({
+    required bool forceRefresh,
+    required bool showLoading,
+  }) async {
+    if (showLoading) {
+      isLoading.value = true;
+    }
     try {
       await _refreshVerifiedProfile();
 
@@ -820,11 +852,32 @@ class MainAuthController extends GetxController {
               ? 'farms_not_found'
               : 'farms_synced';
         }
-        await _syncFarmerInventoryForLogin();
+        unawaited(_syncFarmerInventoryForLogin());
       }
     } finally {
-      isLoading.value = false;
+      if (showLoading) {
+        isLoading.value = false;
+      }
     }
+  }
+
+  bool _hasServerRole(User? user, Set<String> allowedRoles) {
+    if (user == null) return false;
+    final role = '${user.appMetadata['role'] ?? ''}'.trim().toLowerCase();
+    if (allowedRoles.contains(role)) return true;
+    final roles = user.appMetadata['roles'];
+    if (roles is Iterable) {
+      return roles
+          .map((value) => '$value'.trim().toLowerCase())
+          .any(allowedRoles.contains);
+    }
+    if (roles is String) {
+      return roles
+          .split(',')
+          .map((value) => value.trim().toLowerCase())
+          .any(allowedRoles.contains);
+    }
+    return false;
   }
 
   Future<void> _afterSignIn(
@@ -842,49 +895,91 @@ class MainAuthController extends GetxController {
   }
 
   Future<void> logout() async {
-    await _firebaseAuth.signOut();
-    await _auth.signOut();
-    _resetPhoneVerification();
-    verifiedFarmer.value = null;
-    if (Get.isRegistered<FarmerInventoryController>()) {
-      Get.find<FarmerInventoryController>().clear();
+    if (isLoggingOut.value) return;
+    isLoggingOut.value = true;
+    isLoading.value = true;
+    errorMessage.value = '';
+    try {
+      try {
+        if (_auth.currentSession != null) {
+          await _auth.signOut();
+        }
+      } catch (error) {
+        Get.log('Supabase sign out failed during logout cleanup: $error');
+      }
+      verifiedFarmer.value = null;
+      farmerLoginAnalyticsEvents.clear();
+      if (Get.isRegistered<FarmerInventoryController>()) {
+        Get.find<FarmerInventoryController>().clear();
+      }
+      if (Get.isRegistered<StakeholderController>()) {
+        Get.delete<StakeholderController>(force: true);
+      }
+      if (Get.isRegistered<AdminController>()) {
+        Get.delete<AdminController>(force: true);
+      }
+      _clearFarmerLoginSyncStatus();
+      await _clearLocalGuest();
+      if (Get.isRegistered<AuthController>()) {
+        await Get.find<AuthController>().clearSession();
+      }
+      isLoggedIn.value = false;
+      Get.offAllNamed('/login');
+    } finally {
+      isLoading.value = false;
+      isLoggingOut.value = false;
     }
-    _clearFarmerLoginSyncStatus();
-    await _clearLocalGuest();
-    await _clearLastLoginRole();
-    if (Get.isRegistered<AuthController>()) {
-      await Get.find<AuthController>().clearSession();
-    }
-    Get.offAllNamed('/login');
-  }
-
-  Future<String> startupRoute() async {
-    await _loadLastLoginRole();
-    final user = _auth.currentUser;
-    final supabaseRole = '${user?.userMetadata?['role'] ?? ''}'
-        .trim()
-        .toLowerCase();
-    if (verifiedFarmer.value != null || supabaseRole == 'farmer') {
-      return '/farmer';
-    }
-    if (_isFpcRole(supabaseRole) || _hasFirebaseFpcSession) {
-      return '/fpo';
-    }
-    if (_hasUserSupabaseSession) {
-      return '/home';
-    }
-    return '/login';
   }
 
   Future<bool> ensureRemoteGuestSession() async {
-    await _clearLocalGuest();
-    errorMessage.value =
-        'Guest access has been removed. Please sign in before syncing.';
-    return false;
+    if (_auth.currentUser != null) return true;
+    await _refreshLocalGuestState();
+    if (!hasLocalGuest.value ||
+        !await _networkStatusService.hasNetworkInterface()) {
+      return false;
+    }
+    try {
+      await _auth.signInAnonymously();
+      await _clearLocalGuest();
+      return true;
+    } catch (e) {
+      errorMessage.value = _networkStatusService.looksOffline(e)
+          ? 'Still offline. Surveys will sync when internet returns.'
+          : 'Could not prepare guest sync.';
+      return false;
+    }
+  }
+
+  Future<void> _startLocalGuest() async {
+    final current = await _secureStorage.readString(_localGuestIdKey);
+    if (current == null || current.isEmpty) {
+      await _secureStorage.writeString(
+        _localGuestIdKey,
+        'local-guest-${DateTime.now().toUtc().microsecondsSinceEpoch}',
+      );
+    }
+    hasLocalGuest.value = true;
+    isLoggedIn.value = true;
+  }
+
+  Future<void> _refreshLocalGuestState() async {
+    final value = await _secureStorage.readString(_localGuestIdKey);
+    hasLocalGuest.value = value != null && value.isNotEmpty;
+    isLoggedIn.value =
+        _auth.currentSession != null ||
+        hasLocalGuest.value ||
+        verifiedFarmer.value != null;
   }
 
   Future<void> _refreshVerifiedProfile() async {
-    await _loadLastFarmerLoginSummary();
+    if (_auth.currentUser == null) {
+      verifiedFarmer.value = null;
+      isLoggedIn.value =
+          _auth.currentSession != null ||
+          hasLocalGuest.value ||
+          verifiedFarmer.value != null;
+      return;
+    }
 
     VerifiedFarmerRecord? record;
     try {
@@ -892,58 +987,32 @@ class MainAuthController extends GetxController {
     } catch (e) {
       if (_networkStatusService.looksOffline(e)) {
         isLoggedIn.value =
-            _hasUserSupabaseSession || verifiedFarmer.value != null;
+            _auth.currentSession != null ||
+            hasLocalGuest.value ||
+            verifiedFarmer.value != null;
         return;
       }
       rethrow;
     }
     if (record == null) {
       verifiedFarmer.value = null;
-      isLoggedIn.value = _hasUserSupabaseSession;
+      isLoggedIn.value = _auth.currentSession != null || hasLocalGuest.value;
       return;
     }
     verifiedFarmer.value = record;
     await _rememberLocalFarmerProfile(record: record);
 
-    isLoggedIn.value = _hasUserSupabaseSession || verifiedFarmer.value != null;
+    isLoggedIn.value =
+        _auth.currentSession != null ||
+        hasLocalGuest.value ||
+        verifiedFarmer.value != null;
   }
 
   Future<void> _clearLocalGuest() async {
     await _secureStorage.remove(_localGuestIdKey);
     hasLocalGuest.value = false;
-    isLoggedIn.value = _hasUserSupabaseSession || verifiedFarmer.value != null;
-  }
-
-  Future<void> _loadLastLoginRole() async {
-    final role = await _secureStorage.readString(_lastLoginRoleKey) ?? '';
-    lastLoginRole.value = role.trim().toLowerCase();
-    if (_hasFirebaseFpcSession) {
-      isLoggedIn.value = true;
-    }
-  }
-
-  Future<void> _rememberLastLoginRole(String role) async {
-    final normalized = role.trim().toLowerCase();
-    lastLoginRole.value = normalized;
-    if (normalized.isEmpty) {
-      await _secureStorage.remove(_lastLoginRoleKey);
-    } else {
-      await _secureStorage.writeString(_lastLoginRoleKey, normalized);
-    }
-  }
-
-  Future<void> _clearLastLoginRole() async {
-    lastLoginRole.value = '';
-    await _secureStorage.remove(_lastLoginRoleKey);
-  }
-
-  bool _isFpcRole(String role) {
-    return {
-      'fpc',
-      'fpo',
-      'fpo_fpc',
-      'fpo/fpc',
-    }.contains(role.trim().toLowerCase());
+    isLoggedIn.value =
+        _auth.currentSession != null || verifiedFarmer.value != null;
   }
 
   Future<void> _clearFarmerRemoteSession() async {
@@ -954,27 +1023,6 @@ class MainAuthController extends GetxController {
     if (Get.isRegistered<AuthController>()) {
       await Get.find<AuthController>().clearSession();
     }
-  }
-
-  bool get _hasUserSupabaseSession {
-    final session = _auth.currentSession;
-    final user = _auth.currentUser;
-    return session != null &&
-        !(user?.isAnonymous ?? false) &&
-        !_isBackendBridgeSupabaseUser(user);
-  }
-
-  bool _isBackendBridgeSupabaseUser(User? user) {
-    final backendEmail = RuntimeConfig.backendAuthEmail.trim().toLowerCase();
-    if (backendEmail.isEmpty) return false;
-    return (user?.email ?? '').trim().toLowerCase() == backendEmail;
-  }
-
-  Future<void> _startFreshPhoneAuthAttempt() async {
-    await _firebaseAuth.signOut();
-    await _clearFarmerRemoteSession();
-    verifiedFarmer.value = null;
-    isLoggedIn.value = false;
   }
 
   String _normalizePhone(String phone) {
@@ -1025,10 +1073,11 @@ class MainAuthController extends GetxController {
           phone: phone,
           farmerId: record.farmerId,
           farmerName: record.farmerName,
-          userId: _backendAuthUserId ?? _auth.currentUser?.id ?? '',
+          userId: _auth.currentUser?.id ?? '',
           defaultLocation: record.defaultLocation,
           preferredLanguage: 'en',
           agriRecordId: record.agriRecordId,
+          aadhaarNumber: record.aadhaarNumber,
           aadhaarMasked: record.aadhaarMasked,
           aadhaarLast4: record.aadhaarLast4,
           identityDocumentPath: record.identityDocumentPath,
@@ -1107,6 +1156,7 @@ class MainAuthController extends GetxController {
       'farmerId': record.farmerId,
       'defaultLocation': record.defaultLocation,
       'agriRecordId': record.agriRecordId,
+      'aadhaarNumber': record.aadhaarNumber,
       'aadhaarMasked': record.aadhaarMasked,
       'aadhaarLast4': record.aadhaarLast4,
       'identityDocumentPath': record.identityDocumentPath,
@@ -1135,6 +1185,7 @@ class MainAuthController extends GetxController {
             farmerName: cached.farmerName,
             defaultLocation: cached.defaultLocation,
             agriRecordId: cached.agriRecordId,
+            aadhaarNumber: cached.aadhaarNumber,
             aadhaarMasked: cached.aadhaarMasked,
             aadhaarLast4: cached.aadhaarLast4,
             identityDocumentPath: cached.identityDocumentPath,
@@ -1188,7 +1239,7 @@ class MainAuthController extends GetxController {
       farmerLoginSyncedFarmCount.value = farmCtrl.farms.length;
     } else {
       verifiedFarmer.value = null;
-      isLoggedIn.value = _hasUserSupabaseSession;
+      isLoggedIn.value = _auth.currentSession != null || hasLocalGuest.value;
       farmerLoginState.value = null;
       farmerLoginSyncedFarmCount.value = null;
       return false;
@@ -1241,13 +1292,35 @@ class MainAuthController extends GetxController {
     });
     farmerLoginState.value = FarmerLoginState.verified;
 
-    _setFarmerLoginSyncStatus('starting_farmer_session');
-    await _ensureBackendAuthSession();
+    if (_auth.currentSession == null) {
+      _setFarmerLoginSyncStatus('starting_farmer_session');
+      await _auth.signInAnonymously(
+        data: {
+          'role': 'farmer',
+          'phone': phone,
+          'farmer_id': verifiedRecord.farmerId,
+          'farmer_name': verifiedRecord.farmerName,
+        },
+      );
+    }
+
+    final session = _auth.currentSession;
+    final user = _auth.currentUser;
+    if (session == null || user == null) {
+      throw StateError('No Supabase farmer session.');
+    }
 
     _setFarmerLoginSyncStatus('linking_farmer_profile');
     await _linkRemoteFarmerPhone(phone: phone, record: verifiedRecord);
     farmerLoginState.value = FarmerLoginState.linked;
     _setFarmerLoginSyncStatusCode('farmer_linked');
+
+    _setFarmerLoginSyncStatus('syncing_farmer_session');
+    await _syncSatelliteSession(
+      session,
+      user,
+      user.email ?? 'farmer-$phone@anonymous.local',
+    );
 
     return verifiedRecord;
   }
@@ -1321,7 +1394,7 @@ class MainAuthController extends GetxController {
   }
 
   Map<String, String>? _functionAuthHeaders() {
-    final token = _backendAuthToken ?? _auth.currentSession?.accessToken;
+    final token = _auth.currentSession?.accessToken;
     return token == null || token.isEmpty
         ? null
         : {'Authorization': 'Bearer $token'};
@@ -1331,19 +1404,19 @@ class MainAuthController extends GetxController {
     required String phone,
     required VerifiedFarmerRecord record,
   }) async {
-    final userId = _backendAuthUserId ?? _auth.currentUser?.id;
-    final token = _backendAuthToken ?? _auth.currentSession?.accessToken;
-    if (userId == null || userId.isEmpty || token == null || token.isEmpty) {
-      throw const FarmerVerificationException('No backend farmer session.');
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw const FarmerVerificationException('No Supabase farmer session.');
     }
 
-    await _client.from('farmer_phone_profiles').upsert({
+    await _upsertFarmerPhoneProfile({
       'user_id': user.id,
       'phone': phone,
       'farmer_id': record.farmerId,
       'farmer_name': record.farmerName,
       'default_location': record.defaultLocation,
       'agri_record_id': record.agriRecordId,
+      'aadhaar_number': record.aadhaarNumber,
       'aadhaar_masked': record.aadhaarMasked,
       'aadhaar_last4': record.aadhaarLast4,
       'identity_document_path': record.identityDocumentPath,
@@ -1352,6 +1425,24 @@ class MainAuthController extends GetxController {
       'phone_verified_at': DateTime.now().toUtc().toIso8601String(),
       'source': 'phone_login',
     }, onConflict: 'user_id');
+  }
+
+  Future<void> _upsertFarmerPhoneProfile(
+    Map<String, Object?> row, {
+    required String onConflict,
+  }) async {
+    try {
+      await _client
+          .from('farmer_phone_profiles')
+          .upsert(row, onConflict: onConflict);
+    } catch (error) {
+      if (!_isMissingAadhaarNumberColumn(error)) rethrow;
+      final legacyRow = Map<String, Object?>.from(row)
+        ..remove('aadhaar_number');
+      await _client
+          .from('farmer_phone_profiles')
+          .upsert(legacyRow, onConflict: onConflict);
+    }
   }
 
   String _remoteFunctionErrorMessage(Object? error) {
@@ -1369,12 +1460,17 @@ class MainAuthController extends GetxController {
           }
         }
       } catch (_) {
-        // Fall through to the plain exception text.
+        final data = _responseMapFromLooseMap(raw);
+        final message = data['error'] ?? data['message'] ?? data['details'];
+        if (message != null && '$message'.trim().isNotEmpty) {
+          return '$message';
+        }
       }
     }
     return raw
         .replaceFirst('Exception: ', '')
         .replaceFirst('FarmerVerificationException: ', '')
+        .replaceFirst('RoleAccountSignupException: ', '')
         .trim();
   }
 
@@ -1402,12 +1498,55 @@ class MainAuthController extends GetxController {
     if (error == null) return const <String, dynamic>{};
     final raw = error.toString();
     final match = RegExp(r'\{.*\}').firstMatch(raw)?.group(0);
-    if (match == null) return const <String, dynamic>{};
+    if (match == null) return _responseMapFromLooseMap(raw);
     try {
       final decoded = jsonDecode(match);
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
     } catch (_) {}
-    return const <String, dynamic>{};
+    return _responseMapFromLooseMap(raw);
+  }
+
+  Map<String, dynamic> _responseMapFromLooseMap(String raw) {
+    final match = RegExp(r'\{([^{}]*)\}').firstMatch(raw);
+    if (match == null) return const <String, dynamic>{};
+    final body = match.group(1);
+    if (body == null || body.trim().isEmpty) return const <String, dynamic>{};
+    final result = <String, dynamic>{};
+    for (final entry in body.split(',')) {
+      final separator = entry.indexOf(':');
+      if (separator <= 0) continue;
+      final key = entry.substring(0, separator).trim();
+      final value = entry.substring(separator + 1).trim();
+      if (key.isNotEmpty && value.isNotEmpty) {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+
+  String _roleAccountSignupErrorMessage(Object error, String accountLabel) {
+    if (error is RoleAccountSignupException) {
+      switch (error.code) {
+        case 'account_already_exists':
+          return 'This email is already registered. Login instead.';
+        case 'invalid_role':
+          return 'This signup link is not valid.';
+      }
+      if (error.message.isNotEmpty) return error.message;
+    }
+    final parsed = _responseMapFromThrowable(error);
+    final code = '${parsed['code'] ?? ''}'.trim();
+    final message = '${parsed['error'] ?? parsed['message'] ?? ''}'.trim();
+    switch (code) {
+      case 'account_already_exists':
+        return 'This email is already registered. Login instead.';
+      case 'invalid_role':
+        return 'This signup link is not valid.';
+    }
+    if (message.isNotEmpty && !message.startsWith('FunctionException')) {
+      return message;
+    }
+    return 'Could not create $accountLabel account. Check connection and try again.';
   }
 
   bool _isProfileBindingErrorCode(String code) {
@@ -1457,7 +1596,7 @@ class MainAuthController extends GetxController {
 
   bool _hasStakeholderAgriRecord(VerifiedFarmerRecord record) {
     return record.agriRecordId.trim().isNotEmpty &&
-        record.identityDocumentPath.trim().isNotEmpty;
+        record.aadhaarLast4.trim().isNotEmpty;
   }
 
   bool _looksLikeFarmerSignupRequired(Object? value) {
@@ -1496,14 +1635,20 @@ class MainAuthController extends GetxController {
     return {'code': parsed.code, 'error': parsed.message};
   }
 
-  Future<int> _syncFarmerFarmDataForLogin() async {
+  Future<int> _syncFarmerFarmDataForLogin({
+    bool retryEmptyFarmCache = true,
+  }) async {
     await _syncCurrentSupabaseSessionForSatellite();
     final farmCtrl = Get.isRegistered<FarmController>()
         ? Get.find<FarmController>()
         : Get.put(FarmController());
     farmCtrl.invalidateFarmCache();
     await farmCtrl.loadFarms(forceRefresh: true);
-    if (farmCtrl.farms.isEmpty) {
+    final shouldRepairEmptyCache =
+        retryEmptyFarmCache &&
+        farmCtrl.farms.isEmpty &&
+        !farmCtrl.lastLoadRemoteConfirmed;
+    if (shouldRepairEmptyCache) {
       for (final delay in const [
         Duration(milliseconds: 180),
         Duration(milliseconds: 650),
@@ -1540,8 +1685,89 @@ class MainAuthController extends GetxController {
     if (farmCtrl.lastLoadUsedCachedFallback && farmCtrl.farms.isNotEmpty) {
       _setFarmerLoginSyncStatus('offline_cached_session');
     }
-    await _syncFarmerInventoryForLogin();
     return farmCtrl.farms.length;
+  }
+
+  void _startBackgroundFarmerDataSync({
+    required VerifiedFarmerRecord record,
+    required String phone,
+    required String mode,
+    bool retryEmptyFarmCache = true,
+  }) {
+    unawaited(
+      _syncFarmerFarmDataAfterRoute(
+        record: record,
+        phone: phone,
+        mode: mode,
+        retryEmptyFarmCache: retryEmptyFarmCache,
+      ),
+    );
+  }
+
+  Future<void> _syncFarmerFarmDataAfterRoute({
+    required VerifiedFarmerRecord record,
+    required String phone,
+    required String mode,
+    required bool retryEmptyFarmCache,
+  }) async {
+    farmerLoginSyncPhone.value = phone;
+    try {
+      final farmCount = await _syncFarmerFarmDataForLogin(
+        retryEmptyFarmCache: retryEmptyFarmCache,
+      );
+      final farmCtrl = Get.isRegistered<FarmController>()
+          ? Get.find<FarmController>()
+          : null;
+      final usedCachedFarmFallback =
+          farmCtrl?.lastLoadUsedCachedFallback == true && farmCount > 0;
+      farmerLoginSyncedFarmCount.value = farmCount;
+      final syncedAt = DateTime.now().toUtc();
+      farmerLoginLastSyncAt.value = syncedAt;
+      await _rememberFarmerLogin(
+        record: record,
+        farmCount: farmCount,
+        syncedAt: syncedAt,
+      );
+      _setFarmerLoginSyncStatus(
+        usedCachedFarmFallback
+            ? 'offline_cached_session'
+            : farmCount > 0
+            ? 'farm_records_synced'
+            : 'no_farm_records_found',
+        code: usedCachedFarmFallback
+            ? 'network_issue'
+            : farmCount > 0
+            ? 'farms_synced'
+            : 'farms_not_found',
+      );
+      farmerLoginState.value = FarmerLoginState.farmsSynced;
+      _trackFarmerLoginEvent('farm_sync_success', {
+        'phone': phone,
+        'farmCount': farmCount,
+        'mode': mode,
+        'cachedFallback': usedCachedFarmFallback,
+      });
+      unawaited(_syncFarmerInventoryForLogin());
+    } on FarmerVerificationException catch (e) {
+      _setFarmerLoginSyncStatusCode(e.code);
+      _setFarmerLoginSyncStatus('farmer_session_sync_failed');
+      _trackFarmerLoginEvent('farm_sync_failed', {
+        'phone': phone,
+        'mode': mode,
+        'reason': e.code,
+      });
+    } catch (e) {
+      final code = _networkStatusService.looksOffline(e)
+          ? 'network_issue'
+          : 'farm_sync_failed';
+      _setFarmerLoginSyncStatusCode(code);
+      _setFarmerLoginSyncStatus('farmer_session_sync_failed');
+      _trackFarmerLoginEvent('farm_sync_failed', {
+        'phone': phone,
+        'mode': mode,
+        'reason': code,
+      });
+    }
   }
 
   Future<void> _syncFarmerInventoryForLogin() async {
@@ -1562,7 +1788,6 @@ class MainAuthController extends GetxController {
   }
 
   Future<void> _syncCurrentSupabaseSessionForSatellite() async {
-    if (_backendAuthToken != null && _backendAuthUserId != null) return;
     final session = _auth.currentSession;
     final user = _auth.currentUser;
     if (session == null || user == null) return;
@@ -1583,9 +1808,11 @@ class MainAuthController extends GetxController {
     required String farmerName,
     required String defaultLocation,
     required String agriRecordId,
+    required String aadhaarNumber,
     required String aadhaarMasked,
     required String aadhaarLast4,
     required String identityDocumentPath,
+    required String identitySource,
     double? identityOcrConfidence,
   }) async {
     try {
@@ -1597,9 +1824,11 @@ class MainAuthController extends GetxController {
           'farmerName': farmerName,
           'defaultLocation': defaultLocation,
           'agriRecordId': agriRecordId,
+          'aadhaarNumber': aadhaarNumber,
           'aadhaarMasked': aadhaarMasked,
           'aadhaarLast4': aadhaarLast4,
           'identityDocumentPath': identityDocumentPath,
+          'identitySource': identitySource,
           ...(identityOcrConfidence == null
               ? const <String, Object?>{}
               : {'identityOcrConfidence': identityOcrConfidence}),
@@ -1760,30 +1989,42 @@ class MainAuthController extends GetxController {
     return raw is String && raw.trim().isNotEmpty ? raw.trim() : null;
   }
 
-  Future<VerifiedFarmerRecord?> _loadRemoteFarmerProfile() async {
-    final firebasePhone = _normalizePhone(
-      _firebaseAuth.currentUser?.phoneNumber ?? '',
-    );
-    if (firebasePhone.length == 10) {
-      try {
-        final record = await _verifyFarmerPhone(firebasePhone);
-        unawaited(_linkRemoteFarmerPhone(phone: firebasePhone, record: record));
-        return record;
-      } on FarmerProfileNotFoundException {
-        return null;
-      }
+  bool _isMissingAadhaarNumberColumn(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('aadhaar_number') &&
+        (message.contains('42703') ||
+            message.contains('schema cache') ||
+            message.contains('column') ||
+            message.contains('does not exist'));
+  }
+
+  Future<List<dynamic>> _farmerProfileRowsForUser(String userId) async {
+    try {
+      return await _client
+          .from('farmer_phone_profiles')
+          .select(
+            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path',
+          )
+          .eq('user_id', userId)
+          .limit(1);
+    } catch (error) {
+      if (!_isMissingAadhaarNumberColumn(error)) rethrow;
+      return await _client
+          .from('farmer_phone_profiles')
+          .select(
+            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path',
+          )
+          .eq('user_id', userId)
+          .limit(1);
     }
+  }
 
+  Future<VerifiedFarmerRecord?> _loadRemoteFarmerProfile() async {
     final user = _auth.currentUser;
-    if (user == null || _isBackendBridgeSupabaseUser(user)) return null;
+    if (user == null) return null;
 
-    final rows = await _client
-        .from('farmer_phone_profiles')
-        .select(
-          'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path',
-        )
-        .eq('user_id', user.id)
-        .limit(1);
+    // 1. Try primary lookup by user_id
+    final rows = await _farmerProfileRowsForUser(user.id);
 
     if (rows.isNotEmpty) {
       final row = Map<String, dynamic>.from(rows.first as Map);
@@ -1793,6 +2034,7 @@ class MainAuthController extends GetxController {
         farmerName: '${row['farmer_name'] ?? 'Farmer'}',
         defaultLocation: '${row['default_location'] ?? 'Remote farm profile'}',
         agriRecordId: '${row['agri_record_id'] ?? ''}'.trim(),
+        aadhaarNumber: '${row['aadhaar_number'] ?? ''}'.trim(),
         aadhaarMasked: '${row['aadhaar_masked'] ?? ''}'.trim(),
         aadhaarLast4: '${row['aadhaar_last4'] ?? ''}'.trim(),
         identityDocumentPath: '${row['identity_document_path'] ?? ''}'.trim(),
@@ -1800,11 +2042,13 @@ class MainAuthController extends GetxController {
       );
     }
 
+    // 2. Secondary lookup by phone from metadata (for returning users in new sessions)
     final metadata = user.userMetadata ?? const <String, dynamic>{};
     final phone = _normalizePhone('${metadata['phone'] ?? ''}');
     if (phone.length == 10) {
       try {
         final record = await _verifyFarmerPhone(phone);
+        // Automatically link this new session to the existing profile
         unawaited(_linkRemoteFarmerPhone(phone: phone, record: record));
         return record;
       } catch (_) {
@@ -1816,6 +2060,7 @@ class MainAuthController extends GetxController {
           defaultLocation:
               '${metadata['default_location'] ?? 'Remote farm profile'}',
           agriRecordId: '${metadata['agri_record_id'] ?? ''}'.trim(),
+          aadhaarNumber: '${metadata['aadhaar_number'] ?? ''}'.trim(),
           aadhaarMasked: '${metadata['aadhaar_masked'] ?? ''}'.trim(),
           aadhaarLast4: '${metadata['aadhaar_last4'] ?? ''}'.trim(),
           identityDocumentPath: '${metadata['identity_document_path'] ?? ''}'
@@ -1843,7 +2088,7 @@ class MainAuthController extends GetxController {
     final defaultLocation =
         '${metadata['default_location'] ?? 'Remote farm profile'}';
 
-    await _client.from('farmer_phone_profiles').upsert({
+    await _upsertFarmerPhoneProfile({
       'user_id': user.id,
       'phone': phone.isEmpty ? user.id : phone,
       'farmer_id': farmerId,
@@ -1851,6 +2096,7 @@ class MainAuthController extends GetxController {
       'default_location': defaultLocation,
       'auth_method': 'email_password',
       'agri_record_id': '${metadata['agri_record_id'] ?? ''}'.trim(),
+      'aadhaar_number': '${metadata['aadhaar_number'] ?? ''}'.trim(),
       'aadhaar_masked': '${metadata['aadhaar_masked'] ?? ''}'.trim(),
       'aadhaar_last4': '${metadata['aadhaar_last4'] ?? ''}'.trim(),
       'identity_document_path': '${metadata['identity_document_path'] ?? ''}'
@@ -1863,6 +2109,7 @@ class MainAuthController extends GetxController {
       farmerName: farmerName,
       defaultLocation: defaultLocation,
       agriRecordId: '${metadata['agri_record_id'] ?? ''}'.trim(),
+      aadhaarNumber: '${metadata['aadhaar_number'] ?? ''}'.trim(),
       aadhaarMasked: '${metadata['aadhaar_masked'] ?? ''}'.trim(),
       aadhaarLast4: '${metadata['aadhaar_last4'] ?? ''}'.trim(),
       identityDocumentPath: '${metadata['identity_document_path'] ?? ''}'

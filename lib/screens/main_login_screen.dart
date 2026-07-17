@@ -16,6 +16,18 @@ class MainLoginScreen extends StatefulWidget {
 }
 
 class _MainLoginScreenState extends State<MainLoginScreen> {
+  String? _activeRole;
+
+  Future<void> _continueAnonymously(
+    String role, {
+    String nextRoute = '/home',
+  }) async {
+    final auth = Get.find<MainAuthController>();
+    setState(() => _activeRole = role);
+    await auth.continueAsGuest(nextRoute: nextRoute);
+    if (mounted) setState(() => _activeRole = null);
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = Get.find<MainAuthController>();
@@ -106,7 +118,7 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                           color: const Color(0xFF673AB7),
                           tint: const Color(0xFFF1E8FF),
                           isDisabled: false,
-                          onTap: () => Get.toNamed('/satellite/login'),
+                          onTap: () => Get.toNamed('/admin/login'),
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -318,6 +330,7 @@ class _RoleCard extends StatelessWidget {
   final String subtitle;
   final Color color;
   final Color tint;
+  final bool isLoading;
   final bool isDisabled;
   final VoidCallback onTap;
 
@@ -328,6 +341,7 @@ class _RoleCard extends StatelessWidget {
     required this.color,
     required this.tint,
     required this.onTap,
+    this.isLoading = false,
     this.isDisabled = false,
   });
 
@@ -366,7 +380,16 @@ class _RoleCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                     ),
                     alignment: Alignment.center,
-                    child: Icon(icon, color: color, size: 42),
+                    child: isLoading
+                        ? SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.4,
+                              color: color,
+                            ),
+                          )
+                        : Icon(icon, color: color, size: 42),
                   ),
                   const SizedBox(width: 18),
                   Expanded(
@@ -409,6 +432,33 @@ class _RoleCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DividerLabel extends StatelessWidget {
+  final String label;
+
+  const _DividerLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
+      ],
     );
   }
 }

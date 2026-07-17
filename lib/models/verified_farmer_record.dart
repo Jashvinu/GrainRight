@@ -4,6 +4,7 @@ class VerifiedFarmerRecord {
   final String farmerName;
   final String defaultLocation;
   final String agriRecordId;
+  final String aadhaarNumber;
   final String aadhaarMasked;
   final String aadhaarLast4;
   final String identityDocumentPath;
@@ -15,6 +16,7 @@ class VerifiedFarmerRecord {
     required this.farmerName,
     required this.defaultLocation,
     this.agriRecordId = '',
+    this.aadhaarNumber = '',
     this.aadhaarMasked = '',
     this.aadhaarLast4 = '',
     this.identityDocumentPath = '',
@@ -29,6 +31,8 @@ class VerifiedFarmerRecord {
       farmerName: '${json['farmerName']}',
       defaultLocation: '${json['defaultLocation']}',
       agriRecordId: '${json['agriRecordId'] ?? json['agri_record_id'] ?? ''}'
+          .trim(),
+      aadhaarNumber: '${json['aadhaarNumber'] ?? json['aadhaar_number'] ?? ''}'
           .trim(),
       aadhaarMasked: '${json['aadhaarMasked'] ?? json['aadhaar_masked'] ?? ''}'
           .trim(),

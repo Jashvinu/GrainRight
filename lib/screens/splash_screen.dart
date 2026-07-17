@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:kalsubai_farms/core/config/brand_assets.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
-import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -39,9 +40,23 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _routeAfterIntro() async {
     final start = DateTime.now();
     final auth = Get.find<MainAuthController>();
+    final authenticated = await auth.hasAnySession();
+    final user = Supabase.instance.client.auth.currentUser;
+    final serverRole = '${user?.appMetadata['role'] ?? ''}'
+        .trim()
+        .toLowerCase();
+    final userRole = '${user?.userMetadata?['role'] ?? ''}'
+        .trim()
+        .toLowerCase();
+    final role = serverRole.isNotEmpty ? serverRole : userRole;
+    final isFarmerSession =
+        auth.verifiedFarmer.value != null ||
+        role == 'farmer' ||
+        role == 'verified_farmer';
 
-    // Pre-initialize and sync all farmer details
-    await auth.syncFarmerData(forceRefresh: true);
+    if (authenticated && isFarmerSession) {
+      unawaited(auth.syncFarmerData(forceRefresh: true, showLoading: false));
+    }
 
     final elapsed = DateTime.now().difference(start).inMilliseconds;
     final remaining = 1450 - elapsed;
@@ -51,13 +66,18 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (!mounted) return;
 
-    final route = await auth.startupRoute();
-    if (!mounted) return;
-
-    if (route == '/login') {
-      Get.offNamed('/login');
+    if (authenticated) {
+      if (isFarmerSession) {
+        Get.offAllNamed('/farmer');
+      } else if (serverRole == 'admin') {
+        Get.offAllNamed('/admin');
+      } else if ({'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)) {
+        Get.offAllNamed('/fpo');
+      } else {
+        Get.offAllNamed('/home');
+      }
     } else {
-      Get.offAllNamed(route);
+      Get.offNamed('/login');
     }
   }
 
@@ -71,10 +91,9 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
     final logoWidth = (size.width - 48).clamp(260.0, 560.0).toDouble();
-    final logoCacheWidth =
-        (logoWidth * MediaQuery.devicePixelRatioOf(context))
-            .clamp(260.0, 720.0)
-            .round();
+    final logoCacheWidth = (logoWidth * MediaQuery.devicePixelRatioOf(context))
+        .clamp(260.0, 720.0)
+        .round();
 
     return Scaffold(
       backgroundColor: const Color(0xFFE7F0E2),
@@ -101,8 +120,6 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 24),
                     const _LoadingTrack(),
-                    const SizedBox(height: 14),
-                    const _SplashSyncStatus(),
                   ],
                 ),
               ),
@@ -111,35 +128,6 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       ),
     );
-  }
-}
-
-class _SplashSyncStatus extends StatelessWidget {
-  const _SplashSyncStatus();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = Get.find<MainAuthController>();
-    return Obx(() {
-      final statusKey = auth.farmerLoginSyncStatusKey.value.trim();
-      final count = auth.farmerLoginSyncedFarmCount.value;
-      final message = statusKey.isEmpty
-          ? UiStrings.t('syncing_farm_records')
-          : UiStrings.t(statusKey).replaceAll('{count}', '${count ?? 0}');
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 360),
-        child: Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: AppTheme.greenDark,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            height: 1.35,
-          ),
-        ),
-      );
-    });
   }
 }
 
