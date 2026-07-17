@@ -10,9 +10,11 @@ import '../models/satellite/diagnostics_model.dart';
 import '../models/satellite/advanced_monitoring_model.dart';
 import '../models/satellite/farm_alert_model.dart';
 import '../models/satellite/farm_assistant_model.dart';
+import '../models/satellite/farm_chat_message_model.dart';
 import '../models/satellite/farm_timeline_event_model.dart';
 import '../models/satellite/farm_summary_model.dart';
 import '../models/satellite/farm_weather_model.dart';
+import 'local_app_database.dart';
 
 class SatelliteApiException implements Exception {
   final String message;
@@ -62,6 +64,9 @@ class FarmerDiseaseData {
 
 class SatelliteService {
   static const _farmSelect = '*';
+  static final http.Client _httpClient = http.Client();
+
+  LocalAppDatabase? get _localDb => LocalAppDatabase.maybeInstance;
 
   Map<String, String> _headers(String? jwt) {
     final bearer = jwt == null || jwt.trim().isEmpty
@@ -80,7 +85,7 @@ class SatelliteService {
     Exception? last;
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
-        final response = await http
+        final response = await _httpClient
             .get(Uri.parse(url), headers: _headers(jwt))
             .timeout(const Duration(seconds: 30));
         return _parse(response);
@@ -104,7 +109,7 @@ class SatelliteService {
     Exception? last;
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
-        final response = await http
+        final response = await _httpClient
             .post(
               Uri.parse(url),
               headers: _headers(jwt),
@@ -176,7 +181,7 @@ class SatelliteService {
 
   Future<AuthResult> signIn(String email, String password) async {
     final url = '${SatelliteConfig.authBase}/token?grant_type=password';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {
@@ -209,7 +214,7 @@ class SatelliteService {
 
   Future<AuthResult> signUp(String email, String password) async {
     final url = '${SatelliteConfig.authBase}/signup';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {
@@ -254,7 +259,7 @@ class SatelliteService {
     Map<String, dynamic> metadata = const {},
   }) async {
     final url = '${SatelliteConfig.authBase}/signup';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {
@@ -294,7 +299,7 @@ class SatelliteService {
   Future<AuthResult?> refreshToken(String refreshToken) async {
     final url = '${SatelliteConfig.authBase}/token?grant_type=refresh_token';
     try {
-      final response = await http
+      final response = await _httpClient
           .post(
             Uri.parse(url),
             headers: {
@@ -328,7 +333,7 @@ class SatelliteService {
         : '&user_id=eq.${Uri.encodeQueryComponent(owner)}';
     final url =
         '${SatelliteConfig.restBase}/farms?select=$_farmSelect&order=created_at.desc$ownerFilter';
-    final response = await http
+    final response = await _httpClient
         .get(
           Uri.parse(url),
           headers: {..._headers(jwt), 'Prefer': 'return=representation'},
@@ -446,7 +451,7 @@ class SatelliteService {
     String jwt,
   ) async {
     final url = '${SatelliteConfig.restBase}/farms';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {..._headers(jwt), 'Prefer': 'return=representation'},
@@ -489,125 +494,6 @@ class SatelliteService {
       }
     }
     throw lastError ?? SatelliteApiException('Failed to save farm');
-  }
-
-  Future<void> deleteFarm(String farmId, String jwt) async {
-    final id = farmId.trim();
-    if (id.isEmpty) {
-      throw SatelliteApiException('Farm id is required');
-    }
-
-    const dependentTables = <String, String>{
-      'farm_data_compactions': 'farm_id',
-      'farm_data_snapshots': 'farm_id',
-      'farm_timeline_events': 'farm_id',
-      'farm_status_updates': 'farm_id',
-      'farm_issue_actions': 'farm_id',
-      'farmer_notifications': 'farm_id',
-      'diagnostics_cache': 'farm_id',
-      'disease_risk_cells': 'farm_id',
-      'disease_scout_zones': 'farm_id',
-      'farmer_photo_submissions': 'farm_id',
-      'agricultural_indices': 'farm_id',
-      'satellite_observations': 'farm_id',
-      'marketplace_listings': 'farm_id',
-    };
-
-    for (final entry in dependentTables.entries) {
-      await _deleteRows(
-        table: entry.key,
-        column: entry.value,
-        value: id,
-        jwt: jwt,
-        ignoreMissingRelation: true,
-      );
-    }
-
-    await _deleteRows(
-      table: 'farms',
-      column: 'id',
-      value: id,
-      jwt: jwt,
-      ignoreMissingRelation: false,
-    );
-  }
-
-  Future<void> requestAccountDeletion({
-    required String jwt,
-    required Map<String, dynamic> payload,
-  }) async {
-    final response = await http
-        .post(
-          Uri.parse('${SatelliteConfig.restBase}/account_deletion_requests'),
-          headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
-          body: jsonEncode(payload),
-        )
-        .timeout(const Duration(seconds: 20));
-
-    if (response.statusCode >= 200 && response.statusCode < 300) return;
-    throw _parseDeleteError(response);
-  }
-
-  Future<void> _deleteRows({
-    required String table,
-    required String column,
-    required String value,
-    required String jwt,
-    required bool ignoreMissingRelation,
-  }) async {
-    final url =
-        '${SatelliteConfig.restBase}/$table?$column=eq.${Uri.encodeQueryComponent(value)}';
-    final response = await http
-        .delete(
-          Uri.parse(url),
-          headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
-        )
-        .timeout(const Duration(seconds: 20));
-
-    if (response.statusCode >= 200 && response.statusCode < 300) return;
-
-    final error = _parseDeleteError(response);
-    if (ignoreMissingRelation && _looksLikeMissingRelationError(error)) {
-      return;
-    }
-    throw error;
-  }
-
-  SatelliteApiException _parseDeleteError(http.Response response) {
-    final bodyText = response.body.trim();
-    dynamic body;
-    try {
-      body = bodyText.isEmpty ? null : jsonDecode(bodyText);
-    } catch (_) {
-      body = bodyText;
-    }
-    final code = body is Map ? body['code']?.toString() : null;
-    final details = body is Map ? body['details']?.toString() : null;
-    final msg = body is Map
-        ? (body['message'] ?? body['error'] ?? 'HTTP ${response.statusCode}')
-        : body is String && body.isNotEmpty
-        ? body
-        : 'HTTP ${response.statusCode}';
-    return SatelliteApiException(
-      msg.toString(),
-      statusCode: response.statusCode,
-      code: code,
-      details: details,
-    );
-  }
-
-  bool _looksLikeMissingRelationError(SatelliteApiException error) {
-    final text = [
-      error.code,
-      error.message,
-      error.details,
-    ].whereType<String>().join(' ').toLowerCase();
-    return error.statusCode == 404 ||
-        text.contains('42p01') ||
-        text.contains('42703') ||
-        text.contains('pgrst205') ||
-        text.contains('does not exist') ||
-        text.contains('could not find');
   }
 
   Future<Farm> insertFarmerLinkedFarm({
@@ -703,30 +589,225 @@ class SatelliteService {
     required String statusText,
     String? priorStatus,
     String? source,
+    List<FarmChatMessageDraft> chatMessages = const [],
+    Map<String, dynamic> weatherSnapshot = const <String, dynamic>{},
+    Map<String, dynamic> farmContext = const <String, dynamic>{},
   }) async {
-    final data = await _post(
-      '${SatelliteConfig.edgeFunctionsBase}/farm-status-update',
-      {
-        'farmId': farmId,
-        'phone': farmerPhone,
-        if (farmerId != null && farmerId.trim().isNotEmpty)
-          'farmerId': farmerId.trim(),
-        'farmerName': farmerName,
-        'farmName': farmName,
-        'crop': crop,
-        'variety': variety,
-        'stage': stage,
-        'stageQuestion': stageQuestion,
-        'daysAfterSowing': daysAfterSowing,
-        'statusText': statusText,
-        // ignore: use_null_aware_elements
-        if (priorStatus != null) 'priorStatus': priorStatus,
-        'source': source ?? 'farmer_dashboard_status_chat',
-        'updatedAt': DateTime.now().toIso8601String(),
-      },
-      jwt,
+    final body = {
+      'farmId': farmId,
+      'phone': farmerPhone,
+      if (farmerId != null && farmerId.trim().isNotEmpty)
+        'farmerId': farmerId.trim(),
+      'farmerName': farmerName,
+      'farmName': farmName,
+      'crop': crop,
+      'variety': variety,
+      'stage': stage,
+      'stageQuestion': stageQuestion,
+      'daysAfterSowing': daysAfterSowing,
+      'statusText': statusText,
+      // ignore: use_null_aware_elements
+      if (priorStatus != null) 'priorStatus': priorStatus,
+      'source': source ?? 'farmer_dashboard_status_chat',
+      'updatedAt': DateTime.now().toIso8601String(),
+      if (chatMessages.isNotEmpty)
+        'chatMessages': chatMessages.map((item) => item.toJson()).toList(),
+      if (weatherSnapshot.isNotEmpty) 'weatherSnapshot': weatherSnapshot,
+      if (farmContext.isNotEmpty) 'farmContext': farmContext,
+    };
+    try {
+      return await _post(
+        '${SatelliteConfig.edgeFunctionsBase}/farm-status-update',
+        body,
+        jwt,
+      );
+    } catch (error) {
+      await queueFarmChatMessages(
+        farmId: farmId,
+        farmerPhone: farmerPhone,
+        farmerId: farmerId,
+        messages: chatMessages.isEmpty
+            ? [
+                FarmChatMessageDraft(
+                  role: 'farmer',
+                  source: source ?? 'farmer_dashboard_status_chat',
+                  message: statusText,
+                  growthStage: stage,
+                  daysAfterSowing: daysAfterSowing,
+                  weatherSnapshot: weatherSnapshot,
+                  farmContext: farmContext,
+                  createdAt: DateTime.now().toUtc(),
+                ),
+              ]
+            : chatMessages,
+        lastError: error.toString(),
+      );
+      rethrow;
+    }
+  }
+
+  Future<List<FarmChatMemoryEntry>> listFarmChatMessages({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    int limit = 30,
+  }) async {
+    await flushPendingFarmChatMessages(
+      farmerPhone: farmerPhone,
+      farmerId: farmerId,
+      jwt: jwt,
     );
-    return data;
+    final data =
+        await _post('${SatelliteConfig.edgeFunctionsBase}/farm-chat-memory', {
+          'action': 'list',
+          'farmId': farmId,
+          'phone': farmerPhone,
+          if (farmerId != null && farmerId.trim().isNotEmpty)
+            'farmerId': farmerId.trim(),
+          'limit': limit,
+        }, jwt);
+    final raw = data['messages'];
+    return (raw as List? ?? const [])
+        .whereType<Map>()
+        .map(
+          (row) => FarmChatMemoryEntry.fromJson(Map<String, dynamic>.from(row)),
+        )
+        .where((item) => item.message.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<List<FarmChatMemoryEntry>> saveFarmChatMessages({
+    required String farmId,
+    required String farmerPhone,
+    required String? jwt,
+    String? farmerId,
+    required List<FarmChatMessageDraft> messages,
+    bool cacheOnFailure = true,
+  }) async {
+    final cleanMessages = messages
+        .where((item) => item.message.trim().isNotEmpty)
+        .toList(growable: false);
+    if (cleanMessages.isEmpty) return const [];
+    try {
+      final data =
+          await _post('${SatelliteConfig.edgeFunctionsBase}/farm-chat-memory', {
+            'action': 'create',
+            'farmId': farmId,
+            'phone': farmerPhone,
+            if (farmerId != null && farmerId.trim().isNotEmpty)
+              'farmerId': farmerId.trim(),
+            'messages': cleanMessages.map((item) => item.toJson()).toList(),
+          }, jwt);
+      final raw = data['messages'];
+      return (raw as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (row) =>
+                FarmChatMemoryEntry.fromJson(Map<String, dynamic>.from(row)),
+          )
+          .toList(growable: false);
+    } catch (error) {
+      if (cacheOnFailure) {
+        await queueFarmChatMessages(
+          farmId: farmId,
+          farmerPhone: farmerPhone,
+          farmerId: farmerId,
+          messages: cleanMessages,
+          lastError: error.toString(),
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> queueFarmChatMessages({
+    required String farmId,
+    required String farmerPhone,
+    String? farmerId,
+    required List<FarmChatMessageDraft> messages,
+    String? lastError,
+  }) async {
+    final db = _localDb;
+    if (db == null) return;
+    final now = DateTime.now().toUtc();
+    for (var i = 0; i < messages.length; i++) {
+      final message = messages[i];
+      if (message.message.trim().isEmpty) continue;
+      final createdAt = message.createdAt ?? now;
+      await db.upsertFarmChatMessageCache(
+        LocalFarmChatMessageRecord(
+          localId:
+              '$farmId-${createdAt.microsecondsSinceEpoch}-${message.role}-$i',
+          farmId: farmId,
+          farmerPhone: farmerPhone,
+          farmerIdValue: farmerId,
+          role: FarmChatMessageDraft.normalizeRole(message.role),
+          source: FarmChatMessageDraft.normalizeSource(message.source),
+          message: message.message.trim(),
+          language: message.language.trim().isEmpty
+              ? 'en'
+              : message.language.trim(),
+          growthStage: message.growthStage,
+          daysAfterSowing: message.daysAfterSowing,
+          weatherSnapshot: message.weatherSnapshot,
+          farmContext: message.farmContext,
+          syncStatus: 'pending',
+          createdAt: createdAt.toIso8601String(),
+          updatedAt: now.toIso8601String(),
+          lastError: lastError,
+        ),
+      );
+    }
+  }
+
+  Future<void> flushPendingFarmChatMessages({
+    required String farmerPhone,
+    String? farmerId,
+    required String? jwt,
+  }) async {
+    final db = _localDb;
+    if (db == null) return;
+    final pending = await db.loadPendingFarmChatMessages(
+      farmerPhone: farmerPhone,
+      farmerId: farmerId,
+    );
+    for (final item in pending) {
+      try {
+        final saved = await saveFarmChatMessages(
+          farmId: item.farmId,
+          farmerPhone: item.farmerPhone,
+          farmerId: item.farmerIdValue ?? farmerId,
+          jwt: jwt,
+          cacheOnFailure: false,
+          messages: [
+            FarmChatMessageDraft(
+              role: item.role,
+              source: item.source,
+              message: item.message,
+              language: item.language,
+              growthStage: item.growthStage,
+              daysAfterSowing: item.daysAfterSowing,
+              weatherSnapshot: item.weatherSnapshot,
+              farmContext: item.farmContext,
+              createdAt: DateTime.tryParse(item.createdAt),
+            ),
+          ],
+        );
+        final remoteId = saved.isEmpty ? item.remoteId ?? '' : saved.first.id;
+        await db.markFarmChatMessageSynced(
+          localId: item.localId,
+          remoteId: remoteId,
+          syncedAt: DateTime.now().toUtc().toIso8601String(),
+        );
+      } catch (error) {
+        await db.markFarmChatMessagePending(
+          localId: item.localId,
+          updatedAt: DateTime.now().toUtc().toIso8601String(),
+          lastError: error.toString(),
+        );
+      }
+    }
   }
 
   Future<FarmTimelineEvent?> createFarmTimelineEvent({
@@ -865,7 +946,7 @@ class SatelliteService {
     final url =
         '${SatelliteConfig.restBase}/disease_scout_zones'
         '?select=*&farm_id=eq.$farmId&order=scan_date.desc,zone_rank.asc';
-    final response = await http
+    final response = await _httpClient
         .get(Uri.parse(url), headers: _headers(jwt))
         .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
@@ -943,7 +1024,7 @@ class SatelliteService {
     final url =
         '${SatelliteConfig.restBase}/disease_risk_cells'
         '?select=*&farm_id=eq.$farmId&order=scan_date.desc,composite_risk.desc&limit=60';
-    final response = await http
+    final response = await _httpClient
         .get(Uri.parse(url), headers: _headers(jwt))
         .timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) {
@@ -963,7 +1044,7 @@ class SatelliteService {
     String? farmerId,
   }) async {
     final url = '${SatelliteConfig.restBase}/disease_scout_zones';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {..._headers(jwt), 'Prefer': 'return=minimal'},
@@ -991,7 +1072,7 @@ class SatelliteService {
       if (farmerId != null && farmerId.trim().isNotEmpty)
         'farmer_id': farmerId.trim(),
     };
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse('${SatelliteConfig.restBase}/farm_issue_actions'),
           headers: {
@@ -1069,31 +1150,73 @@ class SatelliteService {
     String? location,
     String? growthStage,
     int? daysAfterSowing,
+    String source = 'ai_chat',
+    String? statusText,
+    String? latestStatusQuestion,
+    Map<String, dynamic> weatherSnapshot = const <String, dynamic>{},
+    Map<String, dynamic> farmContext = const <String, dynamic>{},
   }) async {
-    final data = await _post(
-      '${SatelliteConfig.edgeFunctionsBase}/farm-assistant-chat',
-      {
-        'farmId': farmId,
-        'phone': farmerPhone,
-        if (farmerId != null && farmerId.trim().isNotEmpty)
-          'farmerId': farmerId.trim(),
-        'question': question,
-        'language': language,
-        if (farmName != null && farmName.trim().isNotEmpty)
-          'farmName': farmName.trim(),
-        if (crop != null && crop.trim().isNotEmpty) 'crop': crop.trim(),
-        if (variety != null && variety.trim().isNotEmpty)
-          'variety': variety.trim(),
-        if (location != null && location.trim().isNotEmpty)
-          'location': location.trim(),
-        if (growthStage != null && growthStage.trim().isNotEmpty)
-          'growthStage': growthStage.trim(),
-        // ignore: use_null_aware_elements
-        if (daysAfterSowing != null) 'daysAfterSowing': daysAfterSowing,
-      },
-      jwt,
-    );
-    return FarmAssistantAnswer.fromJson(data);
+    final body = {
+      'farmId': farmId,
+      'phone': farmerPhone,
+      if (farmerId != null && farmerId.trim().isNotEmpty)
+        'farmerId': farmerId.trim(),
+      'question': question,
+      'language': language,
+      if (farmName != null && farmName.trim().isNotEmpty)
+        'farmName': farmName.trim(),
+      if (crop != null && crop.trim().isNotEmpty) 'crop': crop.trim(),
+      if (variety != null && variety.trim().isNotEmpty)
+        'variety': variety.trim(),
+      if (location != null && location.trim().isNotEmpty)
+        'location': location.trim(),
+      if (growthStage != null && growthStage.trim().isNotEmpty)
+        'growthStage': growthStage.trim(),
+      // ignore: use_null_aware_elements
+      if (daysAfterSowing != null) 'daysAfterSowing': daysAfterSowing,
+      'source': source.trim().isEmpty ? 'ai_chat' : source.trim(),
+      if (statusText != null && statusText.trim().isNotEmpty)
+        'statusText': statusText.trim(),
+      if (latestStatusQuestion != null &&
+          latestStatusQuestion.trim().isNotEmpty)
+        'latestStatusQuestion': latestStatusQuestion.trim(),
+      if (weatherSnapshot.isNotEmpty) 'weatherSnapshot': weatherSnapshot,
+      if (farmContext.isNotEmpty) 'farmContext': farmContext,
+    };
+    try {
+      final data = await _post(
+        '${SatelliteConfig.edgeFunctionsBase}/farm-assistant-chat',
+        body,
+        jwt,
+      );
+      return FarmAssistantAnswer.fromJson(data);
+    } catch (error) {
+      final queuedFarmContext = <String, dynamic>{};
+      if (farmName != null) queuedFarmContext['farm_name'] = farmName;
+      if (crop != null) queuedFarmContext['crop'] = crop;
+      if (variety != null) queuedFarmContext['variety'] = variety;
+      if (location != null) queuedFarmContext['location'] = location;
+      await queueFarmChatMessages(
+        farmId: farmId,
+        farmerPhone: farmerPhone,
+        farmerId: farmerId,
+        messages: [
+          FarmChatMessageDraft(
+            role: 'farmer',
+            source: source.trim().isEmpty ? 'ai_chat' : source.trim(),
+            message: question,
+            language: language,
+            growthStage: growthStage,
+            daysAfterSowing: daysAfterSowing,
+            weatherSnapshot: weatherSnapshot,
+            farmContext: farmContext.isEmpty ? queuedFarmContext : farmContext,
+            createdAt: DateTime.now().toUtc(),
+          ),
+        ],
+        lastError: error.toString(),
+      );
+      rethrow;
+    }
   }
 
   /// Uploads a field photo to the private disease-photos bucket and returns
@@ -1105,7 +1228,7 @@ class SatelliteService {
   }) async {
     final path = '$farmId/${DateTime.now().millisecondsSinceEpoch}.jpg';
     final url = '${SatelliteConfig.url}/storage/v1/object/disease-photos/$path';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {..._headers(jwt), 'Content-Type': 'image/jpeg'},
@@ -1142,7 +1265,7 @@ class SatelliteService {
   }) async {
     final url =
         '${SatelliteConfig.restBase}/farmer_phone_profiles?on_conflict=user_id';
-    final response = await http
+    final response = await _httpClient
         .post(
           Uri.parse(url),
           headers: {
@@ -1258,7 +1381,7 @@ class SatelliteService {
     try {
       final url =
           '${SatelliteConfig.edgeFunctionsBase}/sync-satellite-dates?farm_id=$farmId';
-      await http
+      await _httpClient
           .get(Uri.parse(url), headers: _headers(jwt))
           .timeout(const Duration(seconds: 30));
     } catch (_) {

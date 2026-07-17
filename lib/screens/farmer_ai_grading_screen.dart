@@ -131,6 +131,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         double.tryParse(_bagSizeCtrl.text.trim()) != null &&
         int.tryParse(_bagCountCtrl.text.trim()) != null &&
         _farmerId.isNotEmpty &&
+        (_isFpcMode || _farmId.isNotEmpty) &&
         _farmName.isNotEmpty;
   }
 
@@ -156,6 +157,13 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
       _loadingCrops = true;
       _notConfigured = false;
     });
+    if (!_service.isConfigured) {
+      setState(() {
+        _loadingCrops = false;
+        _notConfigured = true;
+      });
+      return;
+    }
     try {
       final crops = await _service.fetchCrops();
       final loaded = crops.isEmpty ? _fallbackCrops : crops;
@@ -165,14 +173,7 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
         _variety = _crop!.varieties.isNotEmpty ? _crop!.varieties.first : null;
         _loadingCrops = false;
       });
-    } on GradingException catch (error) {
-      if (error.notConfigured) {
-        setState(() {
-          _loadingCrops = false;
-          _notConfigured = true;
-        });
-        return;
-      }
+    } on GradingException catch (_) {
       // Catalog is non-critical: fall back to a built-in crop so grading still
       // works even when the catalog endpoint is unreachable.
       setState(() {
@@ -445,31 +446,32 @@ class _FarmerAiGradingScreenState extends State<FarmerAiGradingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final gradingBody = SafeArea(
+      child: _notConfigured
+          ? _NotConfiguredState(onRetry: _loadCrops)
+          : Column(
+              children: [
+                _StepBar(current: _step),
+                Expanded(child: _buildStep()),
+              ],
+            ),
+    );
+    if (_isFpcMode) {
+      return FpcWorkspaceScaffold(
+        current: FpcNavTab.grading,
+        title: GradingStrings.t('fpc_title'),
+        body: gradingBody,
+      );
+    }
     return Scaffold(
       backgroundColor: AppTheme.surface,
-      bottomNavigationBar: _isFpcMode
-          ? const FpcBottomNavBar(current: FpcNavTab.grading)
-          : null,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leadingWidth: appBackButtonLeadingWidth,
         leading: appBackButtonLeading(context),
-        title: Text(
-          _isFpcMode
-              ? GradingStrings.t('fpc_title')
-              : GradingStrings.t('title'),
-        ),
+        title: Text(GradingStrings.t('title')),
       ),
-      body: SafeArea(
-        child: _notConfigured
-            ? _NotConfiguredState(onRetry: _loadCrops)
-            : Column(
-                children: [
-                  _StepBar(current: _step),
-                  Expanded(child: _buildStep()),
-                ],
-              ),
-      ),
+      body: gradingBody,
     );
   }
 
@@ -1152,16 +1154,21 @@ class _MoistureReadingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Moisture reading',
-                  style: TextStyle(
+                Text(
+                  UiStrings.t('moisture_reading'),
+                  style: const TextStyle(
                     color: AppTheme.greenDark,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${reading.source}${reading.confidence == null ? '' : ' • ${(reading.confidence! * 100).round()}% confidence'}',
+                  reading.confidence == null
+                      ? UiStrings.option(reading.source)
+                      : UiStrings.f('source_confidence', {
+                          'source': UiStrings.option(reading.source),
+                          'confidence': (reading.confidence! * 100).round(),
+                        }),
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontSize: 12,
@@ -1172,7 +1179,9 @@ class _MoistureReadingCard extends StatelessWidget {
             ),
           ),
           Text(
-            percent == null ? '--' : '${percent.toStringAsFixed(1)}%',
+            percent == null
+                ? '--'
+                : '${LocaleText.number(percent, fractionDigits: 1)}%',
             style: const TextStyle(
               color: AppTheme.greenDark,
               fontSize: 22,
@@ -1336,7 +1345,7 @@ class _GradeHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Grade from cloud score',
+                  UiStrings.t('grade_from_cloud_score'),
                   style: const TextStyle(
                     color: Colors.white70,
                     fontWeight: FontWeight.w800,
@@ -1354,7 +1363,9 @@ class _GradeHero extends StatelessWidget {
                 if (score != null) ...[
                   const SizedBox(height: 10),
                   Text(
-                    'Score: ${score.round()}/100',
+                    UiStrings.f('score_label_out_of_100', {
+                      'score': score.round(),
+                    }),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -1510,9 +1521,9 @@ class _CloudModelAnalysisCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The visible grade is calculated from the score received from the cloud grading response.',
-              style: TextStyle(
+            Text(
+              UiStrings.t('cloud_grade_explanation'),
+              style: const TextStyle(
                 color: AppTheme.textMuted,
                 fontWeight: FontWeight.w700,
                 height: 1.35,

@@ -5,7 +5,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../services/grain_grading_service.dart';
-import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
+import '../widgets/fpc_bottom_nav.dart';
 
 class FpoGradingReviewScreen extends StatefulWidget {
   const FpoGradingReviewScreen({super.key});
@@ -85,21 +85,17 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leadingWidth: appBackButtonLeadingWidth,
-        leading: appBackButtonLeading(context),
-        title: Text(UiStrings.t('grading_review')),
-        actions: [
-          IconButton(
-            tooltip: UiStrings.t('refresh_farm'),
-            onPressed: _load,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
+    return FpcWorkspaceScaffold(
+      current: FpcNavTab.review,
+      title: UiStrings.t('grading_review'),
+      extendBody: false,
+      actions: [
+        IconButton(
+          tooltip: UiStrings.t('refresh_farm'),
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
       body: _buildBody(),
     );
   }
@@ -113,7 +109,11 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 52),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppTheme.error,
+                size: 52,
+              ),
               const SizedBox(height: 12),
               Text(
                 _error,
@@ -150,21 +150,15 @@ class _FpoGradingReviewScreenState extends State<FpoGradingReviewScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemBuilder: (context, index) => _ReviewJobTile(
         job: _jobs[index],
-        onApprove: () => _update(
-          _jobs[index],
-          'approved',
-          UiStrings.t('approved'),
-        ),
+        onApprove: () =>
+            _update(_jobs[index], 'approved', UiStrings.t('approved')),
         onRecapture: () => _update(
           _jobs[index],
           'recapture_requested',
           UiStrings.t('recapture_requested'),
         ),
-        onReject: () => _update(
-          _jobs[index],
-          'rejected',
-          UiStrings.t('rejected'),
-        ),
+        onReject: () =>
+            _update(_jobs[index], 'rejected', UiStrings.t('rejected')),
       ),
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemCount: _jobs.length,

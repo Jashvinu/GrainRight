@@ -4,6 +4,7 @@ import { errorResponse, successResponse } from "../_shared/response.ts";
 import {
   assertLinkedFarm,
   normalizePhone,
+  optionalSchemaError,
   requireUserId,
   text,
 } from "../_shared/farmer-links.ts";
@@ -37,12 +38,20 @@ import assetRice from "../_shared/knowledge/asset_rice_deep_2026.json" with {
 
 type Row = Record<string, unknown>;
 type Confidence = "high" | "medium" | "low";
+type Priority = "normal" | "watch" | "urgent";
 
 type AssistantAnswer = {
   answer: string;
   summary?: string;
   actions: string[];
   warnings: string[];
+  condition_summary?: string;
+  process_steps: string[];
+  farm_update_suggestion?: string;
+  follow_up_question?: string;
+  priority: Priority;
+  alert_suggestion?: string;
+  missing_data: string[];
   confidence: Confidence;
   model?: string;
 };
@@ -126,20 +135,24 @@ function sameScanRows(data: Row[], scan: string): Row[] {
 function diseaseScores(row: Row): Record<string, number> {
   const scores: Record<string, number> = {};
   const perDisease = row.per_disease;
-  if (perDisease && typeof perDisease === "object" && !Array.isArray(perDisease)) {
+  if (
+    perDisease && typeof perDisease === "object" && !Array.isArray(perDisease)
+  ) {
     for (const [name, value] of Object.entries(perDisease as Row)) {
       const parsed = num(value);
       if (parsed !== null) scores[name] = parsed;
     }
   }
-  for (const key of [
-    "rice_blast_risk",
-    "sheath_blight_risk",
-    "blb_risk",
-    "downy_mildew_risk",
-    "leaf_spot_risk",
-    "charcoal_rot_risk",
-  ]) {
+  for (
+    const key of [
+      "rice_blast_risk",
+      "sheath_blight_risk",
+      "blb_risk",
+      "downy_mildew_risk",
+      "leaf_spot_risk",
+      "charcoal_rot_risk",
+    ]
+  ) {
     const parsed = num(row[key]);
     if (parsed !== null) scores[key.replace(/_risk$/, "")] = parsed;
   }
@@ -159,11 +172,14 @@ function topDiseaseRisks(data: Row[]): Record<string, number> {
 function maxDiseaseRisk(data: Row[], risks: Record<string, number>): number {
   let max = 0;
   for (const row of data) {
-    max = Math.max(max, rowNum(row, [
-      "composite_risk",
-      "max_risk_score",
-      "risk_score",
-    ]) ?? 0);
+    max = Math.max(
+      max,
+      rowNum(row, [
+        "composite_risk",
+        "max_risk_score",
+        "risk_score",
+      ]) ?? 0,
+    );
   }
   for (const value of Object.values(risks)) max = Math.max(max, value);
   return max;
@@ -177,6 +193,12 @@ async function safeRows(query: PromiseLike<{ data: unknown; error: unknown }>) {
   } catch {
     return [];
   }
+}
+
+function objectOrEmpty(raw: unknown): Row {
+  return raw != null && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Row
+    : {};
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -200,20 +222,36 @@ function normalizeList(raw: unknown, limit: number): string[] {
     .slice(0, limit);
 }
 
+function normalizePriority(raw: unknown): Priority {
+  const value = text(raw).toLowerCase();
+  if (value === "urgent" || value === "watch" || value === "normal") {
+    return value;
+  }
+  return "normal";
+}
+
 function normalizeAnswer(raw: unknown, model: string): AssistantAnswer | null {
   if (raw == null || typeof raw !== "object") return null;
   const map = raw as Row;
   const answer = text(map.answer);
   if (answer.length === 0) return null;
   const rawConfidence = text(map.confidence).toLowerCase();
-  const confidence: Confidence = rawConfidence === "high" || rawConfidence === "low"
-    ? rawConfidence
-    : "medium";
+  const confidence: Confidence =
+    rawConfidence === "high" || rawConfidence === "low"
+      ? rawConfidence
+      : "medium";
   return {
     answer,
     summary: text(map.summary) || undefined,
     actions: normalizeList(map.actions ?? map.next_actions, 4),
     warnings: normalizeList(map.warnings ?? map.cautions, 3),
+    condition_summary: text(map.condition_summary) || undefined,
+    process_steps: normalizeList(map.process_steps, 5),
+    farm_update_suggestion: text(map.farm_update_suggestion) || undefined,
+    follow_up_question: text(map.follow_up_question) || undefined,
+    priority: normalizePriority(map.priority),
+    alert_suggestion: text(map.alert_suggestion) || undefined,
+    missing_data: normalizeList(map.missing_data, 4),
     confidence,
     model,
   };
@@ -240,7 +278,33 @@ function compactFarmContext(
   risks: Record<string, number>,
   maxRisk: number,
   timeline: Row[],
+  chatMemory: Row[],
+  appFarmContext: Row,
+  weatherSnapshot: Row,
+  statusText: string,
+  latestStatusQuestion: string,
+  source: string,
 ) {
+  const appWeather = objectOrEmpty(appFarmContext.weather);
+  const weather = Object.keys(weatherSnapshot).length > 0
+    ? weatherSnapshot
+    : appWeather;
+  const latestStatusMemory = [...chatMemory].reverse().find((row) =>
+    text(row.source) === "status_chat" && text(row.role) === "farmer"
+  );
+  const latestAssistantMemory = [...chatMemory].reverse().find((row) =>
+    text(row.role) === "assistant"
+  );
+  const currentStatus = statusText || text(farm.current_status) ||
+    text(latestStatusMemory?.message);
+  const rain24h = weather.rain_24h_mm ?? weather.rain24h_mm ?? null;
+  const rain7d = weather.rain_7d_mm ?? weather.total_rain_mm ?? null;
+  const waterNeed = text(
+    weather.water_need_label ?? weather.irrigation_decision,
+  );
+  const weatherSummary = text(
+    weather.weather_summary ?? weather.crop_weather_summary,
+  );
   return {
     farm_id: text(farm.id),
     farm_name: text(farm.name),
@@ -249,13 +313,33 @@ function compactFarmContext(
     season: text(farm.season),
     irrigation: text(farm.irrigation),
     soil_type: text(farm.soil_type),
-    current_status: text(farm.current_status),
+    request_source: source,
+    current_status: currentStatus,
+    latest_status_question: latestStatusQuestion,
     growth_stage: stage,
     sowing_date: text(farm.sowing_date),
     days_after_sowing: daysAfterSowing,
+    weather: {
+      summary: weatherSummary,
+      rain_24h_mm: rain24h,
+      rain_7d_mm: rain7d,
+      water_need: waterNeed,
+      water_stress_score: weather.water_stress_score ?? null,
+      irrigation_detail: weather.irrigation_detail ?? null,
+      updated_at: weather.updated_at ?? null,
+    },
     disease_scan_date: scan,
     top_disease_risks: risks,
     max_disease_risk: maxRisk,
+    condition_snapshot: {
+      status: currentStatus,
+      weather_summary: weatherSummary,
+      rain_24h_mm: rain24h,
+      rain_7d_mm: rain7d,
+      water_need: waterNeed,
+      disease_risk: maxRisk,
+      latest_assistant_note: text(latestAssistantMemory?.message).slice(0, 700),
+    },
     timeline_events: timeline.length,
     latest_timeline: timeline.slice(0, 5).map((row) => ({
       event_type: text(row.event_type),
@@ -263,6 +347,19 @@ function compactFarmContext(
       message: text(row.message),
       stage: text(row.stage),
       created_at: text(row.created_at),
+    })),
+    recent_chat_memory: chatMemory.slice(-12).map((row) => ({
+      role: text(row.role),
+      source: text(row.source),
+      message: text(row.message).slice(0, 700),
+      growth_stage: text(row.growth_stage),
+      created_at: text(row.created_at),
+      weather_summary: text(
+        (row.weather_snapshot as Row | undefined)?.weather_summary,
+      ),
+      rain_24h_mm: (row.weather_snapshot as Row | undefined)?.rain_24h_mm ??
+        null,
+      rain_7d_mm: (row.weather_snapshot as Row | undefined)?.rain_7d_mm ?? null,
     })),
     question,
   };
@@ -279,13 +376,20 @@ function buildPrompt(params: {
   return [
     "You are a conservative AI farm assistant for smallholder farmers in Maharashtra, India.",
     `Answer in ${languageName(params.language)} only.`,
-    `Every JSON string value you return, including answer, summary, actions, and warnings, must be written in ${languageName(params.language)}.`,
+    `Every JSON string value you return, including answer, summary, actions, and warnings, must be written in ${
+      languageName(params.language)
+    }.`,
     "Do not leave English headings, labels, cautions, or action text unless it is an unavoidable crop, disease, unit, or technical index name.",
     "Use the farmer's selected farm context and reference knowledge. Do not answer as a generic chatbot.",
     "Rules:",
     "- Return ONLY valid JSON.",
     "- Answer the actual question directly first.",
+    "- Use the selected farm condition snapshot before giving advice.",
+    "- Guide the farmer through the whole next process: observe, update status, capture photo if needed, check rain/water, take action, then follow up.",
     "- Give 2 to 4 practical next actions when useful.",
+    "- If the farmer reported a condition, write a concise farm_update_suggestion that can be saved as the next status note.",
+    "- Ask exactly one follow_up_question only when more information is required.",
+    "- Set priority to urgent only for severe disease spread, crop-threatening water stress, storm/heavy rain risk, or safety-sensitive field work.",
     "- Treat satellite disease data as risk screening, not confirmed diagnosis.",
     "- Do not recommend pesticide brands, chemical doses, exact fertilizer rates, yield guarantees, or income claims.",
     "- If data is missing or stale, say what data the farmer should refresh or capture.",
@@ -309,6 +413,15 @@ function buildPrompt(params: {
     JSON.stringify({
       answer: "direct farmer-facing answer",
       summary: "one short reason",
+      condition_summary:
+        "current selected farm condition in one short paragraph",
+      process_steps: ["step 1", "step 2"],
+      farm_update_suggestion: "short status update the farmer can save",
+      follow_up_question: "one question only if needed, otherwise empty string",
+      priority: "normal|watch|urgent",
+      alert_suggestion:
+        "short alert text if notification-worthy, otherwise empty string",
+      missing_data: ["missing field/photo/weather data"],
       actions: ["next action 1", "next action 2"],
       warnings: ["important caution"],
       confidence: "high|medium|low",
@@ -394,6 +507,27 @@ function fallbackAnswer(params: {
         "तेज रोग लक्षण दिखें तो स्थानीय कृषि अधिकारी से पुष्टि करें.",
       ],
       warnings: ["यह सलाह स्क्रीनिंग डेटा पर आधारित है, पक्का रोग निदान नहीं."],
+      condition_summary: highRisk
+        ? `${params.farmName} में रोग/तनाव पर नज़र रखने की जरूरत है.`
+        : `${params.farmName} के लिए ताजा स्थिति देखकर अगला कदम तय करें.`,
+      process_steps: [
+        "खेत में 3-4 जगह पत्ते, नमी और कीट के निशान देखें.",
+        "आज की स्थिति ऐप में अपडेट करें.",
+        "समस्या दिखे तो साफ फोटो लेकर AI चैट में भेजें.",
+      ],
+      farm_update_suggestion: `आज ${
+        params.stage || "crop"
+      } अवस्था में ${params.farmName} की स्थिति जांची गई.`,
+      follow_up_question: wantsWater
+        ? "खेत की मिट्टी अभी गीली है या सूखी?"
+        : wantsDisease || highRisk
+        ? "क्या दाग या पीलापन एक जगह है या पूरे खेत में फैल रहा है?"
+        : "",
+      priority: highRisk ? "watch" : "normal",
+      alert_suggestion: highRisk
+        ? "रोग/तनाव जोखिम दिख रहा है, खेत की दोबारा जांच करें."
+        : "",
+      missing_data: ["ताजा खेत फोटो", "आज की नमी/बारिश स्थिति"],
       confidence: "low",
       model: "fallback",
     };
@@ -411,6 +545,25 @@ function fallbackAnswer(params: {
         "तीव्र लक्षणे दिसल्यास स्थानिक कृषी अधिकाऱ्याकडून खात्री करा.",
       ],
       warnings: ["ही सूचना स्क्रीनिंग डेटावर आधारित आहे; निश्चित रोग निदान नाही."],
+      condition_summary: highRisk
+        ? `${params.farmName} मध्ये रोग/ताण यावर लक्ष ठेवण्याची गरज आहे.`
+        : `${params.farmName} साठी ताजी स्थिती पाहून पुढचा निर्णय घ्या.`,
+      process_steps: [
+        "शेतात 3-4 ठिकाणी पाने, ओलावा आणि किडीची चिन्हे तपासा.",
+        "आजची स्थिती अॅपमध्ये अपडेट करा.",
+        "समस्या दिसल्यास स्पष्ट फोटो AI चॅटमध्ये पाठवा.",
+      ],
+      farm_update_suggestion: `आज ${
+        params.stage || "crop"
+      } अवस्थेत ${params.farmName} ची स्थिती तपासली.`,
+      follow_up_question: wantsWater
+        ? "माती आत्ता ओली आहे की कोरडी?"
+        : wantsDisease || highRisk
+        ? "डाग किंवा पिवळेपणा एका भागात आहे की पूर्ण शेतात पसरतो आहे?"
+        : "",
+      priority: highRisk ? "watch" : "normal",
+      alert_suggestion: highRisk ? "रोग/ताण धोका दिसतो आहे, शेत पुन्हा तपासा." : "",
+      missing_data: ["ताजा शेत फोटो", "आजची ओलावा/पाऊस स्थिती"],
       confidence: "low",
       model: "fallback",
     };
@@ -427,6 +580,27 @@ function fallbackAnswer(params: {
       "Confirm severe symptoms with a local agriculture officer.",
     ],
     warnings: ["This is based on screening data, not a confirmed diagnosis."],
+    condition_summary: highRisk
+      ? `${params.farmName} needs watch because disease or crop stress risk is elevated.`
+      : `${params.farmName} needs a fresh field check before deciding the next action.`,
+    process_steps: [
+      "Walk 3-4 spots in the field and check leaves, soil moisture, and pest signs.",
+      "Save today's farm status in the app.",
+      "Send a clear photo in AI chat if any symptom is visible.",
+    ],
+    farm_update_suggestion: `Checked ${params.farmName} at ${
+      params.stage || "current"
+    } stage today.`,
+    follow_up_question: wantsWater
+      ? "Is the soil currently wet, moist, or dry?"
+      : wantsDisease || highRisk
+      ? "Are the spots or yellowing limited to one patch or spreading across the field?"
+      : "",
+    priority: highRisk ? "watch" : "normal",
+    alert_suggestion: highRisk
+      ? "Crop stress or disease risk needs a field recheck."
+      : "",
+    missing_data: ["fresh field photo", "today's moisture/rain condition"],
     confidence: "low",
     model: "fallback",
   };
@@ -440,6 +614,81 @@ function sourceList(knowledge: KnowledgeChunk[]) {
     district: chunk.district,
     similarity: chunk.similarity,
   }));
+}
+
+function assistantMemoryText(answer: AssistantAnswer): string {
+  return [
+    answer.answer,
+    answer.condition_summary ? `Condition: ${answer.condition_summary}` : "",
+    answer.process_steps.length > 0
+      ? `Process: ${answer.process_steps.join("; ")}`
+      : "",
+    answer.farm_update_suggestion
+      ? `Farm update: ${answer.farm_update_suggestion}`
+      : "",
+    answer.follow_up_question ? `Follow-up: ${answer.follow_up_question}` : "",
+    answer.actions.length > 0 ? `Actions: ${answer.actions.join("; ")}` : "",
+    answer.missing_data.length > 0
+      ? `Missing data: ${answer.missing_data.join("; ")}`
+      : "",
+    answer.alert_suggestion ? `Alert: ${answer.alert_suggestion}` : "",
+    answer.warnings.length > 0 ? `Warnings: ${answer.warnings.join("; ")}` : "",
+  ].filter((value) => value.trim().length > 0).join("\n\n").slice(0, 8000);
+}
+
+async function saveAssistantMemory(args: {
+  supabase: any;
+  farmId: string;
+  farmerId: string;
+  phone: string;
+  question: string;
+  answer: AssistantAnswer;
+  language: string;
+  stage: string;
+  daysAfterSowing: number | null;
+  farmContext: Row;
+  weatherSnapshot: Row;
+  source: string;
+}) {
+  const createdAt = new Date().toISOString();
+  const rows = [
+    {
+      farm_id: args.farmId,
+      farmer_id: args.farmerId || null,
+      farmer_phone: args.phone,
+      role: "farmer",
+      source: args.source,
+      message: args.question,
+      language: args.language,
+      growth_stage: args.stage || null,
+      days_after_sowing: args.daysAfterSowing,
+      weather_snapshot: args.weatherSnapshot,
+      farm_context: args.farmContext,
+      created_at: createdAt,
+    },
+    {
+      farm_id: args.farmId,
+      farmer_id: args.farmerId || null,
+      farmer_phone: args.phone,
+      role: "assistant",
+      source: args.source,
+      message: assistantMemoryText(args.answer),
+      language: args.language,
+      growth_stage: args.stage || null,
+      days_after_sowing: args.daysAfterSowing,
+      weather_snapshot: args.weatherSnapshot,
+      farm_context: {
+        ...args.farmContext,
+        assistant_confidence: args.answer.confidence,
+        assistant_model: args.answer.model ?? "",
+      },
+      created_at: createdAt,
+    },
+  ].filter((row) => text(row.message).length > 0);
+
+  if (rows.length === 0) return;
+  const { error } = await args.supabase.from("farm_chat_messages").insert(rows);
+  if (error && !optionalSchemaError(error)) throw error;
 }
 
 function bundledKnowledge(args: {
@@ -469,7 +718,9 @@ function bundledKnowledge(args: {
   const uniqueTokens = [...new Set(tokens)];
   const docs = BUNDLED_DOCS.filter((doc) => {
     if (doc.crop === cropKey) return true;
-    if (cropKey === "millet") return doc.crop === "millet" || doc.crop.includes("millet");
+    if (cropKey === "millet") {
+      return doc.crop === "millet" || doc.crop.includes("millet");
+    }
     return doc.crop === "millet" && cropKey.includes("millet");
   });
 
@@ -517,15 +768,33 @@ Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
   if (req.method !== "POST") {
-    return errorResponse("Method not allowed", 405, undefined, "method_not_allowed");
+    return errorResponse(
+      "Method not allowed",
+      405,
+      undefined,
+      "method_not_allowed",
+    );
   }
 
   try {
     const body = await req.json();
-    const phone = normalizePhone(body.phone ?? body.farmerPhone ?? body.farmer_phone);
+    const phone = normalizePhone(
+      body.phone ?? body.farmerPhone ?? body.farmer_phone,
+    );
     const farmerId = text(body.farmerId ?? body.farmer_id);
     const farmId = text(body.farmId ?? body.farm_id);
     const question = text(body.question).slice(0, 1000);
+    const source = text(body.source).toLowerCase() === "status_chat"
+      ? "status_chat"
+      : "ai_chat";
+    const appFarmContext = objectOrEmpty(body.farmContext ?? body.farm_context);
+    const weatherSnapshot = objectOrEmpty(
+      body.weatherSnapshot ?? body.weather_snapshot,
+    );
+    const statusText = text(body.statusText ?? body.status_text);
+    const latestStatusQuestion = text(
+      body.latestStatusQuestion ?? body.latest_status_question,
+    );
     const language = ["hi", "mr"].includes(text(body.language))
       ? text(body.language)
       : "en";
@@ -539,29 +808,52 @@ Deno.serve(async (req) => {
       );
     }
     if (farmId.length === 0) {
-      return errorResponse("farm_id is required", 400, undefined, "missing_farm_id");
+      return errorResponse(
+        "farm_id is required",
+        400,
+        undefined,
+        "missing_farm_id",
+      );
     }
     if (question.length === 0) {
-      return errorResponse("question is required", 400, undefined, "missing_question");
+      return errorResponse(
+        "question is required",
+        400,
+        undefined,
+        "missing_question",
+      );
     }
 
     const supabase = createServiceClient();
     const userId = await requireUserId(supabase, req);
     if (userId instanceof Response) return userId;
-    const linkedFarm = await assertLinkedFarm(supabase, userId, phone, farmerId, farmId);
+    const linkedFarm = await assertLinkedFarm(
+      supabase,
+      userId,
+      phone,
+      farmerId,
+      farmId,
+    );
     if (linkedFarm instanceof Response) return linkedFarm;
 
     const { data: farm, error: farmError } = await supabase
       .from("farms")
-      .select("id,name,geometry,bounds,area_hectares,area_acres,user_id,created_at,crop,variety,previous_crop,season,irrigation,soil_type,ownership_type,seed_source,harvest_intent,sowing_date,current_status,current_status_stage,current_status_updated_at")
+      .select(
+        "id,name,geometry,bounds,area_hectares,area_acres,user_id,created_at,crop,variety,previous_crop,season,irrigation,soil_type,ownership_type,seed_source,harvest_intent,sowing_date,current_status,current_status_stage,current_status_updated_at",
+      )
       .eq("id", farmId)
       .maybeSingle();
     if (farmError) throw farmError;
     if (!farm) {
-      return errorResponse("Farm not found for this farmer", 404, undefined, "farmer_farm_not_found");
+      return errorResponse(
+        "Farm not found for this farmer",
+        404,
+        undefined,
+        "farmer_farm_not_found",
+      );
     }
 
-    const [zoneData, cellData, timeline] = await Promise.all([
+    const [zoneData, cellData, timeline, chatMemoryDesc] = await Promise.all([
       safeRows(
         supabase
           .from("disease_scout_zones")
@@ -588,7 +880,18 @@ Deno.serve(async (req) => {
           .order("created_at", { ascending: false })
           .limit(12),
       ),
+      safeRows(
+        supabase
+          .from("farm_chat_messages")
+          .select(
+            "role,source,message,language,growth_stage,days_after_sowing,weather_snapshot,farm_context,created_at",
+          )
+          .eq("farm_id", farmId)
+          .order("created_at", { ascending: false })
+          .limit(24),
+      ),
     ]);
+    const chatMemory = [...chatMemoryDesc].reverse();
 
     const scan = latestScanDate(cellData) || latestScanDate(zoneData);
     const latestCells = sameScanRows(cellData, scan);
@@ -598,7 +901,9 @@ Deno.serve(async (req) => {
     const stage = text(body.growthStage ?? body.growth_stage) ||
       text(farm.current_status_stage);
     const daysRaw = num(body.daysAfterSowing ?? body.days_after_sowing);
-    const daysAfterSowing = daysRaw === null ? null : Math.max(0, Math.floor(daysRaw));
+    const daysAfterSowing = daysRaw === null
+      ? null
+      : Math.max(0, Math.floor(daysRaw));
     const crop = text(farm.crop) || text(body.crop) || "millet";
     const diseaseCandidates = Object.keys(risks);
 
@@ -612,7 +917,15 @@ Deno.serve(async (req) => {
         text(farm.variety),
         stage,
         text(farm.current_status),
-        ...timeline.slice(0, 4).map((row) => `${text(row.title)} ${text(row.message)}`),
+        statusText,
+        latestStatusQuestion,
+        JSON.stringify(appFarmContext).slice(0, 1200),
+        ...timeline.slice(0, 4).map((row) =>
+          `${text(row.title)} ${text(row.message)}`
+        ),
+        ...chatMemory.slice(-8).map((row) =>
+          `${text(row.role)} ${text(row.message)}`
+        ),
       ].filter(Boolean).join(" "),
       k: 6,
     });
@@ -634,6 +947,12 @@ Deno.serve(async (req) => {
       risks,
       maxRisk,
       timeline,
+      chatMemory,
+      appFarmContext,
+      weatherSnapshot,
+      statusText,
+      latestStatusQuestion,
+      source,
     );
     const fallback = fallbackAnswer({
       language,
@@ -660,14 +979,42 @@ Deno.serve(async (req) => {
       answer = fallback;
     }
 
+    let chatMemoryError = "";
+    try {
+      await saveAssistantMemory({
+        supabase,
+        farmId,
+        farmerId,
+        phone,
+        question,
+        answer,
+        language,
+        stage,
+        daysAfterSowing,
+        farmContext,
+        weatherSnapshot,
+        source,
+      });
+    } catch (error) {
+      chatMemoryError = error instanceof Error ? error.message : String(error);
+    }
+
     return successResponse(
       {
         answer: answer.answer,
         summary: answer.summary,
         actions: answer.actions,
         warnings: answer.warnings,
+        condition_summary: answer.condition_summary ?? "",
+        process_steps: answer.process_steps,
+        farm_update_suggestion: answer.farm_update_suggestion ?? "",
+        follow_up_question: answer.follow_up_question ?? "",
+        priority: answer.priority,
+        alert_suggestion: answer.alert_suggestion ?? "",
+        missing_data: answer.missing_data,
         sources: sourceList(knowledge),
         farm_context: farmContext,
+        chat_memory_error: chatMemoryError || null,
         confidence: answer.confidence,
         model: answer.model,
       },

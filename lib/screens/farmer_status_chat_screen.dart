@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
+import '../models/satellite/farm_chat_message_model.dart';
 import '../utils/harvest_machine_capture.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
@@ -15,12 +16,18 @@ class FarmStatusUpdateResult {
   final DateTime updatedAt;
   final Uint8List? photoBytes;
   final String? photoName;
+  final List<FarmChatMessageDraft> transcript;
+  final Map<String, dynamic> weatherSnapshot;
+  final Map<String, dynamic> farmContext;
 
   const FarmStatusUpdateResult({
     required this.message,
     required this.question,
     required this.stage,
     required this.updatedAt,
+    this.transcript = const <FarmChatMessageDraft>[],
+    this.weatherSnapshot = const <String, dynamic>{},
+    this.farmContext = const <String, dynamic>{},
     this.photoBytes,
     this.photoName,
   });
@@ -36,6 +43,8 @@ class FarmerStatusChatScreen extends StatefulWidget {
   final String stageQuestion;
   final String? lifecycleContext;
   final String? priorStatus;
+  final Map<String, dynamic> weatherSnapshot;
+  final Map<String, dynamic> farmContext;
   final bool requiresPhoto;
 
   const FarmerStatusChatScreen({
@@ -49,6 +58,8 @@ class FarmerStatusChatScreen extends StatefulWidget {
     required this.stageQuestion,
     this.lifecycleContext,
     this.priorStatus,
+    this.weatherSnapshot = const <String, dynamic>{},
+    this.farmContext = const <String, dynamic>{},
     required this.requiresPhoto,
   });
 
@@ -114,6 +125,11 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
       _messages.add(
         _StatusMessage(isUser: false, text: widget.lifecycleContext!.trim()),
       );
+    }
+
+    final weatherText = _weatherContextText;
+    if (weatherText != null) {
+      _messages.add(_StatusMessage(isUser: false, text: weatherText));
     }
 
     if (widget.priorStatus != null && widget.priorStatus!.trim().isNotEmpty) {
@@ -191,9 +207,6 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
   }
 
   Future<void> _pickPhoto() async {
-    final canUsePhoto = await PolicyDisclosureService.confirmPhotoUse(context);
-    if (!canUsePhoto) return;
-
     final result = await pickHarvestMachineImage();
     if (result == null) return;
     if (!mounted) return;
@@ -221,6 +234,9 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
         question: widget.stageQuestion,
         stage: widget.stage,
         updatedAt: DateTime.now(),
+        transcript: _transcript(),
+        weatherSnapshot: widget.weatherSnapshot,
+        farmContext: widget.farmContext,
         photoBytes: _photoBytes,
         photoName: _photoName,
       ),
@@ -236,6 +252,28 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
         '${UiStrings.t('crop_label')}: $_cropName • ${UiStrings.t('variety')}: $_varietyName\n'
         '${UiStrings.t('location')}: ${UiStrings.label(widget.location)}\n'
         '${UiStrings.t('growth')}: ${UiStrings.f('day_stage', {'day': LocaleText.number(widget.daysAfterSowing), 'stage': UiStrings.option(widget.stage)})}';
+  }
+
+  String? get _weatherContextText {
+    final weather = widget.farmContext['weather'] is Map
+        ? Map<String, dynamic>.from(widget.farmContext['weather'] as Map)
+        : widget.weatherSnapshot;
+    if (weather.isEmpty) return null;
+    final parts = <String>[];
+    final rain24h = _num(weather['rain_24h_mm']);
+    final rain7d = _num(weather['rain_7d_mm'] ?? weather['total_rain_mm']);
+    final waterNeed = '${weather['water_need_label'] ?? ''}'.trim();
+    final weatherSummary = '${weather['weather_summary'] ?? ''}'.trim();
+    if (weatherSummary.isNotEmpty) parts.add(weatherSummary);
+    if (rain24h != null) {
+      parts.add('24h rain ${LocaleText.number(rain24h, fractionDigits: 1)} mm');
+    }
+    if (rain7d != null) {
+      parts.add('7d rain ${LocaleText.number(rain7d, fractionDigits: 1)} mm');
+    }
+    if (waterNeed.isNotEmpty) parts.add(waterNeed);
+    if (parts.isEmpty) return null;
+    return parts.join(' • ');
   }
 
   String get _stageQuestionText {
@@ -268,6 +306,31 @@ class _FarmerStatusChatScreenState extends State<FarmerStatusChatScreen> {
         'variety': widget.variety,
       }),
     ];
+  }
+
+  List<FarmChatMessageDraft> _transcript() {
+    final now = DateTime.now().toUtc();
+    return _messages
+        .where((message) => message.text.trim().isNotEmpty)
+        .map(
+          (message) => FarmChatMessageDraft(
+            role: message.isUser ? 'farmer' : 'assistant',
+            source: 'status_chat',
+            message: message.text.trim(),
+            growthStage: widget.stage,
+            daysAfterSowing: widget.daysAfterSowing,
+            weatherSnapshot: widget.weatherSnapshot,
+            farmContext: widget.farmContext,
+            createdAt: now,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  double? _num(Object? raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw);
+    return null;
   }
 
   @override

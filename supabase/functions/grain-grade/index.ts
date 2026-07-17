@@ -25,6 +25,35 @@ function createServiceClient() {
   return createClient(url, key);
 }
 
+class HttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+async function authenticatedUserId(
+  req: Request,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+): Promise<string> {
+  const authorization = req.headers.get("Authorization") ?? "";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!token) throw new HttpError("Authentication required", 401);
+
+  const { data, error } = await supabase.auth.getUser(token);
+  const userId = data?.user?.id ? String(data.user.id) : "";
+  if (error || !userId) throw new HttpError("Invalid or expired session", 401);
+  return userId;
+}
+
+function ownedStoragePath(path: string, userId: string, field: string): string {
+  const normalized = path.trim().replace(/^\/+/, "");
+  if (!normalized || !normalized.startsWith(`${userId}/`)) {
+    throw new HttpError(`${field} must belong to the signed-in user`, 403);
+  }
+  return normalized;
+}
+
 function vlmEnv() {
   const apiKey = Deno.env.get("VLM_API_KEY") ??
     Deno.env.get("QWEN_VL_API_KEY") ??
@@ -204,12 +233,28 @@ Deno.serve(async (req) => {
   if (cors) return cors;
   if (req.method !== "POST") return errorResponse("Method not allowed", 405);
 
-  try {
-    const body = await req.json();
-    const grainPath = String(body.grain_image_path ?? "");
-    if (!grainPath) return errorResponse("grain_image_path is required", 400);
+  // Keep the row id outside the main try so failures after the initial insert
+  // can be persisted instead of leaving an untracked pair of Storage objects.
+  // deno-lint-ignore no-explicit-any
+  let supabase: any = null;
+  let analysisId: string | null = null;
 
-    const moisturePath = body.moisture_image_path ? String(body.moisture_image_path) : null;
+  try {
+    supabase = createServiceClient();
+    const body = await req.json();
+    const userId = await authenticatedUserId(req, supabase);
+    const requestedOperatorId = body.operator_id ? String(body.operator_id) : "";
+    if (requestedOperatorId && requestedOperatorId !== userId) {
+      throw new HttpError("operator_id does not match the signed-in user", 403);
+    }
+
+    const grainPathRaw = String(body.grain_image_path ?? "");
+    if (!grainPathRaw.trim()) return errorResponse("grain_image_path is required", 400);
+    const grainPath = ownedStoragePath(grainPathRaw, userId, "grain_image_path");
+
+    const moisturePath = body.moisture_image_path
+      ? ownedStoragePath(String(body.moisture_image_path), userId, "moisture_image_path")
+      : null;
     const manualPercent = body.manual_moisture_percent != null
       ? Number(body.manual_moisture_percent)
       : null;
@@ -220,14 +265,10 @@ Deno.serve(async (req) => {
     const cropType = String(body.crop_type ?? "finger_millets");
     const variety = String(body.crop_variety ?? body.variety ?? "");
     const confidenceThreshold = Number(body.confidence_threshold ?? 60);
-    const operatorId = body.operator_id ? String(body.operator_id) : null;
+    const operatorId = userId;
     const actorRoleRaw = String(body.actor_role ?? "farmer").toLowerCase();
     const actorRole = actorRoleRaw === "fpc" ? "fpc" : "farmer";
-    const fpcId = body.fpc_id
-      ? String(body.fpc_id)
-      : actorRole === "fpc"
-      ? operatorId
-      : null;
+    const fpcId = actorRole === "fpc" ? operatorId : null;
     const fpcCustomerId = body.fpc_customer_id ? String(body.fpc_customer_id) : null;
     const fpcCustomerName = body.fpc_customer_name ? String(body.fpc_customer_name) : null;
     const source = body.source ? String(body.source) : "app";
@@ -241,7 +282,35 @@ Deno.serve(async (req) => {
       ? bagSizeKg * bagCount
       : null;
 
-    const supabase = createServiceClient();
+    const createdAt = new Date().toISOString();
+    const { data: created, error: createError } = await supabase
+      .from("analysis_jobs")
+      .insert({
+        operator_id: operatorId,
+        actor_role: actorRole,
+        fpc_id: fpcId,
+        fpc_customer_id: fpcCustomerId,
+        fpc_customer_name: fpcCustomerName,
+        source,
+        batch_id: batchId,
+        farmer_id: farmerId,
+        farm_id: farmId,
+        crop_type: cropType,
+        variety,
+        status: "processing",
+        grain_image_path: grainPath,
+        moisture_image_path: moisturePath,
+        manual_moisture_percent: manualPercent,
+        confidence_threshold: confidenceThreshold,
+        created_at: createdAt,
+        updated_at: createdAt,
+      })
+      .select("id")
+      .single();
+    if (createError || !created?.id) {
+      throw new Error(`Failed to create analysis job: ${createError?.message ?? "no id returned"}`);
+    }
+    analysisId = String(created.id);
 
     const moisture = await readMoisture(supabase, moisturePath, manualPercent);
     const moistureRisk = moistureRiskFromPercent(moisture.percent);
@@ -277,28 +346,38 @@ Deno.serve(async (req) => {
       source: moisture.source,
       ocr_confidence: moisture.confidence,
     };
+    const confidence = {
+      overall: overallConfidence,
+      pass1_safety_gate: overallConfidence,
+      pass2_grading: rules.finalScore,
+    };
+    const reviewStatus = manualReviewRequired ? "pending" : "not_required";
+    const summary = operatorSummary(rules.grade, moistureRisk, rules.rejectRecommended);
+    const responsePayload = {
+      analysis_id: analysisId,
+      grain_image_name: grainPath.split("/").pop() ?? grainPath,
+      grain_image_path: grainPath,
+      moisture_image_name: moisturePath?.split("/").pop() ?? null,
+      moisture_image_path: moisturePath,
+      quality,
+      moisture: moisturePayload,
+      confidence,
+      selection: { selected_crop: cropType, selected_variety: variety },
+      applied_rules: rules.appliedRules,
+      manual_review_required: manualReviewRequired,
+      review_status: reviewStatus,
+      operator_summary: summary,
+      signal_highlights: rules.signalHighlights,
+    };
 
-    // Persist (service role bypasses RLS; operator_id stored for ownership).
-    let analysisId: string = crypto.randomUUID();
-    const { data: inserted, error: insertError } = await supabase
+    // A successful response is sent only after every returned grading field and
+    // both Storage paths are confirmed on the same analysis_jobs row.
+    const completedAt = new Date().toISOString();
+    const { data: saved, error: saveError } = await supabase
       .from("analysis_jobs")
-      .insert({
-        operator_id: operatorId,
-        actor_role: actorRole,
-        fpc_id: fpcId,
-        fpc_customer_id: fpcCustomerId,
-        fpc_customer_name: fpcCustomerName,
-        source,
-        batch_id: batchId,
-        farmer_id: farmerId,
-        farm_id: farmId,
-        crop_type: cropType,
-        variety,
+      .update({
         status: "completed",
-        grain_image_path: grainPath,
-        moisture_image_path: moisturePath,
         manual_moisture_percent: moisture.source === "manual" ? moisture.percent : null,
-        confidence_threshold: confidenceThreshold,
         final_grade: rules.grade,
         grain_grade: rules.grainGrade,
         final_score: rules.finalScore,
@@ -310,48 +389,46 @@ Deno.serve(async (req) => {
         bag_size_kg: bagSizeKg,
         bag_count: bagCount,
         total_kg: totalKg,
-        review_status: manualReviewRequired ? "pending" : "not_required",
+        review_status: reviewStatus,
         reject_recommended: rules.rejectRecommended,
         reject_reasons: rules.rejectReasons,
         applied_rules: rules.appliedRules,
         quality_metrics: quality,
-        result_payload: {
-          quality,
-          moisture: moisturePayload,
-          confidence: {
-            overall: overallConfidence,
-            pass1_safety_gate: overallConfidence,
-            pass2_grading: rules.finalScore,
-          },
-          selection: { selected_crop: cropType, selected_variety: variety },
-          manual_review_required: manualReviewRequired,
+        score_breakdown: {
+          final_score: rules.finalScore,
+          grain_score: rules.grainScore,
+          moisture_score: rules.moistureScore,
+          confidence,
         },
+        result_payload: responsePayload,
+        model_version: vlmEnv().model,
         rule_version: RULE_VERSION,
-        completed_at: new Date().toISOString(),
+        route_version: "grain-grade-v4",
+        error_message: null,
+        updated_at: completedAt,
+        completed_at: completedAt,
       })
+      .eq("id", analysisId)
       .select("id")
-      .maybeSingle();
-    if (!insertError && inserted?.id) analysisId = String(inserted.id);
+      .single();
+    if (saveError || !saved?.id) {
+      throw new Error(`Failed to save completed analysis: ${saveError?.message ?? "no id returned"}`);
+    }
 
-    return successResponse({
-      analysis_id: analysisId,
-      grain_image_name: grainPath.split("/").pop() ?? grainPath,
-      moisture_image_name: moisturePath?.split("/").pop() ?? null,
-      quality,
-      moisture: moisturePayload,
-      confidence: {
-        overall: overallConfidence,
-        pass1_safety_gate: overallConfidence,
-        pass2_grading: rules.finalScore,
-      },
-      selection: { selected_crop: cropType, selected_variety: variety },
-      applied_rules: rules.appliedRules,
-      manual_review_required: manualReviewRequired,
-      review_status: manualReviewRequired ? "pending" : "not_required",
-      operator_summary: operatorSummary(rules.grade, moistureRisk, rules.rejectRecommended),
-      signal_highlights: rules.signalHighlights,
-    });
+    return successResponse(responsePayload);
   } catch (error) {
-    return errorResponse("grain-grade failed", 500, error);
+    if (supabase && analysisId) {
+      const message = error instanceof Error ? error.message : String(error);
+      await supabase
+        .from("analysis_jobs")
+        .update({
+          status: "failed",
+          error_message: message.slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", analysisId);
+    }
+    const status = error instanceof HttpError ? error.status : 500;
+    return errorResponse("grain-grade failed", status, error);
   }
 });

@@ -1,14 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_config.dart';
-import '../controllers/auth_controller.dart';
 import '../models/grading/crop_option.dart';
 import '../models/grading/grade_result.dart';
-import 'backend_bridge_session.dart';
 
 /// Raised by [GrainGradingService] for any non-success path so the UI can show
 /// a single, localized error/empty state.
@@ -129,25 +126,12 @@ class GrainGradingService {
 
   SupabaseClient get _supabase => Supabase.instance.client;
 
-  String? get _uid {
-    final backendUserId = Get.isRegistered<AuthController>()
-        ? Get.find<AuthController>().currentUser.value?.id.trim()
-        : null;
-    if (backendUserId != null && backendUserId.isNotEmpty) {
-      return backendUserId;
-    }
-    return _supabase.auth.currentUser?.id;
-  }
+  String? get _uid => _supabase.auth.currentUser?.id;
 
-  String? get _jwt {
-    final backendToken = Get.isRegistered<AuthController>()
-        ? Get.find<AuthController>().accessToken.value.trim()
-        : null;
-    if (backendToken != null && backendToken.isNotEmpty) return backendToken;
-    return _supabase.auth.currentSession?.accessToken;
-  }
+  String? get _jwt => _supabase.auth.currentSession?.accessToken;
 
-  /// Grading requires an authenticated backend session so uploads satisfy RLS.
+  /// Grading requires an authenticated (or guest) Supabase session so uploads
+  /// satisfy the per-user storage RLS.
   bool get isConfigured => _uid != null && (_jwt?.isNotEmpty ?? false);
 
   Map<String, String> _functionHeaders() => {
@@ -167,7 +151,6 @@ class GrainGradingService {
 
   /// Crop + variety catalog from the `grain-crops` Edge Function.
   Future<List<CropOption>> fetchCrops() async {
-    await ensureBackendBridgeSession();
     final body = await _invoke('grain-crops', method: 'GET');
     final crops = body['crops'];
     if (crops is! List) return const [];
@@ -183,7 +166,6 @@ class GrainGradingService {
     String moistureImageName = 'moisture.jpg',
     double? manualMoisturePercent,
   }) async {
-    await ensureBackendBridgeSession();
     _ensureConfigured();
     if (moistureImageBytes == null && manualMoisturePercent == null) {
       throw GradingException(
@@ -237,8 +219,16 @@ class GrainGradingService {
     String source = 'app',
     int confidenceThreshold = 60,
   }) async {
-    await ensureBackendBridgeSession();
     _ensureConfigured();
+    final normalizedActorRole = actorRole.trim().toLowerCase();
+    if (normalizedActorRole != 'fpc') {
+      if (farmerId == null || farmerId.trim().isEmpty) {
+        throw GradingException('Farmer details are required before grading.');
+      }
+      if (farmId == null || farmId.trim().isEmpty) {
+        throw GradingException('Select a farm before grading.');
+      }
+    }
     if (moistureImageBytes == null &&
         moistureImagePath == null &&
         manualMoisturePercent == null) {
@@ -267,7 +257,7 @@ class GrainGradingService {
       'crop_variety': cropVariety,
       'confidence_threshold': confidenceThreshold,
       'operator_id': _uid,
-      'actor_role': actorRole.trim().isEmpty ? 'farmer' : actorRole.trim(),
+      'actor_role': normalizedActorRole == 'fpc' ? 'fpc' : 'farmer',
       'source': source.trim().isEmpty ? 'app' : source.trim(),
       if (farmerId != null && farmerId.trim().isNotEmpty)
         'farmer_id': farmerId.trim(),
@@ -301,7 +291,6 @@ class GrainGradingService {
     required MoistureRisk trueMoistureRisk,
     String notes = '',
   }) async {
-    await ensureBackendBridgeSession();
     _ensureConfigured();
     await _invoke(
       'grain-grade-feedback',
@@ -366,7 +355,6 @@ class GrainGradingService {
   }
 
   Future<List<GradingReviewJob>> fetchReviewJobs() async {
-    await ensureBackendBridgeSession();
     _ensureConfigured();
     final uri = Uri.parse(
       '${SupabaseConfig.url}/rest/v1/analysis_jobs'
@@ -399,7 +387,6 @@ class GrainGradingService {
     required String reviewStatus,
     String notes = '',
   }) async {
-    await ensureBackendBridgeSession();
     _ensureConfigured();
     final uri = Uri.parse(
       '${SupabaseConfig.url}/rest/v1/analysis_jobs?id=eq.$analysisId',

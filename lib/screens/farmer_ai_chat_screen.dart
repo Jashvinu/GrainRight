@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/auth_controller.dart';
@@ -8,6 +11,7 @@ import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/satellite/farm_assistant_model.dart';
 import '../models/satellite/farm_alert_model.dart';
+import '../models/satellite/farm_chat_message_model.dart';
 import '../models/satellite/farm_model.dart';
 import '../services/satellite_service.dart';
 import '../utils/harvest_machine_capture.dart';
@@ -23,6 +27,9 @@ class FarmerAiChatScreen extends StatefulWidget {
   final String? farmerId;
   final String? growthStage;
   final int? daysAfterSowing;
+  final Map<String, dynamic> weatherSnapshot;
+  final Map<String, dynamic> farmContext;
+  final VoidCallback? onUpdateFarmStatus;
   final double bottomContentInset;
 
   const FarmerAiChatScreen({
@@ -36,6 +43,9 @@ class FarmerAiChatScreen extends StatefulWidget {
     this.farmerId,
     this.growthStage,
     this.daysAfterSowing,
+    this.weatherSnapshot = const <String, dynamic>{},
+    this.farmContext = const <String, dynamic>{},
+    this.onUpdateFarmStatus,
     this.bottomContentInset = 12,
   });
 
@@ -61,12 +71,8 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   @override
   void initState() {
     super.initState();
-    _messages.addAll([
-      _ChatMessage(
-        isUser: false,
-        key: 'ai_chat_welcome',
-      ),
-    ]);
+    _messages.addAll([_ChatMessage(isUser: false, key: 'ai_chat_welcome')]);
+    unawaited(_loadRecentFarmMemory());
   }
 
   @override
@@ -138,7 +144,9 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
 
     setState(() {
       _isSending = true;
-      _messages.add(const _ChatMessage(isUser: true, key: 'ai_chat_photo_user'));
+      _messages.add(
+        const _ChatMessage(isUser: true, key: 'ai_chat_photo_user'),
+      );
       _messages.add(
         const _ChatMessage(isUser: false, key: 'ai_chat_photo_thinking'),
       );
@@ -223,19 +231,15 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
                 leading: const Icon(Icons.photo_camera_rounded),
                 title: Text(UiStrings.t('open_camera')),
                 subtitle: Text(UiStrings.t('ai_chat_photo_camera_subtitle')),
-                onTap: () => Navigator.pop(
-                  context,
-                  HarvestMachineImageSource.camera,
-                ),
+                onTap: () =>
+                    Navigator.pop(context, HarvestMachineImageSource.camera),
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library_rounded),
                 title: Text(UiStrings.t('select_from_gallery')),
                 subtitle: Text(UiStrings.t('ai_chat_photo_gallery_subtitle')),
-                onTap: () => Navigator.pop(
-                  context,
-                  HarvestMachineImageSource.gallery,
-                ),
+                onTap: () =>
+                    Navigator.pop(context, HarvestMachineImageSource.gallery),
               ),
               const SizedBox(height: 12),
             ],
@@ -314,7 +318,36 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
       location: _effectiveLocation,
       growthStage: _effectiveGrowthStage,
       daysAfterSowing: widget.daysAfterSowing,
+      weatherSnapshot: widget.weatherSnapshot,
+      farmContext: widget.farmContext,
     );
+  }
+
+  Future<void> _loadRecentFarmMemory() async {
+    try {
+      await _ensureFarmContext();
+      final farmId = _effectiveFarmId;
+      final phone = _effectiveFarmerPhone;
+      final jwt = _jwt;
+      if (farmId == null || phone == null || jwt.trim().isEmpty) return;
+      final history = await _service.listFarmChatMessages(
+        farmId: farmId,
+        farmerPhone: phone,
+        farmerId: _effectiveFarmerId,
+        jwt: jwt,
+        limit: 18,
+      );
+      final aiHistory = history
+          .where(isVisibleAiAssistantMemory)
+          .toList(growable: false);
+      if (aiHistory.isEmpty || !mounted) return;
+      setState(() {
+        _messages.insertAll(1, aiHistory.take(10).map(_chatMessageFromMemory));
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Recent memory is optional; the current chat should still open.
+    }
   }
 
   Future<void> _ensureFarmContext() async {
@@ -351,6 +384,10 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   String? get _effectiveGrowthStage =>
       _clean(widget.growthStage) ?? _clean(_controllerFarm?.currentStatusStage);
 
+  _ChatMessage _chatMessageFromMemory(FarmChatMemoryEntry item) {
+    return _ChatMessage(isUser: item.role == 'farmer', text: item.message);
+  }
+
   String? get _effectiveFarmerPhone {
     final widgetPhone = _phoneDigits(widget.farmerPhone);
     if (widgetPhone != null) return widgetPhone;
@@ -364,7 +401,9 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     final widgetFarmerId = _clean(widget.farmerId);
     if (widgetFarmerId != null) return widgetFarmerId;
     if (!Get.isRegistered<MainAuthController>()) return null;
-    return _clean(Get.find<MainAuthController>().verifiedFarmer.value?.farmerId);
+    return _clean(
+      Get.find<MainAuthController>().verifiedFarmer.value?.farmerId,
+    );
   }
 
   String get _jwt {
@@ -408,9 +447,44 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     if (answer.answer.trim().isNotEmpty) {
       lines.add(answer.answer.trim());
     }
+    if (answer.conditionSummary.trim().isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('farm_condition')}\n${answer.conditionSummary.trim()}',
+      );
+    }
+    if (answer.priority != 'normal') {
+      lines.add(
+        '${UiStrings.t('ai_chat_priority')}\n${UiStrings.option(answer.priority)}',
+      );
+    }
+    if (answer.processSteps.isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('what_to_do_now')}\n${answer.processSteps.map((item) => '- $item').join('\n')}',
+      );
+    }
+    if (answer.farmUpdateSuggestion.trim().isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('ai_chat_farm_update_suggestion')}\n${answer.farmUpdateSuggestion.trim()}',
+      );
+    }
+    if (answer.followUpQuestion.trim().isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('ai_chat_follow_up_question')}\n${answer.followUpQuestion.trim()}',
+      );
+    }
     if (answer.actions.isNotEmpty) {
       lines.add(
         '${UiStrings.t('ai_chat_next_steps')}\n${answer.actions.map((item) => '- $item').join('\n')}',
+      );
+    }
+    if (answer.missingData.isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('ai_chat_check_and_update')}\n${answer.missingData.map((item) => '- $item').join('\n')}',
+      );
+    }
+    if (answer.alertSuggestion.trim().isNotEmpty) {
+      lines.add(
+        '${UiStrings.t('ai_chat_alert')}\n${answer.alertSuggestion.trim()}',
       );
     }
     if (answer.warnings.isNotEmpty) {
@@ -448,8 +522,8 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     final confidence = '${(diagnosis.confidence * 100).round()}%';
     final lines = <String>[
       UiStrings.t('ai_chat_photo_result'),
-      '${UiStrings.t('ai_chat_visual_findings')}: ${diagnosis.diagnosis}',
-      '${UiStrings.t('ai_chat_confidence')}: $confidence • ${UiStrings.t('ai_chat_severity')}: ${UiStrings.option(diagnosis.severity)}',
+      '${UiStrings.t('ai_chat_visual_findings')}: ${UiStrings.diseaseName(diagnosis.diagnosis)}',
+      '${UiStrings.t('ai_chat_confidence')}: $confidence • ${UiStrings.t('ai_chat_severity')}: ${UiStrings.riskLevel(diagnosis.severity)}',
     ];
     if (diagnosis.evidence.isNotEmpty) {
       lines.add(
@@ -458,7 +532,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     }
     if (diagnosis.differential.isNotEmpty) {
       lines.add(
-        '${UiStrings.t('ai_chat_possible_causes')}\n${diagnosis.differential.map((item) => '- $item').join('\n')}',
+        '${UiStrings.t('ai_chat_possible_causes')}\n${diagnosis.differential.map((item) => '- ${UiStrings.diseaseName(item)}').join('\n')}',
       );
     }
     if (diagnosis.scoutAction.trim().isNotEmpty) {
@@ -478,13 +552,13 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   String _photoFollowUpPrompt(FarmPhotoDiagnosis diagnosis) {
     return [
       UiStrings.t('ai_chat_photo_followup_question'),
-      '${UiStrings.t('ai_chat_visual_findings')}: ${diagnosis.diagnosis}',
-      '${UiStrings.t('ai_chat_severity')}: ${UiStrings.option(diagnosis.severity)}',
+      '${UiStrings.t('ai_chat_visual_findings')}: ${UiStrings.diseaseName(diagnosis.diagnosis)}',
+      '${UiStrings.t('ai_chat_severity')}: ${UiStrings.riskLevel(diagnosis.severity)}',
       '${UiStrings.t('ai_chat_confidence')}: ${(diagnosis.confidence * 100).round()}%',
       if (diagnosis.evidence.isNotEmpty)
         '${UiStrings.t('ai_chat_evidence')}: ${diagnosis.evidence.join('; ')}',
       if (diagnosis.differential.isNotEmpty)
-        '${UiStrings.t('ai_chat_possible_causes')}: ${diagnosis.differential.join(', ')}',
+        '${UiStrings.t('ai_chat_possible_causes')}: ${diagnosis.differential.map(UiStrings.diseaseName).join(', ')}',
       if (diagnosis.scoutAction.trim().isNotEmpty)
         '${UiStrings.t('ai_chat_scout_action')}: ${diagnosis.scoutAction.trim()}',
     ].join('\n');
@@ -496,6 +570,12 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     }
     if (item.key != null) return UiStrings.t(item.key!);
     return item.text;
+  }
+
+  double? _num(Object? raw) {
+    if (raw is num) return raw.toDouble();
+    if (raw is String) return double.tryParse(raw);
+    return null;
   }
 
   void _sendQuickPrompt(String key) {
@@ -566,6 +646,13 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     final variety = _effectiveVariety;
     final stage = _effectiveGrowthStage;
     final days = widget.daysAfterSowing;
+    final rain24h = _num(widget.weatherSnapshot['rain_24h_mm']);
+    final rain7d = _num(
+      widget.weatherSnapshot['rain_7d_mm'] ??
+          widget.weatherSnapshot['total_rain_mm'],
+    );
+    final waterNeed = '${widget.weatherSnapshot['water_need_label'] ?? ''}'
+        .trim();
     final subtitle = [
       if (crop != null) UiStrings.option(crop),
       if (variety != null) UiStrings.option(variety),
@@ -631,10 +718,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
               runSpacing: 8,
               children: [
                 if (subtitle.isNotEmpty)
-                  _ContextPill(
-                    icon: Icons.eco_rounded,
-                    label: subtitle,
-                  ),
+                  _ContextPill(icon: Icons.eco_rounded, label: subtitle),
                 if (days != null)
                   _ContextPill(
                     icon: Icons.today_rounded,
@@ -642,7 +726,31 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
                       'days': days,
                     }),
                   ),
+                if (rain24h != null)
+                  _ContextPill(
+                    icon: Icons.water_drop_rounded,
+                    label: UiStrings.f('rain_24h_value', {
+                      'value': LocaleText.number(rain24h, fractionDigits: 1),
+                    }),
+                  ),
+                if (rain7d != null)
+                  _ContextPill(
+                    icon: Icons.grain_rounded,
+                    label: UiStrings.f('rain_7d_value', {
+                      'value': LocaleText.number(rain7d, fractionDigits: 1),
+                    }),
+                  ),
+                if (waterNeed.isNotEmpty)
+                  _ContextPill(icon: Icons.opacity_rounded, label: waterNeed),
               ],
+            ),
+          ],
+          if (widget.onUpdateFarmStatus != null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: widget.onUpdateFarmStatus,
+              icon: const Icon(Icons.edit_note_rounded),
+              label: Text(UiStrings.t('ai_chat_update_farm_status')),
             ),
           ],
         ],
@@ -706,8 +814,9 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
             ? constraints.maxWidth * 0.84
             : 430.0;
         return Row(
-          mainAxisAlignment:
-              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+          mainAxisAlignment: isUser
+              ? MainAxisAlignment.end
+              : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             if (!isUser) ...[
@@ -716,8 +825,9 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
                     ? Icons.error_outline_rounded
                     : Icons.auto_awesome_rounded,
                 color: foregroundColor,
-                backgroundColor:
-                    item.isError ? const Color(0xFFFFE4E6) : AppTheme.greenPale,
+                backgroundColor: item.isError
+                    ? const Color(0xFFFFE4E6)
+                    : AppTheme.greenPale,
               ),
               const SizedBox(width: 8),
             ],
@@ -927,12 +1037,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
                 },
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _composer(),
-            ),
+            Positioned(left: 0, right: 0, bottom: 0, child: _composer()),
           ],
         ),
       ),
@@ -969,11 +1074,7 @@ class _QuickPromptChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return ActionChip(
       avatar: Icon(icon, size: 16, color: AppTheme.greenDark),
-      label: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
       onPressed: onPressed,
       visualDensity: VisualDensity.compact,
       backgroundColor: const Color(0xFFF4F7F4),
@@ -993,10 +1094,7 @@ class _ContextPill extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _ContextPill({
-    required this.icon,
-    required this.label,
-  });
+  const _ContextPill({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1058,4 +1156,11 @@ class _MessageAvatar extends StatelessWidget {
 
 class _MissingFarmContextException implements Exception {
   const _MissingFarmContextException();
+}
+
+@visibleForTesting
+bool isVisibleAiAssistantMemory(FarmChatMemoryEntry item) {
+  return item.source == 'ai_chat' &&
+      (item.role == 'farmer' || item.role == 'assistant') &&
+      item.message.trim().isNotEmpty;
 }

@@ -114,6 +114,7 @@ class LocalFarmerProfileRecord {
   final String defaultLocation;
   final String preferredLanguage;
   final String agriRecordId;
+  final String aadhaarNumber;
   final String aadhaarMasked;
   final String aadhaarLast4;
   final String identityDocumentPath;
@@ -129,6 +130,7 @@ class LocalFarmerProfileRecord {
     required this.defaultLocation,
     required this.preferredLanguage,
     this.agriRecordId = '',
+    this.aadhaarNumber = '',
     this.aadhaarMasked = '',
     this.aadhaarLast4 = '',
     this.identityDocumentPath = '',
@@ -191,6 +193,48 @@ class LocalFarmCacheRecord {
     this.currentStatusStage,
     this.currentStatusUpdatedAt,
     this.selected = false,
+  });
+}
+
+class LocalFarmChatMessageRecord {
+  final String localId;
+  final String? remoteId;
+  final String farmId;
+  final String farmerPhone;
+  final String? farmerIdValue;
+  final String role;
+  final String source;
+  final String message;
+  final String language;
+  final String? growthStage;
+  final int? daysAfterSowing;
+  final Map<String, dynamic> weatherSnapshot;
+  final Map<String, dynamic> farmContext;
+  final String syncStatus;
+  final String createdAt;
+  final String updatedAt;
+  final String? syncedAt;
+  final String? lastError;
+
+  const LocalFarmChatMessageRecord({
+    required this.localId,
+    required this.farmId,
+    required this.farmerPhone,
+    required this.role,
+    required this.source,
+    required this.message,
+    required this.language,
+    required this.weatherSnapshot,
+    required this.farmContext,
+    required this.syncStatus,
+    required this.createdAt,
+    required this.updatedAt,
+    this.remoteId,
+    this.farmerIdValue,
+    this.growthStage,
+    this.daysAfterSowing,
+    this.syncedAt,
+    this.lastError,
   });
 }
 
@@ -334,6 +378,7 @@ class LocalAppDatabase extends GeneratedDatabase {
         default_location TEXT NOT NULL DEFAULT '',
         preferred_language TEXT NOT NULL DEFAULT 'en',
         agri_record_id TEXT NOT NULL DEFAULT '',
+        aadhaar_number TEXT NOT NULL DEFAULT '',
         aadhaar_masked TEXT NOT NULL DEFAULT '',
         aadhaar_last4 TEXT NOT NULL DEFAULT '',
         identity_document_path TEXT NOT NULL DEFAULT '',
@@ -344,6 +389,7 @@ class LocalAppDatabase extends GeneratedDatabase {
     ''');
     for (final statement in const [
       'ALTER TABLE local_farmer_profile_cache ADD COLUMN agri_record_id TEXT NOT NULL DEFAULT \'\';',
+      'ALTER TABLE local_farmer_profile_cache ADD COLUMN aadhaar_number TEXT NOT NULL DEFAULT \'\';',
       'ALTER TABLE local_farmer_profile_cache ADD COLUMN aadhaar_masked TEXT NOT NULL DEFAULT \'\';',
       'ALTER TABLE local_farmer_profile_cache ADD COLUMN aadhaar_last4 TEXT NOT NULL DEFAULT \'\';',
       'ALTER TABLE local_farmer_profile_cache ADD COLUMN identity_document_path TEXT NOT NULL DEFAULT \'\';',
@@ -404,6 +450,37 @@ class LocalAppDatabase extends GeneratedDatabase {
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_local_farms_selected ON local_farms_cache(farmer_phone, selected);',
+    );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS local_farm_chat_messages (
+        local_id TEXT PRIMARY KEY,
+        remote_id TEXT,
+        farm_id TEXT NOT NULL,
+        farmer_phone TEXT NOT NULL,
+        farmer_id TEXT,
+        role TEXT NOT NULL,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        language TEXT NOT NULL DEFAULT 'en',
+        growth_stage TEXT,
+        days_after_sowing INTEGER,
+        weather_snapshot_json TEXT NOT NULL DEFAULT '{}',
+        farm_context_json TEXT NOT NULL DEFAULT '{}',
+        sync_status TEXT NOT NULL DEFAULT 'pending',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        synced_at TEXT,
+        last_error TEXT
+      );
+    ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_farm_chat_farmer ON local_farm_chat_messages(farmer_phone, farmer_id, created_at DESC);',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_farm_chat_farm ON local_farm_chat_messages(farm_id, created_at DESC);',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_farm_chat_status ON local_farm_chat_messages(sync_status, created_at);',
     );
     await customStatement('''
       CREATE TABLE IF NOT EXISTS local_inventory_items (
@@ -662,9 +739,9 @@ class LocalAppDatabase extends GeneratedDatabase {
       '''
       INSERT INTO local_farmer_profile_cache (
         phone, farmer_id, farmer_name, user_id, default_location,
-        preferred_language, agri_record_id, aadhaar_masked, aadhaar_last4,
+        preferred_language, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4,
         identity_document_path, profile_complete, last_verified_at, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(phone) DO UPDATE SET
         farmer_id = excluded.farmer_id,
         farmer_name = excluded.farmer_name,
@@ -672,6 +749,7 @@ class LocalAppDatabase extends GeneratedDatabase {
         default_location = excluded.default_location,
         preferred_language = excluded.preferred_language,
         agri_record_id = excluded.agri_record_id,
+        aadhaar_number = excluded.aadhaar_number,
         aadhaar_masked = excluded.aadhaar_masked,
         aadhaar_last4 = excluded.aadhaar_last4,
         identity_document_path = excluded.identity_document_path,
@@ -687,6 +765,7 @@ class LocalAppDatabase extends GeneratedDatabase {
         Variable.withString(record.defaultLocation),
         Variable.withString(record.preferredLanguage),
         Variable.withString(record.agriRecordId),
+        Variable.withString(record.aadhaarNumber),
         Variable.withString(record.aadhaarMasked),
         Variable.withString(record.aadhaarLast4),
         Variable.withString(record.identityDocumentPath),
@@ -846,6 +925,133 @@ class LocalAppDatabase extends GeneratedDatabase {
         variables: [Variable.withString(digits), Variable.withString(farmId)],
       );
     });
+  }
+
+  Future<void> upsertFarmChatMessageCache(
+    LocalFarmChatMessageRecord record,
+  ) async {
+    await ensureInitialized();
+    final digits = _normalizePhone(record.farmerPhone);
+    if (digits.isEmpty ||
+        record.localId.trim().isEmpty ||
+        record.farmId.trim().isEmpty ||
+        record.message.trim().isEmpty) {
+      return;
+    }
+    await customUpdate(
+      '''
+      INSERT INTO local_farm_chat_messages (
+        local_id, remote_id, farm_id, farmer_phone, farmer_id, role, source,
+        message, language, growth_stage, days_after_sowing,
+        weather_snapshot_json, farm_context_json, sync_status, created_at,
+        updated_at, synced_at, last_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(local_id) DO UPDATE SET
+        remote_id = excluded.remote_id,
+        farm_id = excluded.farm_id,
+        farmer_phone = excluded.farmer_phone,
+        farmer_id = excluded.farmer_id,
+        role = excluded.role,
+        source = excluded.source,
+        message = excluded.message,
+        language = excluded.language,
+        growth_stage = excluded.growth_stage,
+        days_after_sowing = excluded.days_after_sowing,
+        weather_snapshot_json = excluded.weather_snapshot_json,
+        farm_context_json = excluded.farm_context_json,
+        sync_status = excluded.sync_status,
+        updated_at = excluded.updated_at,
+        synced_at = excluded.synced_at,
+        last_error = excluded.last_error
+      ''',
+      variables: [
+        Variable.withString(record.localId),
+        Variable(record.remoteId),
+        Variable.withString(record.farmId),
+        Variable.withString(digits),
+        Variable(record.farmerIdValue),
+        Variable.withString(record.role),
+        Variable.withString(record.source),
+        Variable.withString(record.message),
+        Variable.withString(record.language),
+        Variable(record.growthStage),
+        Variable(record.daysAfterSowing),
+        Variable.withString(jsonEncode(record.weatherSnapshot)),
+        Variable.withString(jsonEncode(record.farmContext)),
+        Variable.withString(record.syncStatus),
+        Variable.withString(record.createdAt),
+        Variable.withString(record.updatedAt),
+        Variable(record.syncedAt),
+        Variable(record.lastError),
+      ],
+    );
+  }
+
+  Future<List<LocalFarmChatMessageRecord>> loadPendingFarmChatMessages({
+    required String farmerPhone,
+    String? farmerId,
+    int limit = 80,
+  }) async {
+    await ensureInitialized();
+    final digits = _normalizePhone(farmerPhone);
+    if (digits.isEmpty) return const [];
+    final rows = await customSelect(
+      '''
+      SELECT * FROM local_farm_chat_messages
+      WHERE farmer_phone = ? AND sync_status != 'synced'
+      ORDER BY created_at ASC
+      LIMIT ?
+      ''',
+      variables: [Variable.withString(digits), Variable.withInt(limit)],
+    ).get();
+    return rows.map(_farmChatMessageFromRow).toList(growable: false);
+  }
+
+  Future<void> markFarmChatMessageSynced({
+    required String localId,
+    required String remoteId,
+    required String syncedAt,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      UPDATE local_farm_chat_messages
+      SET remote_id = ?,
+          sync_status = 'synced',
+          synced_at = ?,
+          updated_at = ?,
+          last_error = NULL
+      WHERE local_id = ?
+      ''',
+      variables: [
+        Variable.withString(remoteId),
+        Variable.withString(syncedAt),
+        Variable.withString(syncedAt),
+        Variable.withString(localId),
+      ],
+    );
+  }
+
+  Future<void> markFarmChatMessagePending({
+    required String localId,
+    required String updatedAt,
+    String? lastError,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      UPDATE local_farm_chat_messages
+      SET sync_status = 'pending',
+          updated_at = ?,
+          last_error = ?
+      WHERE local_id = ?
+      ''',
+      variables: [
+        Variable.withString(updatedAt),
+        Variable(lastError),
+        Variable.withString(localId),
+      ],
+    );
   }
 
   Future<void> replaceInventoryCacheForFarmer({
@@ -1283,6 +1489,7 @@ class LocalAppDatabase extends GeneratedDatabase {
       defaultLocation: row.read<String>('default_location'),
       preferredLanguage: row.read<String>('preferred_language'),
       agriRecordId: row.read<String>('agri_record_id'),
+      aadhaarNumber: row.read<String>('aadhaar_number'),
       aadhaarMasked: row.read<String>('aadhaar_masked'),
       aadhaarLast4: row.read<String>('aadhaar_last4'),
       identityDocumentPath: row.read<String>('identity_document_path'),
@@ -1321,6 +1528,29 @@ class LocalAppDatabase extends GeneratedDatabase {
       createdAt: row.read<String>('created_at'),
       updatedAt: row.read<String>('updated_at'),
       selected: row.read<int>('selected') == 1,
+    );
+  }
+
+  LocalFarmChatMessageRecord _farmChatMessageFromRow(QueryRow row) {
+    return LocalFarmChatMessageRecord(
+      localId: row.read<String>('local_id'),
+      remoteId: row.readNullable<String>('remote_id'),
+      farmId: row.read<String>('farm_id'),
+      farmerPhone: row.read<String>('farmer_phone'),
+      farmerIdValue: row.readNullable<String>('farmer_id'),
+      role: row.read<String>('role'),
+      source: row.read<String>('source'),
+      message: row.read<String>('message'),
+      language: row.read<String>('language'),
+      growthStage: row.readNullable<String>('growth_stage'),
+      daysAfterSowing: row.readNullable<int>('days_after_sowing'),
+      weatherSnapshot: _decodeMap(row.read<String>('weather_snapshot_json')),
+      farmContext: _decodeMap(row.read<String>('farm_context_json')),
+      syncStatus: row.read<String>('sync_status'),
+      createdAt: row.read<String>('created_at'),
+      updatedAt: row.read<String>('updated_at'),
+      syncedAt: row.readNullable<String>('synced_at'),
+      lastError: row.readNullable<String>('last_error'),
     );
   }
 
