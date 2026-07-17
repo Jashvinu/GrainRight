@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../config/satellite_config.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../services/map_tile_provider.dart';
 
 class SatelliteMapView extends StatelessWidget {
@@ -192,9 +192,12 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 const OfflineMapBackground(
                   message: 'Offline map\nSaved farm boundary visible',
                 ),
-                OfflineAwareTileLayer(urlTemplate: fieldImageryTileUrl),
+                ...fieldImageryTileLayers(includeReferenceLabels: false),
                 if (widget.tileUrl != null && widget.tileUrl!.isNotEmpty)
-                  OfflineAwareTileLayer(urlTemplate: widget.tileUrl!),
+                  OfflineAwareTileLayer(
+                    urlTemplate: widget.tileUrl!,
+                    maxNativeZoom: fieldImageryMaxNativeZoom,
+                  ),
                 if (widget.rasterUrl != null &&
                     widget.rasterUrl!.isNotEmpty &&
                     widget.rasterBounds != null)
@@ -207,6 +210,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
+                if (shouldShowFieldReferenceLabels(fieldImageryTileUrl))
+                  ...fieldReferenceTileLayers(),
                 if (widget.farmPolygon != null &&
                     widget.farmPolygon!.length >= 3)
                   PolygonLayer(

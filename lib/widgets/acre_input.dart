@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class AcreInput extends StatefulWidget {
   final String label;

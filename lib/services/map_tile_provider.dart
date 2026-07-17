@@ -16,13 +16,64 @@ String get fieldImageryTileUrl {
   return satellite.isNotEmpty ? satellite : openStreetMapTileUrl;
 }
 const String openStreetMapTileUrl = RuntimeConfig.onlineBaseTileUrlTemplate;
+const String fieldRoadsTileUrl =
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
+const String fieldPlacesTileUrl =
+    'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
 const int mapTileMaxNativeZoom = 20;
+const int fieldImageryMaxNativeZoom = 18;
+const int fieldReferenceMaxNativeZoom = 19;
 const double mapTileMinZoom = 3;
 const double mapTileMaxZoom = 20;
+
+List<Widget> fieldImageryTileLayers({
+  String? urlTemplate,
+  String? offlineUrlTemplateOverride,
+  int? maxOfflineNativeZoom,
+  bool includeReferenceLabels = true,
+}) {
+  final imageryTemplate = (urlTemplate?.trim().isNotEmpty ?? false)
+      ? urlTemplate!.trim()
+      : fieldImageryTileUrl;
+  return [
+    OfflineAwareTileLayer(
+      urlTemplate: imageryTemplate,
+      offlineUrlTemplateOverride: offlineUrlTemplateOverride,
+      maxNativeZoom: fieldImageryMaxNativeZoom,
+      maxOfflineNativeZoom: maxOfflineNativeZoom,
+    ),
+    if (includeReferenceLabels &&
+        shouldShowFieldReferenceLabels(imageryTemplate))
+      ...fieldReferenceTileLayers(),
+  ];
+}
+
+List<Widget> fieldReferenceTileLayers() {
+  return const [
+    OfflineAwareTileLayer(
+      urlTemplate: fieldRoadsTileUrl,
+      maxNativeZoom: fieldReferenceMaxNativeZoom,
+      preferOfflineTemplateWhenOffline: false,
+    ),
+    OfflineAwareTileLayer(
+      urlTemplate: fieldPlacesTileUrl,
+      maxNativeZoom: fieldReferenceMaxNativeZoom,
+      preferOfflineTemplateWhenOffline: false,
+    ),
+  ];
+}
+
+bool shouldShowFieldReferenceLabels(String template) {
+  final lower = template.toLowerCase();
+  return !lower.contains('openstreetmap.org') &&
+      !lower.contains('/maps/hybrid/') &&
+      !lower.contains('maptiler.com/maps/hybrid');
+}
 
 class OfflineAwareTileLayer extends StatefulWidget {
   final String urlTemplate;
   final String? offlineUrlTemplateOverride;
+  final int? maxNativeZoom;
   final int? maxOfflineNativeZoom;
   final String userAgentPackageName;
   final bool preferOfflineTemplateWhenOffline;
@@ -32,6 +83,7 @@ class OfflineAwareTileLayer extends StatefulWidget {
     super.key,
     required this.urlTemplate,
     this.offlineUrlTemplateOverride,
+    this.maxNativeZoom,
     this.maxOfflineNativeZoom,
     this.userAgentPackageName = 'grainright.wrkfarm',
     this.preferOfflineTemplateWhenOffline = true,
@@ -118,17 +170,20 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
     if (activeTemplate.trim().isEmpty) {
       return const SizedBox.shrink();
     }
-    final maxNativeZoom = usingOfflineTemplate
-        ? (widget.maxOfflineNativeZoom ?? mapTileMaxNativeZoom)
-              .clamp(0, mapTileMaxNativeZoom)
-              .toInt()
-        : mapTileMaxNativeZoom;
+    final maxNativeZoom =
+        (usingOfflineTemplate
+                ? widget.maxOfflineNativeZoom ?? widget.maxNativeZoom
+                : widget.maxNativeZoom) ??
+            mapTileMaxNativeZoom;
+    final effectiveMaxNativeZoom = maxNativeZoom
+        .clamp(0, mapTileMaxNativeZoom)
+        .toInt();
     if (!usingOfflineTemplate && canTryLiveTiles) {
       return TileLayer(
         urlTemplate: activeTemplate,
         minZoom: mapTileMinZoom,
         maxZoom: mapTileMaxZoom,
-        maxNativeZoom: maxNativeZoom,
+        maxNativeZoom: effectiveMaxNativeZoom,
         userAgentPackageName: widget.userAgentPackageName,
         errorTileCallback: (tile, error, stackTrace) {
           if (_looksOffline(error)) {
@@ -141,7 +196,7 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
       urlTemplate: activeTemplate,
       minZoom: mapTileMinZoom,
       maxZoom: mapTileMaxZoom,
-      maxNativeZoom: maxNativeZoom,
+      maxNativeZoom: effectiveMaxNativeZoom,
       userAgentPackageName: widget.userAgentPackageName,
       tileProvider: _CachedMapTileProvider(
         sourceId: activeTemplate,

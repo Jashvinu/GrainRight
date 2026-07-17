@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/brand_assets.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../widgets/farm_hills_background.dart';
-import '../widgets/language_selector_button.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 
 class MainLoginScreen extends StatefulWidget {
   const MainLoginScreen({super.key});
@@ -97,6 +97,50 @@ class _MainLoginScreenState extends State<MainLoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
+                      _AnimatedEntrance(
+                        delay: 230,
+                        child: _RoleCard(
+                          icon: Icons.admin_panel_settings_outlined,
+                          title: UiStrings.t('role_admin'),
+                          subtitle: UiStrings.t('role_admin_sub'),
+                          color: const Color(0xFF673AB7),
+                          tint: const Color(0xFFF1E8FF),
+                          isDisabled: false,
+                          onTap: () => Get.toNamed('/satellite/login'),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _AnimatedEntrance(
+                        delay: 300,
+                        child: _RoleCard(
+                          icon: Icons.handshake_outlined,
+                          title: UiStrings.t('role_stakeholder'),
+                          subtitle: UiStrings.t('role_stakeholder_sub'),
+                          color: const Color(0xFF00897B),
+                          tint: const Color(0xFFE0F2F1),
+                          isDisabled: false,
+                          onTap: () => Get.toNamed('/stakeholder/login'),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _DividerLabel(label: UiStrings.t('or')),
+                      const SizedBox(height: 24),
+                      Obx(
+                        () => _AnimatedEntrance(
+                          delay: 370,
+                          child: _RoleCard(
+                            icon: Icons.person_outline_rounded,
+                            title: UiStrings.t('guest'),
+                            subtitle: UiStrings.t('guest_sub'),
+                            color: const Color(0xFFB8860B),
+                            tint: const Color(0xFFFFF8E1),
+                            isLoading:
+                                auth.isLoading.value && _activeRole == 'guest',
+                            isDisabled: auth.isLoading.value,
+                            onTap: () => _continueAnonymously('guest'),
+                          ),
+                        ),
+                      ),
                       Obx(
                         () => auth.errorMessage.isEmpty
                             ? const SizedBox.shrink()

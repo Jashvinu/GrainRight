@@ -6,14 +6,14 @@ import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/satellite_config.dart';
-import '../../config/theme.dart';
-import '../../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../services/local_app_database.dart';
 import '../../services/map_tile_provider.dart';
 import '../../services/offline_map_service.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/farm_controller.dart';
-import '../../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class DrawPolygonScreen extends StatefulWidget {
   const DrawPolygonScreen({super.key});
@@ -344,8 +344,7 @@ class _DrawPolygonScreenState extends State<DrawPolygonScreen> {
               OfflineMapBackground(
                 message: UiStrings.t('offline_map_tap_draw_farm'),
               ),
-              OfflineAwareTileLayer(
-                urlTemplate: fieldImageryTileUrl,
+              ...fieldImageryTileLayers(
                 offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
                 maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
               ),

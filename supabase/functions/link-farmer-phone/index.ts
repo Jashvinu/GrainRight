@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     const { data: registryRows, error: registryError } = await supabase
       .from("farmer_phone_registry")
       .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status",
+        "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at",
       )
       .in("phone", phoneValues);
 
@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       const { data: profileRows, error: profileLookupError } = await supabase
         .from("farmer_phone_profiles")
         .select(
-          "phone, farmer_id, farmer_name, default_location, preferred_language, status",
+          "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at",
         )
         .in("phone", phoneValues);
 
@@ -138,6 +138,16 @@ Deno.serve(async (req) => {
         defaultLocation,
       preferred_language: text(verifiedProfile.preferred_language) ||
         preferredLanguage,
+      agri_record_id: text(verifiedProfile.agri_record_id),
+      aadhaar_masked: text(verifiedProfile.aadhaar_masked),
+      aadhaar_last4: text(verifiedProfile.aadhaar_last4),
+      identity_document_bucket:
+        text(verifiedProfile.identity_document_bucket) ||
+        "farmer-identity-documents",
+      identity_document_path: text(verifiedProfile.identity_document_path),
+      identity_ocr_confidence: verifiedProfile.identity_ocr_confidence ?? null,
+      identity_source: text(verifiedProfile.identity_source),
+      identity_verified_at: verifiedProfile.identity_verified_at ?? null,
       auth_method: "anonymous_link",
       status: "active",
       phone_verified_at: now,
@@ -149,7 +159,7 @@ Deno.serve(async (req) => {
       .from("farmer_phone_profiles")
       .upsert(linkedProfile, { onConflict: "user_id" })
       .select(
-        "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status",
+        "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
       )
       .maybeSingle();
 

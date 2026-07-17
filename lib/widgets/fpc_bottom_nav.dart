@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
-enum FpcNavTab { home, farmerScan, receiver, grading }
+enum FpcNavTab { home, farmerScan, marketplace, receiver, grading }
 
 class FpcBottomNavBar extends StatelessWidget {
   final FpcNavTab current;
@@ -62,6 +62,12 @@ class FpcBottomNavBar extends StatelessWidget {
                     onTap: () => _go(FpcNavTab.farmerScan),
                   ),
                   _NavItem(
+                    icon: Icons.storefront_rounded,
+                    label: 'Market',
+                    selected: current == FpcNavTab.marketplace,
+                    onTap: () => _go(FpcNavTab.marketplace),
+                  ),
+                  _NavItem(
                     icon: Icons.assignment_turned_in_outlined,
                     label: 'Receiver',
                     selected: current == FpcNavTab.receiver,
@@ -90,6 +96,9 @@ class FpcBottomNavBar extends StatelessWidget {
         return;
       case FpcNavTab.farmerScan:
         Get.offNamed('/fpo/scan-farmer');
+        return;
+      case FpcNavTab.marketplace:
+        Get.offNamed('/fpo/marketplace');
         return;
       case FpcNavTab.receiver:
         Get.offNamed('/fpo/receiver');

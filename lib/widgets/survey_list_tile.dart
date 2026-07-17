@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../models/farmer_survey.dart';
 
 class SurveyListTile extends StatelessWidget {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/satellite_config.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class IndexSelector extends StatelessWidget {
   final String value;

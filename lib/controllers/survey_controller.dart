@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/farmer_survey.dart';
@@ -29,8 +29,10 @@ class SurveyController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    loadSurveys();
-    unawaited(syncPendingSurveys());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      unawaited(loadSurveys());
+    });
   }
 
   Future<void> loadSurveys() async {

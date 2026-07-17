@@ -81,36 +81,84 @@ void main() {
     );
   });
 
-  test('keeps new farmer id marked farm isolated in cache', () async {
+  test('loads farms by login phone even when farmer id changes', () async {
     await database.replaceFarmCacheForFarmer(
       farmerPhone: '+91 98765 43210',
-      farmerId: 'FMR-NEW',
+      farmerId: 'FMR-OLD',
       farms: [
         _farm(
           farmId: 'marked-farm',
           farmerPhone: '9876543210',
-          farmerId: 'FMR-NEW',
+          farmerId: 'FMR-OLD',
           name: 'Marked Farm',
           selected: true,
         ),
       ],
     );
 
-    final newFarmerFarms = await database.loadCachedFarmsForFarmer(
+    final samePhoneFarms = await database.loadCachedFarmsForFarmer(
       farmerPhone: '9876543210',
       farmerId: 'FMR-NEW',
     );
-    final otherFarmerFarms = await database.loadCachedFarmsForFarmer(
-      farmerPhone: '9876543210',
+    final otherPhoneFarms = await database.loadCachedFarmsForFarmer(
+      farmerPhone: '9123456789',
       farmerId: 'FMR-OTHER',
     );
 
-    expect(newFarmerFarms, hasLength(1));
-    expect(newFarmerFarms.single.farmId, 'marked-farm');
-    expect(newFarmerFarms.single.farmerIdValue, 'FMR-NEW');
-    expect(newFarmerFarms.single.selected, isTrue);
-    expect(otherFarmerFarms, isEmpty);
+    expect(samePhoneFarms, hasLength(1));
+    expect(samePhoneFarms.single.farmId, 'marked-farm');
+    expect(samePhoneFarms.single.farmerIdValue, 'FMR-OLD');
+    expect(samePhoneFarms.single.selected, isTrue);
+    expect(otherPhoneFarms, isEmpty);
   });
+
+  test(
+    'loads farmer inventory by login phone even when farmer id changes',
+    () async {
+      await database.upsertInventoryCache(
+        _inventory(
+          localId: 'manual-product',
+          farmerPhone: '+91 98765 43210',
+          farmerId: 'FMR-OLD',
+          productName: 'Ragi Flour',
+          productCategory: 'processed_product',
+        ),
+      );
+      await database.upsertInventoryCache(
+        _inventory(
+          localId: 'byproduct',
+          farmerPhone: '9876543210',
+          farmerId: null,
+          productName: 'Ragi Straw',
+          productCategory: 'byproduct',
+        ),
+      );
+      await database.upsertInventoryCache(
+        _inventory(
+          localId: 'other-farmer-product',
+          farmerPhone: '9123456789',
+          farmerId: 'FMR-OTHER',
+          productName: 'Other Product',
+          productCategory: 'processed_product',
+        ),
+      );
+
+      final cached = await database.loadCachedInventoryForFarmer(
+        farmerPhone: '+91 98765 43210',
+        farmerId: 'FMR-NEW',
+      );
+
+      expect(cached, hasLength(2));
+      expect(
+        cached.map((item) => item.localId),
+        containsAll(['manual-product', 'byproduct']),
+      );
+      expect(
+        cached.any((item) => item.localId == 'other-farmer-product'),
+        isFalse,
+      );
+    },
+  );
 }
 
 LocalFarmCacheRecord _farm({
@@ -146,5 +194,38 @@ LocalFarmCacheRecord _farm({
     createdAt: '2026-06-18T09:00:00.000Z',
     updatedAt: '2026-06-18T10:00:00.000Z',
     selected: selected,
+  );
+}
+
+LocalInventoryCacheRecord _inventory({
+  required String localId,
+  required String farmerPhone,
+  required String? farmerId,
+  required String productName,
+  required String productCategory,
+}) {
+  return LocalInventoryCacheRecord(
+    localId: localId,
+    remoteId: 'remote-$localId',
+    userId: 'user-1',
+    farmerPhone: farmerPhone,
+    farmerIdValue: farmerId,
+    farmId: 'farm-a',
+    farmName: 'North Field',
+    batchId: localId,
+    productCategory: productCategory,
+    productName: productName,
+    crop: 'Ragi',
+    variety: '',
+    quantity: 12,
+    unit: 'kg',
+    harvestedAt: '2026-06-26T10:00:00.000Z',
+    imageName: '',
+    sourceFlow: 'manual_inventory',
+    notes: '',
+    syncStatus: 'synced',
+    createdAt: '2026-06-26T10:00:00.000Z',
+    updatedAt: '2026-06-26T10:00:00.000Z',
+    syncedAt: '2026-06-26T10:00:00.000Z',
   );
 }

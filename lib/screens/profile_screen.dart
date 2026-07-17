@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:convert';
-import '../config/brand_assets.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/config/brand_assets.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/main_auth_controller.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class FarmerProfileScreen extends StatelessWidget {
   final dynamic profile; // Using dynamic for now to match the local _FarmerProfile
@@ -219,17 +219,21 @@ class _ProfileHeader extends StatelessWidget {
       child: Row(
         children: [
           Container(
-              width: 84,
-              height: 84,
-              decoration: BoxDecoration(
-                color: AppTheme.greenPale,
-                shape: BoxShape.circle,
-                image: DecorationImage(
-                  image: AssetImage(avatarAsset),
-                  fit: BoxFit.cover,
-                ),
-              ),
+            width: 84,
+            height: 84,
+            clipBehavior: Clip.antiAlias,
+            decoration: const BoxDecoration(
+              color: AppTheme.greenPale,
+              shape: BoxShape.circle,
             ),
+            child: Image.asset(
+              avatarAsset,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Image.asset(BrandAssets.farmerAvatar, fit: BoxFit.cover);
+              },
+            ),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(

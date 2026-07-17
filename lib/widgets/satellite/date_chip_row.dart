@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../config/theme.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/satellite/satellite_date_model.dart';
 
 class DateChipRow extends StatelessWidget {

@@ -18,7 +18,10 @@ class ConnectivitySyncController extends GetxController
     _connectivitySubscription = _offlineQueueService.connectivityChanges.listen(
       (_) => _syncPendingSurveys(),
     );
-    unawaited(_syncPendingSurveys());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      unawaited(_syncPendingSurveys());
+    });
   }
 
   @override

@@ -42,6 +42,26 @@ function hasPolygonRing(geometry: Record<string, unknown>): boolean {
   return Array.isArray(ring) && ring.length >= 4;
 }
 
+function stableJson(raw: unknown): string {
+  if (Array.isArray(raw)) {
+    return `[${raw.map(stableJson).join(",")}]`;
+  }
+  if (raw && typeof raw === "object") {
+    const entries = Object.entries(raw as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right));
+    return `{${
+      entries.map(([key, value]) =>
+        `${JSON.stringify(key)}:${stableJson(value)}`
+      ).join(",")
+    }}`;
+  }
+  return JSON.stringify(raw) ?? "null";
+}
+
+function geometryEquals(left: unknown, right: unknown): boolean {
+  return stableJson(left) === stableJson(right);
+}
+
 function columnSchemaError(error: unknown): boolean {
   const raw = String(
     (error as { code?: unknown; message?: unknown; details?: unknown })?.code ??
@@ -157,6 +177,32 @@ async function upsertCurrentFarmerLink(
   if (lastError) throw lastError;
 }
 
+async function findExistingMatchingFarm(
+  supabase: any,
+  options: {
+    linkedUserIds: string[];
+    name: string;
+    geometry: Record<string, unknown>;
+  },
+): Promise<Record<string, unknown> | null> {
+  if (options.linkedUserIds.length === 0) return null;
+  const { data, error } = await supabase
+    .from("farms")
+    .select("*")
+    .in("user_id", options.linkedUserIds)
+    .eq("name", options.name)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  const farms = Array.isArray(data) ? data : [];
+  for (const farm of farms) {
+    if (geometryEquals(farm.geometry, options.geometry)) {
+      return farm as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -228,6 +274,25 @@ Deno.serve(async (req) => {
         403,
         undefined,
         "farmer_session_not_linked",
+      );
+    }
+
+    const existingFarm = await findExistingMatchingFarm(supabase, {
+      linkedUserIds,
+      name,
+      geometry,
+    });
+    if (existingFarm) {
+      const savedFarmId = text(existingFarm.id);
+      return successResponse(
+        {
+          farm: existingFarm,
+          selectedFarmId: savedFarmId.length === 0 ? null : savedFarmId,
+          farmerPhone: phone,
+          farmerId,
+        },
+        200,
+        "farmer_farm_existing",
       );
     }
 

@@ -3,6 +3,10 @@ class VerifiedFarmerRecord {
   final String farmerId;
   final String farmerName;
   final String defaultLocation;
+  final String agriRecordId;
+  final String aadhaarMasked;
+  final String aadhaarLast4;
+  final String identityDocumentPath;
   final List<VerifiedFarmerLot> lots;
 
   const VerifiedFarmerRecord({
@@ -10,6 +14,10 @@ class VerifiedFarmerRecord {
     required this.farmerId,
     required this.farmerName,
     required this.defaultLocation,
+    this.agriRecordId = '',
+    this.aadhaarMasked = '',
+    this.aadhaarLast4 = '',
+    this.identityDocumentPath = '',
     required this.lots,
   });
 
@@ -20,11 +28,20 @@ class VerifiedFarmerRecord {
       farmerId: '${json['farmerId']}',
       farmerName: '${json['farmerName']}',
       defaultLocation: '${json['defaultLocation']}',
+      agriRecordId: '${json['agriRecordId'] ?? json['agri_record_id'] ?? ''}'
+          .trim(),
+      aadhaarMasked: '${json['aadhaarMasked'] ?? json['aadhaar_masked'] ?? ''}'
+          .trim(),
+      aadhaarLast4: '${json['aadhaarLast4'] ?? json['aadhaar_last4'] ?? ''}'
+          .trim(),
+      identityDocumentPath:
+          '${json['identityDocumentPath'] ?? json['identity_document_path'] ?? ''}'
+              .trim(),
       lots: rawLots is List
           ? rawLots
-              .whereType<Map<String, dynamic>>()
-              .map(VerifiedFarmerLot.fromJson)
-              .toList(growable: false)
+                .whereType<Map<String, dynamic>>()
+                .map(VerifiedFarmerLot.fromJson)
+                .toList(growable: false)
           : const [],
     );
   }

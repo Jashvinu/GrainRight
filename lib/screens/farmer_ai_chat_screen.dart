@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/farm_controller.dart';
 import '../controllers/language_controller.dart';
@@ -11,7 +11,7 @@ import '../models/satellite/farm_alert_model.dart';
 import '../models/satellite/farm_model.dart';
 import '../services/satellite_service.dart';
 import '../utils/harvest_machine_capture.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class FarmerAiChatScreen extends StatefulWidget {
   final String? farmId;

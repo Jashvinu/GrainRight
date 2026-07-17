@@ -5,9 +5,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:shared_preferences/shared_preferences.dart';
-import '../config/locale_text.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../services/local_app_database.dart';
 import '../services/location_service.dart';
 import '../services/map_tile_cache_service.dart';
@@ -17,7 +17,7 @@ import '../services/offline_map_service.dart';
 import '../services/policy_disclosure_service.dart';
 import '../utils/polygon_geometry.dart';
 import '../utils/polygon_simplify.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 
 class PencilPolygonScreen extends StatefulWidget {
   final List<List<double>>? initialPolygon;
@@ -414,8 +414,7 @@ class _PencilPolygonScreenState extends State<PencilPolygonScreen> {
               OfflineMapBackground(
                 message: UiStrings.t('offline_map_pan_draw'),
               ),
-              OfflineAwareTileLayer(
-                urlTemplate: fieldImageryTileUrl,
+              ...fieldImageryTileLayers(
                 offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
                 maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
               ),

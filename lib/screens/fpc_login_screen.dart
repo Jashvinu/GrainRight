@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../config/theme.dart';
-import '../config/ui_strings.dart';
+import 'package:kalsubai_farms/core/theme/app_theme.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
-import '../widgets/app_back_button.dart';
+import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import '../widgets/farm_hills_background.dart';
-import '../widgets/language_selector_button.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 
 class FpcLoginScreen extends StatefulWidget {
   const FpcLoginScreen({super.key});
