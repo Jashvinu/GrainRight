@@ -42,8 +42,8 @@ insert into public.stakeholder_plans (
   'Kalsubai Farms Farmer Stakeholder Plan',
   'Register interest as a farmer stakeholder. Final allocation is reviewed by the Kalsubai Farms team.',
   'INR',
-  1000,
-  1000,
+  100,
+  100,
   25000,
   'active',
   '[

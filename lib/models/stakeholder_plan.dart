@@ -12,7 +12,23 @@ class StakeholderApplicationStatus {
   }
 }
 
+class StakeholderPaymentMethod {
+  static const none = 'none';
+  static const razorpay = 'razorpay';
+  static const bankTransfer = 'bank_transfer';
+}
+
+class StakeholderPaymentStatus {
+  static const pending = 'pending';
+  static const gatewayOrderCreated = 'gateway_order_created';
+  static const gatewayVerified = 'gateway_verified';
+  static const bankTransferSubmitted = 'bank_transfer_submitted';
+  static const failed = 'failed';
+}
+
 class StakeholderPlan {
+  static const double amountStep = 100;
+
   final String id;
   final String planCode;
   final String title;
@@ -57,8 +73,8 @@ class StakeholderPlan {
       summary: _text(json['summary']),
       currency: _text(json['currency'], 'INR'),
       shareUnitValue:
-          _double(json['share_unit_value'] ?? json['shareUnitValue']) ?? 1000,
-      minAmount: _double(json['min_amount'] ?? json['minAmount']) ?? 1000,
+          _double(json['share_unit_value'] ?? json['shareUnitValue']) ?? 100,
+      minAmount: _double(json['min_amount'] ?? json['minAmount']) ?? 100,
       maxAmount: _double(json['max_amount'] ?? json['maxAmount']) ?? 25000,
       status: _text(json['status'], 'active'),
       purpose: _stringList(json['purpose']),
@@ -77,16 +93,16 @@ class StakeholderPlan {
       planCode: 'kalsubai-farmer-stakeholder-v1',
       title: 'Kalsubai Farms Farmer Stakeholder Plan',
       summary:
-          'Register interest as a farmer stakeholder. Final allocation is reviewed by the Kalsubai Farms team.',
+          'Apply to buy farmer stakeholder shares. Final allocation is confirmed only after Kalsubai Farms review.',
       currency: 'INR',
-      shareUnitValue: 1000,
-      minAmount: 1000,
+      shareUnitValue: 100,
+      minAmount: 100,
       maxAmount: 25000,
       status: 'active',
       purpose: [
-        'Let registered farmers express interest in Kalsubai Farms participation.',
-        'Keep farmer identity, selected amount, and consent in one review-ready record.',
-        'Prepare an auditable queue before final approval and allocation.',
+        'Let registered farmers apply to buy Kalsubai Farms stakeholder shares.',
+        'Keep farmer identity, PAN, 7/12 land record, bank, selected amount and payment details in one review-ready record.',
+        'Prepare an auditable application before final approval and allocation.',
       ],
       useOfFunds: [
         'Farm aggregation and procurement readiness',
@@ -94,17 +110,17 @@ class StakeholderPlan {
         'Traceability, farmer services, and working capital planning',
       ],
       stages: [
-        'Submit interest with selected amount',
-        'Kalsubai Farms reviews farmer record and plan capacity',
-        'Approved allocation and documents are updated later',
+        'Submit farmer account, KYC, 7/12 land record, bank and payment details',
+        'Kalsubai Farms reviews farmer record, payment and plan capacity',
+        'Approved allocation and documents are updated after admin review',
       ],
       riskNotes: [
-        'This is not a payment receipt or confirmed share issue.',
+        'Payment confirmation is not a confirmed share issue.',
         'Returns are not guaranteed and depend on final approval and business performance.',
-        'Final terms must be reviewed before any payment or allocation.',
+        'Final terms must be reviewed before any allocation.',
       ],
       terms: [
-        'The selected amount is only an expression of interest.',
+        'The selected amount starts an application for review.',
         'Estimated shares are calculated from the current plan share value.',
         'Kalsubai Farms may approve, revise, or reject the application after review.',
       ],
@@ -119,7 +135,19 @@ class StakeholderPlan {
   bool isValidAmount(double amount) {
     return amount >= minAmount &&
         amount <= maxAmount &&
+        _isAmountStep(amount) &&
         estimateShares(amount) > 0;
+  }
+
+  double snapAmount(double amount) {
+    final clamped = amount.clamp(minAmount, maxAmount) as num;
+    final snapped = (clamped / amountStep).round() * amountStep;
+    return (snapped.clamp(minAmount, maxAmount) as num).toDouble();
+  }
+
+  bool _isAmountStep(double amount) {
+    final remainder = amount % amountStep;
+    return remainder.abs() < 0.001 || (amountStep - remainder).abs() < 0.001;
   }
 }
 
@@ -131,7 +159,31 @@ class StakeholderApplication {
   final String farmerId;
   final String farmerName;
   final String agriRecordId;
+  final String aadhaarNumber;
   final String aadhaarLast4;
+  final String farmerFullName;
+  final String farmerFatherName;
+  final String farmerMobileNumber;
+  final String farmerAadhaarNumber;
+  final String farmerAadhaarLast4;
+  final String farmerAddress;
+  final String farmerVillage;
+  final String farmerTaluka;
+  final String farmerDistrict;
+  final String farmerPincode;
+  final String farmerTotalLandAcres;
+  final String farmerPhotoPath;
+  final String nomineeName;
+  final String nomineeAddress;
+  final String nomineeMobileNumber;
+  final String nomineeSignature;
+  final int nomineeCount;
+  final String nominee2Name;
+  final String nominee2Address;
+  final String nominee2MobileNumber;
+  final String nominee2Signature;
+  final String farmerSignature;
+  final bool contractReadAccepted;
   final double selectedAmount;
   final int estimatedShares;
   final String status;
@@ -140,9 +192,29 @@ class StakeholderApplication {
   final bool consentDataUse;
   final String farmerNote;
   final String adminNote;
+  final String panNumber;
+  final String panHolderName;
+  final String panDocumentPath;
+  final String landRecordDetails;
+  final String landRecordDocumentPath;
+  final String accountHolderName;
+  final String bankName;
+  final String bankAccountNumber;
+  final String ifscCode;
+  final String upiId;
+  final String passbookDocumentPath;
+  final String paymentMethod;
+  final String paymentStatus;
+  final String razorpayOrderId;
+  final String razorpayPaymentId;
+  final String razorpaySignature;
+  final String bankTransferReference;
+  final String bankTransferProofPath;
   final DateTime? submittedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final DateTime? paymentReviewedAt;
+  final DateTime? kycReviewedAt;
 
   const StakeholderApplication({
     required this.id,
@@ -152,7 +224,31 @@ class StakeholderApplication {
     required this.farmerId,
     required this.farmerName,
     required this.agriRecordId,
+    required this.aadhaarNumber,
     required this.aadhaarLast4,
+    required this.farmerFullName,
+    required this.farmerFatherName,
+    required this.farmerMobileNumber,
+    required this.farmerAadhaarNumber,
+    required this.farmerAadhaarLast4,
+    required this.farmerAddress,
+    required this.farmerVillage,
+    required this.farmerTaluka,
+    required this.farmerDistrict,
+    required this.farmerPincode,
+    required this.farmerTotalLandAcres,
+    required this.farmerPhotoPath,
+    required this.nomineeName,
+    required this.nomineeAddress,
+    required this.nomineeMobileNumber,
+    required this.nomineeSignature,
+    required this.nomineeCount,
+    required this.nominee2Name,
+    required this.nominee2Address,
+    required this.nominee2MobileNumber,
+    required this.nominee2Signature,
+    required this.farmerSignature,
+    required this.contractReadAccepted,
     required this.selectedAmount,
     required this.estimatedShares,
     required this.status,
@@ -161,9 +257,29 @@ class StakeholderApplication {
     required this.consentDataUse,
     required this.farmerNote,
     required this.adminNote,
+    required this.panNumber,
+    required this.panHolderName,
+    required this.panDocumentPath,
+    required this.landRecordDetails,
+    required this.landRecordDocumentPath,
+    required this.accountHolderName,
+    required this.bankName,
+    required this.bankAccountNumber,
+    required this.ifscCode,
+    required this.upiId,
+    required this.passbookDocumentPath,
+    required this.paymentMethod,
+    required this.paymentStatus,
+    required this.razorpayOrderId,
+    required this.razorpayPaymentId,
+    required this.razorpaySignature,
+    required this.bankTransferReference,
+    required this.bankTransferProofPath,
     this.submittedAt,
     this.createdAt,
     this.updatedAt,
+    this.paymentReviewedAt,
+    this.kycReviewedAt,
   });
 
   factory StakeholderApplication.fromJson(Map<String, dynamic> json) {
@@ -177,7 +293,75 @@ class StakeholderApplication {
       farmerId: _text(json['farmer_id'] ?? json['farmerId']),
       farmerName: _text(json['farmer_name'] ?? json['farmerName']),
       agriRecordId: _text(json['agri_record_id'] ?? json['agriRecordId']),
+      aadhaarNumber: _text(json['aadhaar_number'] ?? json['aadhaarNumber']),
       aadhaarLast4: _text(json['aadhaar_last4'] ?? json['aadhaarLast4']),
+      farmerFullName: _text(
+        json['farmer_full_name'] ??
+            json['farmerFullName'] ??
+            json['farmer_name'] ??
+            json['farmerName'],
+      ),
+      farmerFatherName: _text(
+        json['farmer_father_name'] ?? json['farmerFatherName'],
+      ),
+      farmerMobileNumber: _normalizePhone(
+        _text(
+          json['farmer_mobile_number'] ??
+              json['farmerMobileNumber'] ??
+              json['farmer_phone'] ??
+              json['farmerPhone'],
+        ),
+      ),
+      farmerAadhaarNumber: _text(
+        json['farmer_aadhaar_number'] ??
+            json['farmerAadhaarNumber'] ??
+            json['aadhaar_number'] ??
+            json['aadhaarNumber'],
+      ),
+      farmerAadhaarLast4: _text(
+        json['farmer_aadhaar_last4'] ??
+            json['farmerAadhaarLast4'] ??
+            json['aadhaar_last4'] ??
+            json['aadhaarLast4'],
+      ),
+      farmerAddress: _text(json['farmer_address'] ?? json['farmerAddress']),
+      farmerVillage: _text(json['farmer_village'] ?? json['farmerVillage']),
+      farmerTaluka: _text(json['farmer_taluka'] ?? json['farmerTaluka']),
+      farmerDistrict: _text(json['farmer_district'] ?? json['farmerDistrict']),
+      farmerPincode: _text(json['farmer_pincode'] ?? json['farmerPincode']),
+      farmerTotalLandAcres: _text(
+        json['farmer_total_land_acres'] ?? json['farmerTotalLandAcres'],
+      ),
+      farmerPhotoPath: _text(
+        json['farmer_photo_path'] ?? json['farmerPhotoPath'],
+      ),
+      nomineeName: _text(json['nominee_name'] ?? json['nomineeName']),
+      nomineeAddress: _text(json['nominee_address'] ?? json['nomineeAddress']),
+      nomineeMobileNumber: _normalizePhone(
+        _text(json['nominee_mobile_number'] ?? json['nomineeMobileNumber']),
+      ),
+      nomineeSignature: _text(
+        json['nominee_signature'] ?? json['nomineeSignature'],
+      ),
+      nomineeCount: ((_int(json['nominee_count'] ?? json['nomineeCount']) ?? 1)
+          .clamp(1, 2)
+          .toInt()),
+      nominee2Name: _text(json['nominee2_name'] ?? json['nominee2Name']),
+      nominee2Address: _text(
+        json['nominee2_address'] ?? json['nominee2Address'],
+      ),
+      nominee2MobileNumber: _normalizePhone(
+        _text(json['nominee2_mobile_number'] ?? json['nominee2MobileNumber']),
+      ),
+      nominee2Signature: _text(
+        json['nominee2_signature'] ?? json['nominee2Signature'],
+      ),
+      farmerSignature: _text(
+        json['farmer_signature'] ?? json['farmerSignature'],
+      ),
+      contractReadAccepted: _bool(
+        json['contract_read_accepted'] ?? json['contractReadAccepted'],
+      ),
       selectedAmount:
           _double(json['selected_amount'] ?? json['selectedAmount']) ?? 0,
       estimatedShares:
@@ -193,11 +377,180 @@ class StakeholderApplication {
       consentDataUse: _bool(json['consent_data_use'] ?? json['consentDataUse']),
       farmerNote: _text(json['farmer_note'] ?? json['farmerNote']),
       adminNote: _text(json['admin_note'] ?? json['adminNote']),
+      panNumber: _text(json['pan_number'] ?? json['panNumber']).toUpperCase(),
+      panHolderName: _text(json['pan_holder_name'] ?? json['panHolderName']),
+      panDocumentPath: _text(
+        json['pan_document_path'] ?? json['panDocumentPath'],
+      ),
+      landRecordDetails: _text(
+        json['land_record_details'] ?? json['landRecordDetails'],
+      ),
+      landRecordDocumentPath: _text(
+        json['land_record_document_path'] ?? json['landRecordDocumentPath'],
+      ),
+      accountHolderName: _text(
+        json['account_holder_name'] ?? json['accountHolderName'],
+      ),
+      bankName: _text(json['bank_name'] ?? json['bankName']),
+      bankAccountNumber: _text(
+        json['bank_account_number'] ?? json['bankAccountNumber'],
+      ),
+      ifscCode: _text(json['ifsc_code'] ?? json['ifscCode']).toUpperCase(),
+      upiId: _text(json['upi_id'] ?? json['upiId']),
+      passbookDocumentPath: _text(
+        json['passbook_document_path'] ?? json['passbookDocumentPath'],
+      ),
+      paymentMethod: _text(
+        json['payment_method'] ?? json['paymentMethod'],
+        StakeholderPaymentMethod.none,
+      ),
+      paymentStatus: _text(
+        json['payment_status'] ?? json['paymentStatus'],
+        StakeholderPaymentStatus.pending,
+      ),
+      razorpayOrderId: _text(
+        json['razorpay_order_id'] ?? json['razorpayOrderId'],
+      ),
+      razorpayPaymentId: _text(
+        json['razorpay_payment_id'] ?? json['razorpayPaymentId'],
+      ),
+      razorpaySignature: _text(
+        json['razorpay_signature'] ?? json['razorpaySignature'],
+      ),
+      bankTransferReference: _text(
+        json['bank_transfer_reference'] ?? json['bankTransferReference'],
+      ),
+      bankTransferProofPath: _text(
+        json['bank_transfer_proof_path'] ?? json['bankTransferProofPath'],
+      ),
       submittedAt: _date(json['submitted_at'] ?? json['submittedAt']),
       createdAt: _date(json['created_at'] ?? json['createdAt']),
       updatedAt: _date(json['updated_at'] ?? json['updatedAt']),
+      paymentReviewedAt: _date(
+        json['payment_reviewed_at'] ?? json['paymentReviewedAt'],
+      ),
+      kycReviewedAt: _date(json['kyc_reviewed_at'] ?? json['kycReviewedAt']),
     );
   }
+}
+
+class StakeholderRazorpayOrder {
+  final String keyId;
+  final String orderId;
+  final int amountSubunits;
+  final String currency;
+  final String receipt;
+
+  const StakeholderRazorpayOrder({
+    required this.keyId,
+    required this.orderId,
+    required this.amountSubunits,
+    required this.currency,
+    required this.receipt,
+  });
+
+  factory StakeholderRazorpayOrder.fromJson(Map<String, dynamic> json) {
+    return StakeholderRazorpayOrder(
+      keyId: _text(json['keyId'] ?? json['key_id']),
+      orderId: _text(json['orderId'] ?? json['order_id']),
+      amountSubunits:
+          _int(json['amountSubunits'] ?? json['amount_subunits']) ?? 0,
+      currency: _text(json['currency'], 'INR'),
+      receipt: _text(json['receipt']),
+    );
+  }
+}
+
+class StakeholderDocumentUpload {
+  final String path;
+  final String kind;
+
+  const StakeholderDocumentUpload({required this.path, required this.kind});
+
+  factory StakeholderDocumentUpload.fromJson(Map<String, dynamic> json) {
+    return StakeholderDocumentUpload(
+      path: _text(json['documentPath'] ?? json['document_path']),
+      kind: _text(json['documentKind'] ?? json['document_kind']),
+    );
+  }
+}
+
+class StakeholderBuyApplicationInput {
+  final double selectedAmount;
+  final String farmerFullName;
+  final String farmerFatherName;
+  final String farmerMobileNumber;
+  final String farmerAadhaarNumber;
+  final String farmerAadhaarLast4;
+  final String farmerAddress;
+  final String farmerVillage;
+  final String farmerTaluka;
+  final String farmerDistrict;
+  final String farmerPincode;
+  final String farmerTotalLandAcres;
+  final String farmerAgriRecordId;
+  final String nomineeName;
+  final String nomineeAddress;
+  final String nomineeMobileNumber;
+  final String nomineeSignature;
+  final int nomineeCount;
+  final String nominee2Name;
+  final String nominee2Address;
+  final String nominee2MobileNumber;
+  final String nominee2Signature;
+  final String farmerSignature;
+  final bool contractReadAccepted;
+  final String farmerNote;
+  final String panNumber;
+  final String panHolderName;
+  final String panDocumentPath;
+  final String landRecordDetails;
+  final String landRecordDocumentPath;
+  final String accountHolderName;
+  final String bankName;
+  final String bankAccountNumber;
+  final String ifscCode;
+  final String upiId;
+  final String passbookDocumentPath;
+
+  const StakeholderBuyApplicationInput({
+    required this.selectedAmount,
+    required this.farmerFullName,
+    required this.farmerFatherName,
+    required this.farmerMobileNumber,
+    required this.farmerAadhaarNumber,
+    required this.farmerAadhaarLast4,
+    required this.farmerAddress,
+    required this.farmerVillage,
+    required this.farmerTaluka,
+    required this.farmerDistrict,
+    required this.farmerPincode,
+    required this.farmerTotalLandAcres,
+    required this.farmerAgriRecordId,
+    required this.nomineeName,
+    required this.nomineeAddress,
+    required this.nomineeMobileNumber,
+    required this.nomineeSignature,
+    required this.nomineeCount,
+    required this.nominee2Name,
+    required this.nominee2Address,
+    required this.nominee2MobileNumber,
+    required this.nominee2Signature,
+    required this.farmerSignature,
+    required this.contractReadAccepted,
+    required this.farmerNote,
+    required this.panNumber,
+    required this.panHolderName,
+    required this.panDocumentPath,
+    required this.landRecordDetails,
+    required this.landRecordDocumentPath,
+    required this.accountHolderName,
+    required this.bankName,
+    required this.bankAccountNumber,
+    required this.ifscCode,
+    required this.upiId,
+    required this.passbookDocumentPath,
+  });
 }
 
 class StakeholderApplicationEvent {
