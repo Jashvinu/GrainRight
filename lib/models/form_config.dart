@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 
 class FormSectionConfig {
   final String id;
@@ -40,8 +41,10 @@ class FormSectionConfig {
 
   String localizedTitle(BuildContext context) {
     return switch (Localizations.localeOf(context).languageCode) {
-      'hi' => titleHi?.isNotEmpty == true ? titleHi! : title,
-      'mr' => titleMr?.isNotEmpty == true ? titleMr! : title,
+      'hi' =>
+        titleHi?.isNotEmpty == true ? titleHi! : UiStrings.fromEnglish(title),
+      'mr' =>
+        titleMr?.isNotEmpty == true ? titleMr! : UiStrings.fromEnglish(title),
       _ => title,
     };
   }
@@ -113,16 +116,28 @@ class FormFieldConfig {
 
   String localizedLabel(BuildContext context) {
     return switch (Localizations.localeOf(context).languageCode) {
-      'hi' => labelHi?.isNotEmpty == true ? labelHi! : label,
-      'mr' => labelMr?.isNotEmpty == true ? labelMr! : label,
+      'hi' =>
+        labelHi?.isNotEmpty == true ? labelHi! : UiStrings.fromEnglish(label),
+      'mr' =>
+        labelMr?.isNotEmpty == true ? labelMr! : UiStrings.fromEnglish(label),
       _ => label,
     };
   }
 
   String? localizedHint(BuildContext context) {
     return switch (Localizations.localeOf(context).languageCode) {
-      'hi' => hintTextHi?.isNotEmpty == true ? hintTextHi : hintText,
-      'mr' => hintTextMr?.isNotEmpty == true ? hintTextMr : hintText,
+      'hi' =>
+        hintTextHi?.isNotEmpty == true
+            ? hintTextHi
+            : hintText == null
+            ? null
+            : UiStrings.fromEnglish(hintText!),
+      'mr' =>
+        hintTextMr?.isNotEmpty == true
+            ? hintTextMr
+            : hintText == null
+            ? null
+            : UiStrings.fromEnglish(hintText!),
       _ => hintText,
     };
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class TypingIndicator extends StatelessWidget {
@@ -13,9 +14,9 @@ class TypingIndicator extends StatelessWidget {
           color: AppTheme.greenPale,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Text('typing...'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Text(UiStrings.t('typing')),
         ),
       ),
     );

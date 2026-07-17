@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../models/form_config.dart';
 import '../dynamic_field.dart';
@@ -32,7 +33,10 @@ class BotFieldPrompt extends StatelessWidget {
             children: [
               Text(
                 field.isRequired ? '$label *' : label,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 12),
               DynamicField(config: field),
@@ -40,11 +44,14 @@ class BotFieldPrompt extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   if (onSkip != null)
-                    TextButton(onPressed: onSkip, child: const Text('Skip')),
+                    TextButton(
+                      onPressed: onSkip,
+                      child: Text(UiStrings.t('skip')),
+                    ),
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: onContinue,
-                    child: const Text('Continue'),
+                    child: Text(UiStrings.t('continue')),
                   ),
                 ],
               ),

@@ -3,13 +3,11 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 import 'config/runtime_config.dart';
 import 'config/supabase_config.dart';
-import 'firebase_options.dart';
 import 'services/offline_map_download_manager.dart';
 import 'services/local_notification_service.dart';
 import 'app.dart';
@@ -55,14 +53,6 @@ Future<_BootstrapResult> _bootstrapProductionApp() async {
 
   try {
     await RuntimeConfig.initialize();
-  } catch (error, stack) {
-    _reportUncaughtError(error, stack);
-  }
-
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
   } catch (error, stack) {
     _reportUncaughtError(error, stack);
   }
@@ -130,28 +120,28 @@ class _StartupRecoveryApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       locale: initialLocale,
-      home: const Scaffold(
+      home: Scaffold(
         body: SafeArea(
           child: Center(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.wifi_off_rounded,
                     size: 48,
                     color: Color(0xFF0B5D2A),
                   ),
-                  SizedBox(height: 16),
-                  Text(
+                  const SizedBox(height: 16),
+                  const Text(
                     'Kalsubai Farms',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   ),
-                  SizedBox(height: 8),
+                  const SizedBox(height: 8),
                   Text(
-                    'The app could not start fully right now. Check your internet connection and open it again.',
+                    _startupRecoveryMessage(initialLocale.languageCode),
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -162,4 +152,13 @@ class _StartupRecoveryApp extends StatelessWidget {
       ),
     );
   }
+}
+
+String _startupRecoveryMessage(String languageCode) {
+  return switch (languageCode) {
+    'hi' => 'ऐप अभी पूरी तरह शुरू नहीं हो सका। इंटरनेट जांचें और ऐप फिर खोलें।',
+    'mr' => 'अ‍ॅप सध्या पूर्णपणे सुरू झाले नाही. इंटरनेट तपासा आणि अ‍ॅप पुन्हा उघडा.',
+    _ =>
+      'The app could not start fully right now. Check your internet connection and open it again.',
+  };
 }

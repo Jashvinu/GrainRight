@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../config/icon_map.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
-import '../config/translations.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
@@ -126,10 +125,7 @@ class _SurveyFormScreenState extends State<SurveyFormScreen>
     return _ChipState.upcoming;
   }
 
-  String _tr(String text) {
-    if (!lang.isMarathi) return text;
-    return AppTranslations.translate(text);
-  }
+  String _tr(String text) => UiStrings.fromEnglish(text);
 
   Future<void> _switchToChat() async {
     await c.saveDraft();

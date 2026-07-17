@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../models/farmer_survey.dart';
 
@@ -20,8 +21,8 @@ class SurveyListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final date = survey.surveyDate != null
-        ? DateFormat('dd MMM yyyy').format(DateTime.parse(survey.surveyDate!))
-        : 'No date';
+        ? LocaleText.date(DateTime.parse(survey.surveyDate!))
+        : UiStrings.t('no_date');
 
     final initials = (survey.farmerName ?? 'U')
         .split(' ')
@@ -62,7 +63,7 @@ class SurveyListTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      survey.farmerName ?? 'Unnamed',
+                      survey.farmerName ?? UiStrings.t('unnamed_farmer'),
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
@@ -139,7 +140,7 @@ class SurveyListTile extends StatelessWidget {
                                   width: 32,
                                   height: 32,
                                   child: PopupMenuButton<_SurveyTileAction>(
-                                    tooltip: 'Survey actions',
+                                    tooltip: UiStrings.t('survey_actions'),
                                     padding: EdgeInsets.zero,
                                     icon: Icon(
                                       Icons.more_vert_rounded,
@@ -153,13 +154,13 @@ class SurveyListTile extends StatelessWidget {
                                       }
                                     },
                                     itemBuilder: (_) => [
-                                      const PopupMenuItem(
+                                      PopupMenuItem(
                                         value: _SurveyTileAction.delete,
                                         child: Row(
                                           children: [
-                                            Icon(Icons.delete_outline),
-                                            SizedBox(width: 10),
-                                            Text('Delete'),
+                                            const Icon(Icons.delete_outline),
+                                            const SizedBox(width: 10),
+                                            Text(UiStrings.t('delete')),
                                           ],
                                         ),
                                       ),

@@ -31,7 +31,7 @@ class _PageScaffold extends StatelessWidget {
               ],
               Expanded(
                 child: Text(
-                  title,
+                  UiStrings.fromEnglish(title),
                   style: const TextStyle(
                     color: AppTheme.greenDark,
                     fontSize: 28,
@@ -116,7 +116,7 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 6),
           Flexible(
             child: Text(
-              label,
+              UiStrings.fromEnglish(label),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(

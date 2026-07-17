@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
-import '../config/translations.dart';
 import '../controllers/form_controller.dart';
 import '../controllers/language_controller.dart';
 
@@ -17,9 +17,9 @@ class YesNoToggle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Obx(() {
-        final isMr = lang.isMarathi;
-        final yes = isMr ? (AppTranslations.ui['Yes'] ?? 'होय') : 'Yes';
-        final no = isMr ? (AppTranslations.ui['No'] ?? 'नाही') : 'No';
+        final _ = lang.language.value;
+        final yes = UiStrings.t('yes');
+        final no = UiStrings.t('no');
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(

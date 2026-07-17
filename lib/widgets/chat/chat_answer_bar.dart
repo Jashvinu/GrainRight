@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
-
+import 'package:kalsubai_farms/core/localization/locale_text.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../controllers/form_controller.dart';
 import '../../models/form_config.dart';
@@ -191,7 +191,8 @@ class _TextAnswerInput extends StatelessWidget {
             inputFormatters: _inputFormatters,
             style: const TextStyle(fontSize: 19),
             decoration: InputDecoration(
-              hintText: field.localizedHint(context) ?? 'Type answer',
+              hintText:
+                  field.localizedHint(context) ?? UiStrings.t('type_answer'),
               hintStyle: const TextStyle(fontSize: 17),
               prefixText: field.inputType == 'currency' ? 'Rs  ' : null,
               prefixStyle: const TextStyle(fontSize: 18),
@@ -208,7 +209,7 @@ class _TextAnswerInput extends StatelessWidget {
         if (onSkip != null) ...[const SizedBox(width: 8), _SkipButton(onSkip!)],
         const SizedBox(width: 8),
         _AnswerIconButton(
-          tooltip: 'Send',
+          tooltip: UiStrings.t('send'),
           onPressed: onSubmit,
           icon: Icons.arrow_upward_rounded,
         ),
@@ -390,7 +391,7 @@ class _MultiChoiceAnswerInput extends StatelessWidget {
         trailing: [
           if (onSkip != null) _SkipButton(onSkip!),
           _AnswerIconButton(
-            tooltip: 'Done',
+            tooltip: UiStrings.t('done'),
             onPressed: onSubmit,
             icon: Icons.check_rounded,
           ),
@@ -426,8 +427,8 @@ class _DateAnswerInput extends StatelessWidget {
               icon: const Icon(Icons.calendar_today_rounded, size: 20),
               label: Text(
                 rxDate.value == null
-                    ? 'Select date'
-                    : DateFormat('dd MMM yyyy').format(rxDate.value!),
+                    ? UiStrings.t('select_date')
+                    : LocaleText.date(rxDate.value!),
               ),
             ),
           ),
@@ -437,7 +438,7 @@ class _DateAnswerInput extends StatelessWidget {
           ],
           const SizedBox(width: 8),
           _AnswerIconButton(
-            tooltip: 'Send',
+            tooltip: UiStrings.t('send'),
             onPressed: onSubmit,
             icon: Icons.arrow_upward_rounded,
           ),
@@ -503,7 +504,9 @@ class _AutoCalcAnswerInput extends StatelessWidget {
                 border: Border.all(color: Colors.grey.shade300),
               ),
               child: Text(
-                'Rs ${value.value.toStringAsFixed(2)}',
+                UiStrings.f('rs_value', {
+                  'value': LocaleText.number(value.value, fractionDigits: 2),
+                }),
                 style: const TextStyle(
                   color: AppTheme.greenDark,
                   fontSize: 18,
@@ -514,7 +517,7 @@ class _AutoCalcAnswerInput extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           _AnswerIconButton(
-            tooltip: 'Continue',
+            tooltip: UiStrings.t('continue'),
             onPressed: onSubmit,
             icon: Icons.arrow_forward_rounded,
           ),
@@ -543,7 +546,7 @@ class _UnsupportedAnswerInput extends StatelessWidget {
         ),
         onPressed: onSubmit,
         icon: const Icon(Icons.arrow_forward_rounded),
-        label: const Text('Continue'),
+        label: Text(UiStrings.t('continue')),
       ),
     );
   }
@@ -659,7 +662,7 @@ class _SkipButton extends StatelessWidget {
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
       onPressed: onPressed,
-      child: const Text('Skip'),
+      child: Text(UiStrings.t('skip')),
     );
   }
 }

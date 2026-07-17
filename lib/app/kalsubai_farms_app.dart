@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:kalsubai_farms/core/theme/app_motion.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 import 'bindings/app_bindings.dart';
@@ -30,6 +31,8 @@ class KalsubaiFarmsApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       debugShowCheckedModeBanner: false,
+      defaultTransition: Transition.cupertino,
+      transitionDuration: AppMotion.page,
       initialBinding: StartupBinding(
         loadStartupControllers: loadStartupControllers,
       ),

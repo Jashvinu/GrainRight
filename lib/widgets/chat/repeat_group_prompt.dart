@@ -1,11 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
-import '../../config/translations.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../../controllers/form_controller.dart';
-import '../../controllers/language_controller.dart';
 
 const _sprayQuantityUnits = ['ml', 'kg'];
 const _productionQuantityUnits = ['qt', 'kg', 'ton'];
@@ -102,12 +100,7 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
     }
   }
 
-  /// Translates a UI string to Marathi when that language is active.
-  String _tr(String text) {
-    final lang = Get.find<LanguageController>();
-    if (!lang.isMarathi) return text;
-    return AppTranslations.translate(text);
-  }
+  String _tr(String text) => UiStrings.fromEnglish(text);
 
   void _prefillFromMainCrop() {
     final form = widget.formController;
@@ -224,7 +217,11 @@ class _RepeatGroupPromptState extends State<RepeatGroupPrompt> {
               'other_crops' => _kharifEditor(),
               'main_crop_yearly' => _yearlyEditor(),
               'crop_practices' => _practiceStepBody(_practiceStep),
-              _ => Text('Unsupported repeat group: ${widget.groupKey}'),
+              _ => Text(
+                UiStrings.f('unsupported_repeat_group', {
+                  'group': widget.groupKey,
+                }),
+              ),
             },
             const SizedBox(height: 14),
             Row(

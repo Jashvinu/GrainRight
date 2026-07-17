@@ -72,6 +72,40 @@ class UiStrings {
     return key == null ? LocaleText.digits(value) : t(key);
   }
 
+  static String diseaseName(String value) {
+    return option(value.replaceAll('_', ' ').replaceAll('-', ' '));
+  }
+
+  static String riskLevel(String value) {
+    return switch (value.trim().toLowerCase()) {
+      'critical' => t('critical'),
+      'high' => t('high'),
+      'medium' => t('medium'),
+      'moderate' => t('moderate'),
+      'low' => t('low'),
+      'mild' => t('option_mild'),
+      'severe' => t('option_severe'),
+      _ => option(value),
+    };
+  }
+
+  static Map<String, Map<String, String>> get translationCatalog => _data;
+
+  /// Localizes app-owned English copy that arrives from form configuration.
+  /// User-entered values remain unchanged when no known UI string matches.
+  static String fromEnglish(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty || _lang() == 'en') return value;
+    final key = _keyByEnglishText[normalized];
+    return key == null ? option(value) : t(key);
+  }
+
+  static final Map<String, String> _keyByEnglishText = {
+    for (final entry in _data.entries)
+      if (entry.value['en']?.trim().isNotEmpty ?? false)
+        entry.value['en']!.trim().toLowerCase(): entry.key,
+  };
+
   static String authError(String message) {
     final text = message.trim();
     final normalized = text.toLowerCase();
@@ -266,6 +300,16 @@ class UiStrings {
     'important': 'important',
     'watch': 'watch',
     'disease risk': 'disease_risk',
+    'blast': 'option_blast',
+    'rice blast': 'disease_rice_blast',
+    'brown spot': 'option_brown_spot',
+    'rust': 'option_rust',
+    'smut': 'option_smut',
+    'sheath blight': 'disease_sheath_blight',
+    'bacterial leaf blight': 'disease_bacterial_leaf_blight',
+    'downy mildew': 'disease_downy_mildew',
+    'leaf spot': 'disease_leaf_spot',
+    'charcoal rot': 'disease_charcoal_rot',
     'crop stage': 'crop_stage',
     'sowing': 'stage_sowing',
     'establishment': 'stage_establishment',
@@ -323,26 +367,26 @@ class UiStrings {
     },
     'stakeholder_login_subtitle': {
       'en':
-          'Login with your farmer mobile number to view the stakeholder plan, submit interest, and track review status.',
+          'Login with your farmer mobile number to apply for stakeholder shares and track review status.',
       'hi':
-          'हितधारक योजना देखने, रुचि जमा करने और समीक्षा स्थिति देखने के लिए अपने किसान मोबाइल नंबर से लॉगिन करें।',
+          'हितधारक शेयर आवेदन और समीक्षा स्थिति देखने के लिए अपने किसान मोबाइल नंबर से लॉगिन करें।',
       'mr':
-          'हितधारक योजना पाहण्यासाठी, स्वारस्य नोंदवण्यासाठी आणि पुनरावलोकन स्थिती पाहण्यासाठी तुमच्या शेतकरी मोबाइल नंबरने लॉगिन करा.',
+          'हितधारक शेअर अर्ज आणि पुनरावलोकन स्थिती पाहण्यासाठी तुमच्या शेतकरी मोबाइल नंबरने लॉगिन करा.',
     },
     'stakeholder_login_benefit_record': {
-      'en': 'Farmer record',
-      'hi': 'किसान रिकॉर्ड',
-      'mr': 'शेतकरी रेकॉर्ड',
+      'en': 'Farmer account',
+      'hi': 'किसान खाता',
+      'mr': 'शेतकरी खाते',
     },
     'stakeholder_login_benefit_interest': {
-      'en': 'Interest only',
-      'hi': 'केवल रुचि',
-      'mr': 'फक्त स्वारस्य',
+      'en': 'PAN KYC',
+      'hi': 'PAN KYC',
+      'mr': 'PAN KYC',
     },
     'stakeholder_login_benefit_review': {
-      'en': 'Review tracking',
-      'hi': 'समीक्षा ट्रैकिंग',
-      'mr': 'पुनरावलोकन ट्रॅकिंग',
+      'en': 'Bank and payment',
+      'hi': 'बैंक और भुगतान',
+      'mr': 'बँक आणि पेमेंट',
     },
     'guest': {
       'en': 'Continue as Guest',
@@ -400,11 +444,11 @@ class UiStrings {
     },
     'stakeholder_login_note': {
       'en':
-          'Use the same mobile number used for farmer signup. New numbers can create a farmer profile first.',
+          'Use the same mobile number used for farmer signup. Add PAN, bank and payment details after login.',
       'hi':
-          'किसान साइन अप में इस्तेमाल किया गया वही मोबाइल नंबर उपयोग करें। नया नंबर पहले किसान प्रोफ़ाइल बना सकता है।',
+          'किसान साइन अप में इस्तेमाल किया गया वही मोबाइल नंबर उपयोग करें। लॉगिन के बाद PAN, बैंक और भुगतान विवरण जोड़ें।',
       'mr':
-          'शेतकरी साइन अपसाठी वापरलेला तोच मोबाइल नंबर वापरा. नवीन नंबर आधी शेतकरी प्रोफाइल तयार करू शकतो.',
+          'शेतकरी साइन अपसाठी वापरलेला तोच मोबाइल नंबर वापरा. लॉगिननंतर PAN, बँक आणि पेमेंट तपशील जोडा.',
     },
     'stakeholder_continue': {
       'en': 'Continue as stakeholder',
@@ -417,25 +461,25 @@ class UiStrings {
       'mr': 'हितधारक कार्यक्षेत्र उघडत आहे.',
     },
     'stakeholder_signup_title': {
-      'en': 'New farmer stakeholder?',
-      'hi': 'नए किसान हितधारक हैं?',
-      'mr': 'नवीन शेतकरी हितधारक?',
+      'en': 'Need a farmer account?',
+      'hi': 'किसान खाता चाहिए?',
+      'mr': 'शेतकरी खाते हवे आहे?',
     },
     'stakeholder_signup_body': {
       'en':
-          'Create the farmer profile first. After signup, the stakeholder workspace opens automatically.',
+          'Create the farmer profile first. The stakeholder application uses that account.',
       'hi':
-          'पहले किसान प्रोफ़ाइल बनाएं। साइन अप के बाद हितधारक कार्यक्षेत्र अपने आप खुलेगा।',
+          'पहले किसान प्रोफ़ाइल बनाएं। हितधारक आवेदन उसी खाते का उपयोग करता है।',
       'mr':
-          'आधी शेतकरी प्रोफाइल तयार करा. साइन अपनंतर हितधारक कार्यक्षेत्र आपोआप उघडेल.',
+          'आधी शेतकरी प्रोफाइल तयार करा. हितधारक अर्ज त्याच खात्याचा वापर करतो.',
     },
     'stakeholder_login_secure_body': {
       'en':
-          'This login only opens the farmer stakeholder interest workspace. It does not collect payment or issue shares.',
+          'This login opens the farmer stakeholder application workspace. Share allocation is confirmed only after review.',
       'hi':
-          'यह लॉगिन केवल किसान हितधारक रुचि कार्यक्षेत्र खोलता है। इसमें भुगतान नहीं लिया जाता और शेयर जारी नहीं होते।',
+          'यह लॉगिन किसान हितधारक आवेदन कार्यक्षेत्र खोलता है। शेयर आवंटन समीक्षा के बाद ही पुष्टि होता है।',
       'mr':
-          'हा लॉगिन फक्त शेतकरी हितधारक स्वारस्य कार्यक्षेत्र उघडतो. यात पेमेंट घेतले जात नाही आणि शेअर्स जारी होत नाहीत.',
+          'हा लॉगिन शेतकरी हितधारक अर्ज कार्यक्षेत्र उघडतो. शेअर वाटप पुनरावलोकनानंतरच निश्चित होते.',
     },
     'stakeholder_agri_record_required': {
       'en':
@@ -690,11 +734,12 @@ class UiStrings {
       'mr': 'सरकारी कृषी नोंद',
     },
     'farmer_identity_document_hint': {
-      'en': 'Capture a clear agri record document. Aadhaar is stored masked.',
+      'en':
+          'Capture a clear agri record document or enter the ID details manually. Aadhaar is stored masked.',
       'hi':
-          'साफ कृषि रिकॉर्ड दस्तावेज़ लें। आधार सुरक्षित रूप से मास्क करके सहेजा जाएगा।',
+          'साफ कृषि रिकॉर्ड दस्तावेज़ लें या ID जानकारी हाथ से भरें। आधार सुरक्षित रूप से मास्क करके सहेजा जाएगा।',
       'mr':
-          'स्पष्ट कृषी नोंद दस्तऐवज घ्या. आधार सुरक्षितपणे मास्क करून जतन होईल.',
+          'स्पष्ट कृषी नोंद दस्तऐवज घ्या किंवा ID माहिती हाताने भरा. आधार सुरक्षितपणे मास्क करून जतन होईल.',
     },
     'capture_agri_record_document': {
       'en': 'Capture document',
@@ -727,24 +772,34 @@ class UiStrings {
       'mr': 'दस्तऐवज जतन झाला. ID माहिती हाताने भरा.',
     },
     'farmer_identity_document_required': {
-      'en': 'Upload agri record document',
-      'hi': 'कृषि रिकॉर्ड दस्तावेज़ अपलोड करें',
-      'mr': 'कृषी नोंद दस्तऐवज अपलोड करा',
+      'en': 'Capture a document or complete the manual ID details',
+      'hi': 'दस्तावेज़ लें या ID जानकारी पूरी भरें',
+      'mr': 'दस्तऐवज घ्या किंवा ID माहिती पूर्ण भरा',
+    },
+    'manual_identity_details_ready': {
+      'en': 'Manual ID details ready',
+      'hi': 'मैनुअल ID जानकारी तैयार है',
+      'mr': 'हाताने भरलेली ID माहिती तयार आहे',
     },
     'farmer_agri_record_id': {
-      'en': 'Farmer agri record ID',
-      'hi': 'किसान कृषि रिकॉर्ड ID',
-      'mr': 'शेतकरी कृषी नोंद ID',
+      'en': 'Farmer ID',
+      'hi': 'किसान ID',
+      'mr': 'शेतकरी ID',
+    },
+    'farmer_agri_record_id_optional': {
+      'en': 'Farmer ID (optional)',
+      'hi': 'किसान ID (वैकल्पिक)',
+      'mr': 'शेतकरी ID (ऐच्छिक)',
     },
     'enter_agri_record_id': {
-      'en': 'Enter agri record ID',
-      'hi': 'कृषि रिकॉर्ड ID लिखें',
-      'mr': 'कृषी नोंद ID लिहा',
+      'en': 'Enter farmer ID',
+      'hi': 'किसान ID लिखें',
+      'mr': 'शेतकरी ID लिहा',
     },
     'enter_agri_record_id_error': {
-      'en': 'Enter farmer agri record ID',
-      'hi': 'किसान कृषि रिकॉर्ड ID लिखें',
-      'mr': 'शेतकरी कृषी नोंद ID लिहा',
+      'en': 'Enter farmer ID',
+      'hi': 'किसान ID लिखें',
+      'mr': 'शेतकरी ID लिहा',
     },
     'aadhaar_number': {
       'en': 'Aadhaar number',
@@ -812,14 +867,19 @@ class UiStrings {
       'mr': 'शेतकऱ्याचे नाव',
     },
     'stakeholder_agri_record_id': {
-      'en': 'Agri record ID',
-      'hi': 'कृषि रिकॉर्ड आईडी',
-      'mr': 'कृषी रेकॉर्ड आयडी',
+      'en': 'Farmer ID',
+      'hi': 'किसान ID',
+      'mr': 'शेतकरी ID',
     },
     'stakeholder_aadhaar_last4': {
       'en': 'Aadhaar last 4',
       'hi': 'आधार अंतिम 4',
       'mr': 'आधार शेवटचे 4',
+    },
+    'stakeholder_aadhaar_number': {
+      'en': 'Aadhaar number',
+      'hi': 'आधार नंबर',
+      'mr': 'आधार क्रमांक',
     },
     'stakeholder_share_title': {
       'en': 'Stakeholder share planning',
@@ -876,9 +936,9 @@ class UiStrings {
       'mr': 'रक्कम निवडा',
     },
     'stakeholder_select_amount_sub': {
-      'en': 'Choose interest amount and estimated shares',
-      'hi': 'रुचि राशि और अनुमानित शेयर चुनें',
-      'mr': 'स्वारस्य रक्कम आणि अंदाजित शेअर्स निवडा',
+      'en': 'Choose amount, KYC, bank and payment method',
+      'hi': 'राशि, KYC, बैंक और भुगतान तरीका चुनें',
+      'mr': 'रक्कम, KYC, बँक आणि पेमेंट पद्धत निवडा',
     },
     'stakeholder_status_title': {
       'en': 'Application Status',
@@ -896,23 +956,23 @@ class UiStrings {
       'mr': 'दस्तऐवज',
     },
     'stakeholder_documents_sub': {
-      'en': 'Farmer record, consent and future receipt',
-      'hi': 'किसान रिकॉर्ड, सहमति और भविष्य रसीद',
-      'mr': 'शेतकरी रेकॉर्ड, संमती आणि पुढील पावती',
+      'en': 'Farmer record, KYC and payment proof',
+      'hi': 'किसान रिकॉर्ड, KYC और भुगतान प्रमाण',
+      'mr': 'शेतकरी रेकॉर्ड, KYC आणि पेमेंट पुरावा',
     },
     'stakeholder_help_title': {'en': 'Help', 'hi': 'मदद', 'mr': 'मदत'},
     'stakeholder_interest_only_title': {
-      'en': 'Interest only for now',
-      'hi': 'अभी केवल रुचि दर्ज करें',
-      'mr': 'आत्तासाठी फक्त स्वारस्य नोंद',
+      'en': 'Application before allocation',
+      'hi': 'आवंटन से पहले आवेदन',
+      'mr': 'वाटपापूर्वी अर्ज',
     },
     'stakeholder_interest_only_body': {
       'en':
-          'This does not collect payment or issue shares. Kalsubai Farms will review farmer records before any final allocation.',
+          'Kalsubai Farms reviews farmer record, KYC, bank and payment details before any share allocation.',
       'hi':
-          'यह भुगतान नहीं लेता और शेयर जारी नहीं करता। अंतिम आवंटन से पहले कलसुबाई फार्म्स किसान रिकॉर्ड की समीक्षा करेगा।',
+          'किसी भी शेयर आवंटन से पहले कलसुबाई फार्म्स किसान रिकॉर्ड, KYC, बैंक और भुगतान विवरण जांचता है।',
       'mr':
-          'यात पेमेंट घेतले जात नाही आणि शेअर्स जारी होत नाहीत. अंतिम वाटपापूर्वी कळसुबाई फार्म्स शेतकरी रेकॉर्ड तपासेल.',
+          'कोणत्याही शेअर वाटपापूर्वी कळसुबाई फार्म्स शेतकरी रेकॉर्ड, KYC, बँक आणि पेमेंट तपशील तपासतो.',
     },
     'stakeholder_application_snapshot': {
       'en': 'Application snapshot',
@@ -920,17 +980,17 @@ class UiStrings {
       'mr': 'अर्ज सारांश',
     },
     'stakeholder_no_application_title': {
-      'en': 'Interest not submitted yet',
-      'hi': 'रुचि अभी जमा नहीं हुई',
-      'mr': 'स्वारस्य अजून सबमिट झाले नाही',
+      'en': 'Application not submitted yet',
+      'hi': 'आवेदन अभी जमा नहीं हुआ',
+      'mr': 'अर्ज अजून सबमिट झाला नाही',
     },
     'stakeholder_no_application_body': {
       'en':
-          'Choose an amount, review the consent points, and submit interest to start Kalsubai Farms review.',
+          'Choose an amount, add PAN and bank details, then submit payment details for Kalsubai Farms review.',
       'hi':
-          'राशि चुनें, सहमति बिंदु देखें और कलसुबाई फार्म्स समीक्षा शुरू करने के लिए रुचि जमा करें।',
+          'राशि चुनें, PAN और बैंक विवरण जोड़ें, फिर कलसुबाई फार्म्स समीक्षा के लिए भुगतान विवरण जमा करें।',
       'mr':
-          'रक्कम निवडा, संमती मुद्दे तपासा आणि कळसुबाई फार्म्स पुनरावलोकन सुरू करण्यासाठी स्वारस्य सबमिट करा.',
+          'रक्कम निवडा, PAN आणि बँक तपशील जोडा, मग कळसुबाई फार्म्स पुनरावलोकनासाठी पेमेंट तपशील सबमिट करा.',
     },
     'stakeholder_application_locked_title': {
       'en': 'Application is locked for review',
@@ -939,11 +999,11 @@ class UiStrings {
     },
     'stakeholder_application_locked_body': {
       'en':
-          'The selected amount cannot be edited after the team starts review. Track the latest status from the status page.',
+          'The submitted amount, KYC and payment details cannot be edited after review starts. Track the latest status from the status page.',
       'hi':
-          'टीम समीक्षा शुरू करने के बाद चुनी राशि बदली नहीं जा सकती। नई स्थिति स्टेटस पेज पर देखें।',
+          'समीक्षा शुरू होने के बाद जमा राशि, KYC और भुगतान विवरण बदले नहीं जा सकते। नई स्थिति स्टेटस पेज पर देखें।',
       'mr':
-          'टीमने पुनरावलोकन सुरू केल्यानंतर निवडलेली रक्कम बदलता येत नाही. नवीन स्थिती स्टेटस पेजवर पहा.',
+          'पुनरावलोकन सुरू झाल्यानंतर सबमिट केलेली रक्कम, KYC आणि पेमेंट तपशील बदलता येत नाहीत. नवीन स्थिती स्टेटस पेजवर पहा.',
     },
     'stakeholder_application_status': {
       'en': 'Status',
@@ -1028,9 +1088,12 @@ class UiStrings {
       'mr': 'सबमिट करण्यापूर्वी संमती',
     },
     'stakeholder_consent_interest_only': {
-      'en': 'I understand this is only an interest submission.',
-      'hi': 'मैं समझता हूं कि यह केवल रुचि आवेदन है।',
-      'mr': 'मला समजते की ही फक्त स्वारस्य नोंद आहे.',
+      'en':
+          'I am applying as a verified farmer stakeholder; final approval and allotment come after Kalsubai Farms review.',
+      'hi':
+          'मैं सत्यापित किसान हितधारक के रूप में आवेदन कर रहा हूं; अंतिम मंजूरी और आवंटन कलसुबाई फार्म्स की समीक्षा के बाद होगा।',
+      'mr':
+          'मी पडताळलेल्या शेतकरी भागधारक म्हणून अर्ज करत आहे; अंतिम मंजुरी आणि वाटप कळसुबाई फार्म्सच्या तपासणीनंतर होईल.',
     },
     'stakeholder_consent_no_return': {
       'en': 'I understand returns or allocation are not guaranteed.',
@@ -1045,9 +1108,9 @@ class UiStrings {
           'या योजनेसाठी कळसुबाई फार्म्सने माझा शेतकरी रेकॉर्ड तपासावा यास मी परवानगी देतो.',
     },
     'stakeholder_submit_interest': {
-      'en': 'Submit interest',
-      'hi': 'रुचि जमा करें',
-      'mr': 'स्वारस्य सबमिट करा',
+      'en': 'Start share application',
+      'hi': 'शेयर आवेदन शुरू करें',
+      'mr': 'शेअर अर्ज सुरू करा',
     },
     'stakeholder_review_timeline': {
       'en': 'Review timeline',
@@ -1061,11 +1124,11 @@ class UiStrings {
     },
     'stakeholder_status_next_body': {
       'en':
-          'The team reviews farmer identity, selected amount and plan capacity before any approval is shown here.',
+          'The team reviews farmer identity, PAN, bank, payment details and plan capacity before any approval is shown here.',
       'hi':
-          'टीम यहां कोई मंजूरी दिखाने से पहले किसान पहचान, चुनी राशि और योजना क्षमता की समीक्षा करती है।',
+          'टीम यहां कोई मंजूरी दिखाने से पहले किसान पहचान, PAN, बैंक, भुगतान विवरण और योजना क्षमता की समीक्षा करती है।',
       'mr':
-          'येथे कोणतीही मंजुरी दिसण्यापूर्वी टीम शेतकरी ओळख, निवडलेली रक्कम आणि योजना क्षमता तपासते.',
+          'येथे कोणतीही मंजुरी दिसण्यापूर्वी टीम शेतकरी ओळख, PAN, बँक, पेमेंट तपशील आणि योजना क्षमता तपासते.',
     },
     'stakeholder_submitted_at': {
       'en': 'Submitted at',
@@ -1084,11 +1147,11 @@ class UiStrings {
     },
     'stakeholder_future_documents_body': {
       'en':
-          'If approved later, allocation details, receipts or certificates can be attached here.',
+          'PAN, payment proof and future allocation documents are tracked here after submission.',
       'hi':
-          'बाद में मंजूरी मिलने पर आवंटन विवरण, रसीद या प्रमाणपत्र यहां जोड़े जा सकते हैं।',
+          'जमा करने के बाद PAN, भुगतान प्रमाण और भविष्य आवंटन दस्तावेज़ यहां ट्रैक होते हैं।',
       'mr':
-          'नंतर मंजुरी मिळाल्यास वाटप तपशील, पावती किंवा प्रमाणपत्र येथे जोडता येतील.',
+          'सबमिट केल्यानंतर PAN, पेमेंट पुरावा आणि पुढील वाटप दस्तऐवज येथे ट्रॅक होतात.',
     },
     'stakeholder_documents_empty_title': {
       'en': 'No stakeholder documents yet',
@@ -1096,18 +1159,15 @@ class UiStrings {
       'mr': 'अजून हितधारक दस्तऐवज नाहीत',
     },
     'stakeholder_documents_empty_body': {
-      'en':
-          'Farmer record and consent are saved first. Future receipts or allocation documents appear only after approval.',
-      'hi':
-          'पहले किसान रिकॉर्ड और सहमति सेव होती है। भविष्य की रसीद या आवंटन दस्तावेज़ मंजूरी के बाद ही दिखेंगे।',
-      'mr':
-          'आधी शेतकरी रेकॉर्ड आणि संमती जतन होते. पुढील पावती किंवा वाटप दस्तऐवज मंजुरीनंतरच दिसतील.',
+      'en': 'Start the share application to upload PAN and payment proof.',
+      'hi': 'PAN और भुगतान प्रमाण अपलोड करने के लिए शेयर आवेदन शुरू करें।',
+      'mr': 'PAN आणि पेमेंट पुरावा अपलोड करण्यासाठी शेअर अर्ज सुरू करा.',
     },
     'stakeholder_status_draft': {'en': 'Draft', 'hi': 'ड्राफ्ट', 'mr': 'मसुदा'},
     'stakeholder_status_submitted': {
-      'en': 'Submitted',
-      'hi': 'जमा',
-      'mr': 'सबमिट',
+      'en': 'Application submitted',
+      'hi': 'आवेदन जमा',
+      'mr': 'अर्ज सबमिट',
     },
     'stakeholder_status_under_review': {
       'en': 'Under review',
@@ -1130,24 +1190,27 @@ class UiStrings {
       'mr': 'मसुदा तयार',
     },
     'stakeholder_timeline_draft_body': {
-      'en': 'Choose an amount and review consent points.',
-      'hi': 'राशि चुनें और सहमति बिंदु देखें।',
-      'mr': 'रक्कम निवडा आणि संमती मुद्दे तपासा.',
+      'en': 'Choose an amount, add PAN, bank and payment details.',
+      'hi': 'राशि चुनें, PAN, बैंक और भुगतान विवरण जोड़ें।',
+      'mr': 'रक्कम निवडा, PAN, बँक आणि पेमेंट तपशील जोडा.',
     },
     'stakeholder_timeline_submitted': {
-      'en': 'Interest submitted',
-      'hi': 'रुचि जमा',
-      'mr': 'स्वारस्य सबमिट',
+      'en': 'Application submitted',
+      'hi': 'आवेदन जमा',
+      'mr': 'अर्ज सबमिट',
     },
     'stakeholder_timeline_submit_pending': {
-      'en': 'Submit interest to start review.',
-      'hi': 'समीक्षा शुरू करने के लिए रुचि जमा करें।',
-      'mr': 'पुनरावलोकन सुरू करण्यासाठी स्वारस्य सबमिट करा.',
+      'en': 'Submit application details to start review.',
+      'hi': 'समीक्षा शुरू करने के लिए आवेदन विवरण जमा करें।',
+      'mr': 'पुनरावलोकन सुरू करण्यासाठी अर्ज तपशील सबमिट करा.',
     },
     'stakeholder_timeline_submitted_body': {
-      'en': 'Your selected amount and farmer record are saved for review.',
-      'hi': 'आपकी चुनी राशि और किसान रिकॉर्ड समीक्षा के लिए सेव हैं।',
-      'mr': 'तुमची निवडलेली रक्कम आणि शेतकरी रेकॉर्ड तपासणीसाठी जतन आहेत.',
+      'en':
+          'Your farmer record, KYC, bank and payment details are saved for review.',
+      'hi':
+          'आपका किसान रिकॉर्ड, KYC, बैंक और भुगतान विवरण समीक्षा के लिए सेव हैं।',
+      'mr':
+          'तुमचा शेतकरी रेकॉर्ड, KYC, बँक आणि पेमेंट तपशील पुनरावलोकनासाठी जतन आहेत.',
     },
     'stakeholder_timeline_review': {
       'en': 'Review by Kalsubai Farms',
@@ -1155,9 +1218,11 @@ class UiStrings {
       'mr': 'कळसुबाई फार्म्स पुनरावलोकन',
     },
     'stakeholder_timeline_review_body': {
-      'en': 'The team checks eligibility, farmer record and plan capacity.',
-      'hi': 'टीम पात्रता, किसान रिकॉर्ड और योजना क्षमता जांचती है।',
-      'mr': 'टीम पात्रता, शेतकरी रेकॉर्ड आणि योजना क्षमता तपासते.',
+      'en':
+          'The team checks eligibility, farmer record, KYC, payment and plan capacity.',
+      'hi':
+          'टीम पात्रता, किसान रिकॉर्ड, KYC, भुगतान और योजना क्षमता जांचती है।',
+      'mr': 'टीम पात्रता, शेतकरी रेकॉर्ड, KYC, पेमेंट आणि योजना क्षमता तपासते.',
     },
     'stakeholder_timeline_approval': {
       'en': 'Allocation decision',
@@ -1171,11 +1236,11 @@ class UiStrings {
     },
     'stakeholder_help_intro': {
       'en':
-          'This section explains the farmer stakeholder workflow before payment or final allocation is enabled.',
+          'This section explains the farmer stakeholder workflow before final allocation is approved.',
       'hi':
-          'यह भाग भुगतान या अंतिम आवंटन शुरू होने से पहले किसान हितधारक प्रक्रिया समझाता है।',
+          'यह भाग अंतिम आवंटन मंजूर होने से पहले किसान हितधारक प्रक्रिया समझाता है।',
       'mr':
-          'हा भाग पेमेंट किंवा अंतिम वाटप सुरू होण्यापूर्वी शेतकरी हितधारक प्रक्रिया समजावतो.',
+          'हा भाग अंतिम वाटप मंजूर होण्यापूर्वी शेतकरी हितधारक प्रक्रिया समजावतो.',
     },
     'stakeholder_faq_what_title': {
       'en': 'What is a farmer stakeholder?',
@@ -1184,11 +1249,11 @@ class UiStrings {
     },
     'stakeholder_faq_what_body': {
       'en':
-          'A registered farmer who wants to participate in the Kalsubai Farms plan and submits an interest amount for review.',
+          'A registered farmer who wants to participate in the Kalsubai Farms plan and submits share application details for review.',
       'hi':
-          'एक पंजीकृत किसान जो कलसुबाई फार्म्स योजना में भाग लेना चाहता है और समीक्षा के लिए रुचि राशि जमा करता है।',
+          'एक पंजीकृत किसान जो कलसुबाई फार्म्स योजना में भाग लेना चाहता है और समीक्षा के लिए शेयर आवेदन विवरण जमा करता है।',
       'mr':
-          'कळसुबाई फार्म्स योजनेत सहभागी होऊ इच्छिणारा आणि तपासणीसाठी स्वारस्य रक्कम जमा करणारा नोंदणीकृत शेतकरी.',
+          'कळसुबाई फार्म्स योजनेत सहभागी होऊ इच्छिणारा आणि तपासणीसाठी शेअर अर्ज तपशील जमा करणारा नोंदणीकृत शेतकरी.',
     },
     'stakeholder_faq_shares_title': {
       'en': 'How are estimated shares calculated?',
@@ -1223,11 +1288,11 @@ class UiStrings {
     },
     'stakeholder_faq_returns_body': {
       'en':
-          'No. This V1 only records interest. Any future benefit depends on final approval, business performance and legal terms.',
+          'No. Share allocation and any future benefit depend on final approval, business performance and legal terms.',
       'hi':
-          'नहीं। यह V1 केवल रुचि दर्ज करता है। कोई भी भविष्य लाभ अंतिम मंजूरी, व्यवसाय प्रदर्शन और कानूनी शर्तों पर निर्भर है।',
+          'नहीं। शेयर आवंटन और कोई भी भविष्य लाभ अंतिम मंजूरी, व्यवसाय प्रदर्शन और कानूनी शर्तों पर निर्भर है।',
       'mr':
-          'नाही. हा V1 फक्त स्वारस्य नोंदवतो. पुढील लाभ अंतिम मंजुरी, व्यवसाय कामगिरी आणि कायदेशीर अटींवर अवलंबून असेल.',
+          'नाही. शेअर वाटप आणि पुढील लाभ अंतिम मंजुरी, व्यवसाय कामगिरी आणि कायदेशीर अटींवर अवलंबून असेल.',
     },
     'creating_farmer_profile': {
       'en': 'Creating farmer profile and secure farm access.',
@@ -1861,6 +1926,11 @@ class UiStrings {
       'hi': 'फोन, खेत और ग्रेडिंग डेटा खाते से जुड़ा रहता है',
       'mr': 'फोन, शेत आणि ग्रेडिंग डेटा खात्याशी जोडलेला राहतो',
     },
+    'privacy_policy_desc': {
+      'en': 'View policy for account, farm, KYC, payment, and app data',
+      'hi': 'खाता, खेत, KYC, भुगतान और ऐप डेटा की नीति देखें',
+      'mr': 'खाते, शेत, KYC, पेमेंट आणि अ‍ॅप डेटाचे धोरण पहा',
+    },
     'privacy_data_message': {
       'en':
           'Your farm data syncs only with the farmer profile linked to this mobile number.',
@@ -1869,82 +1939,21 @@ class UiStrings {
       'mr':
           'तुमचा शेत डेटा फक्त या मोबाइल नंबरशी जोडलेल्या शेतकरी प्रोफाइलशी सिंक होतो.',
     },
-    'privacy_data_details': {
-      'en':
-          'Kalsubai Farms stores your phone login, farmer profile, farm boundaries, crop survey answers, field photos, grading results, diagnostics, and sync records so your farm data can be recovered on this account and shared with your FPC workflow. You can request account and farm-data deletion from this settings page.',
-      'hi':
-          'Kalsubai Farms आपके फोन लॉगिन, किसान प्रोफ़ाइल, खेत सीमाएँ, फसल सर्वे उत्तर, फील्ड फोटो, ग्रेडिंग परिणाम, डायग्नोस्टिक्स और सिंक रिकॉर्ड को इस खाते पर खेत डेटा वापस लाने और FPC वर्कफ़्लो में उपयोग करने के लिए रखता है। आप इसी सेटिंग पेज से खाता और खेत डेटा हटाने का अनुरोध कर सकते हैं।',
-      'mr':
-          'Kalsubai Farms तुमचा फोन लॉगिन, शेतकरी प्रोफाइल, शेत सीमा, पीक सर्वे उत्तरे, फील्ड फोटो, ग्रेडिंग निकाल, डायग्नोस्टिक्स आणि सिंक नोंदी या खात्यावर शेत डेटा परत मिळवण्यासाठी आणि FPC वर्कफ्लोमध्ये वापरण्यासाठी साठवते. या सेटिंग पेजवरून खाते आणि शेत डेटा हटवण्याची विनंती करता येते.',
-    },
     'delete_account_data': {
-      'en': 'Delete account and farm data',
-      'hi': 'खाता और खेत डेटा हटाएँ',
-      'mr': 'खाते आणि शेत डेटा हटवा',
+      'en': 'Delete account and data',
+      'hi': 'खाता और डेटा हटाएँ',
+      'mr': 'खाते आणि डेटा हटवा',
     },
     'delete_account_data_desc': {
-      'en':
-          'Request deletion of your login, profile, farms, photos, and records',
-      'hi': 'अपना लॉगिन, प्रोफ़ाइल, खेत, फोटो और रिकॉर्ड हटाने का अनुरोध करें',
-      'mr': 'तुमचा लॉगिन, प्रोफाइल, शेत, फोटो आणि नोंदी हटवण्याची विनंती करा',
+      'en': 'Open the account and linked data deletion request page',
+      'hi': 'खाता और जुड़े डेटा हटाने का अनुरोध पेज खोलें',
+      'mr': 'खाते आणि जोडलेला डेटा हटवण्याचा विनंती पेज उघडा',
     },
-    'delete_account_data_body': {
-      'en':
-          'This sends a deletion request for your farmer login, profile, farm boundaries, survey answers, field photos, grading records, and diagnostics. Your coordinator may contact you before permanent deletion.',
-      'hi':
-          'यह आपके किसान लॉगिन, प्रोफ़ाइल, खेत सीमाएँ, सर्वे उत्तर, फील्ड फोटो, ग्रेडिंग रिकॉर्ड और डायग्नोस्टिक्स हटाने का अनुरोध भेजता है। स्थायी हटाने से पहले आपका समन्वयक आपसे संपर्क कर सकता है।',
-      'mr':
-          'यामुळे तुमचा शेतकरी लॉगिन, प्रोफाइल, शेत सीमा, सर्वे उत्तरे, फील्ड फोटो, ग्रेडिंग नोंदी आणि डायग्नोस्टिक्स हटवण्याची विनंती पाठवली जाते. कायमचे हटवण्यापूर्वी तुमचा समन्वयक संपर्क करू शकतो.',
+    'open_link_failed': {
+      'en': 'Could not open {url}. Copy it into your browser.',
+      'hi': '{url} नहीं खुल सका। इसे अपने ब्राउज़र में कॉपी करें।',
+      'mr': '{url} उघडू शकले नाही. ते ब्राउझरमध्ये कॉपी करा.',
     },
-    'request_deletion': {
-      'en': 'Request deletion',
-      'hi': 'हटाने का अनुरोध',
-      'mr': 'हटवण्याची विनंती',
-    },
-    'deletion_request_saved': {
-      'en':
-          'Deletion request saved. We will process the account and farm data deletion request.',
-      'hi':
-          'हटाने का अनुरोध सेव हो गया। हम खाता और खेत डेटा हटाने का अनुरोध प्रोसेस करेंगे।',
-      'mr':
-          'हटवण्याची विनंती सेव झाली. खाते आणि शेत डेटा हटवण्याची विनंती आम्ही प्रक्रिया करू.',
-    },
-    'deletion_request_copied': {
-      'en':
-          'Deletion request copied. Send it to support if online saving is unavailable.',
-      'hi':
-          'हटाने का अनुरोध कॉपी हो गया। ऑनलाइन सेव न हो तो इसे सपोर्ट को भेजें।',
-      'mr':
-          'हटवण्याची विनंती कॉपी झाली. ऑनलाइन सेव उपलब्ध नसल्यास ती सपोर्टला पाठवा.',
-    },
-    'location_disclosure_title': {
-      'en': 'Location use',
-      'hi': 'स्थान का उपयोग',
-      'mr': 'स्थान वापर',
-    },
-    'location_disclosure_body': {
-      'en':
-          'Kalsubai Farms uses your device location to center the map and help mark farm boundaries. Saved farm boundaries and coordinates are linked to your farmer profile for weather, diagnostics, farm sync, and advisory features.',
-      'hi':
-          'Kalsubai Farms आपके डिवाइस स्थान का उपयोग मैप को केंद्र में लाने और खेत सीमा चिह्नित करने में मदद के लिए करता है। सेव की गई खेत सीमाएँ और निर्देशांक मौसम, डायग्नोस्टिक्स, फार्म सिंक और सलाह सुविधाओं के लिए आपकी किसान प्रोफ़ाइल से जुड़े रहते हैं।',
-      'mr':
-          'Kalsubai Farms तुमचे डिवाइस स्थान नकाशा केंद्रित करण्यासाठी आणि शेत सीमा चिन्हांकित करण्यात मदत करण्यासाठी वापरते. सेव केलेल्या शेत सीमा आणि निर्देशांक हवामान, डायग्नोस्टिक्स, फार्म सिंक आणि सल्ला सुविधांसाठी तुमच्या शेतकरी प्रोफाइलशी जोडलेले राहतात.',
-    },
-    'photo_disclosure_title': {
-      'en': 'Camera and photo use',
-      'hi': 'कैमरा और फोटो उपयोग',
-      'mr': 'कॅमेरा आणि फोटो वापर',
-    },
-    'photo_disclosure_body': {
-      'en':
-          'Kalsubai Farms uses camera or gallery images for grain grading, moisture-meter reading, crop-stage proof, and disease diagnostics. Uploaded photos are linked to your selected farm or harvest record for review and advisory features.',
-      'hi':
-          'Kalsubai Farms कैमरा या गैलरी इमेज का उपयोग अनाज ग्रेडिंग, नमी मीटर रीडिंग, फसल चरण प्रमाण और रोग डायग्नोस्टिक्स के लिए करता है। अपलोड की गई फोटो समीक्षा और सलाह सुविधाओं के लिए आपके चुने हुए खेत या हार्वेस्ट रिकॉर्ड से जुड़ती हैं।',
-      'mr':
-          'Kalsubai Farms कॅमेरा किंवा गॅलरी फोटो धान्य ग्रेडिंग, ओलावा मीटर रीडिंग, पीक अवस्था पुरावा आणि रोग डायग्नोस्टिक्ससाठी वापरते. अपलोड केलेले फोटो पुनरावलोकन आणि सल्ला सुविधांसाठी निवडलेल्या शेत किंवा कापणी नोंदीशी जोडले जातात.',
-    },
-    'not_now': {'en': 'Not now', 'hi': 'अभी नहीं', 'mr': 'आता नाही'},
-    'ok': {'en': 'OK', 'hi': 'ठीक है', 'mr': 'ठीक आहे'},
     'help_and_support': {
       'en': 'Help and support',
       'hi': 'मदद और सहायता',
@@ -2236,6 +2245,16 @@ class UiStrings {
       'mr': 'मदत आणि सहाय्य',
     },
     'logout': {'en': 'Logout', 'hi': 'लॉग आउट', 'mr': 'बाहेर पडा'},
+    'logout_in_progress': {
+      'en': 'Signing out',
+      'hi': 'लॉग आउट हो रहा है',
+      'mr': 'बाहेर पडत आहे',
+    },
+    'logout_in_progress_desc': {
+      'en': 'Closing safely.',
+      'hi': 'सुरक्षित रूप से बंद हो रहा है।',
+      'mr': 'सुरक्षितपणे बंद होत आहे.',
+    },
     'available_next_update': {
       'en': 'Available in next update.',
       'hi': 'अगले अपडेट में उपलब्ध।',
@@ -2307,9 +2326,9 @@ class UiStrings {
           'नमस्कार! मी {subject} साठी पीक माहिती सहाय्यक आहे. पीक आरोग्य, सिंचन वेळ, बाजार कल किंवा तपासणीपूर्वी कोणता डेटा घ्यायचा ते विचारा.',
     },
     'ask_about_farm': {
-      'en': 'Ask about your farm...',
-      'hi': 'अपने खेत के बारे में पूछें...',
-      'mr': 'तुमच्या शेताबद्दल विचारा...',
+      'en': 'Ask AI Farm Assistant...',
+      'hi': 'AI खेत सहायक से पूछें...',
+      'mr': 'AI शेत सहाय्यकाला विचारा...',
     },
     'ai_chat_thinking': {
       'en': 'Checking your farm data...',
@@ -2353,6 +2372,32 @@ class UiStrings {
       'mr': 'पुढील पावले',
     },
     'ai_chat_cautions': {'en': 'Cautions', 'hi': 'सावधानियाँ', 'mr': 'काळजी'},
+    'ai_chat_priority': {
+      'en': 'Priority',
+      'hi': 'प्राथमिकता',
+      'mr': 'प्राधान्य',
+    },
+    'ai_chat_farm_update_suggestion': {
+      'en': 'Farm update suggestion',
+      'hi': 'खेत अपडेट सुझाव',
+      'mr': 'शेत अपडेट सूचना',
+    },
+    'ai_chat_follow_up_question': {
+      'en': 'Follow-up question',
+      'hi': 'अगला सवाल',
+      'mr': 'पुढचा प्रश्न',
+    },
+    'ai_chat_check_and_update': {
+      'en': 'Check and update',
+      'hi': 'जांचें और अपडेट करें',
+      'mr': 'तपासा आणि अपडेट करा',
+    },
+    'ai_chat_alert': {'en': 'Alert', 'hi': 'अलर्ट', 'mr': 'अलर्ट'},
+    'ai_chat_update_farm_status': {
+      'en': 'Update farm status',
+      'hi': 'खेत स्थिति अपडेट करें',
+      'mr': 'शेत स्थिती अपडेट करा',
+    },
     'ai_chat_prompt_disease': {
       'en': 'What disease risk is highest today?',
       'hi': 'आज सबसे बड़ा रोग जोखिम क्या है?',
@@ -2540,7 +2585,8 @@ class UiStrings {
     },
     'sync_inventory_first_market': {
       'en': 'Sync this inventory item first, then list it for FPC buyers.',
-      'hi': 'पहले यह इन्वेंटरी आइटम सिंक करें, फिर FPC खरीदारों के लिए लिस्ट करें।',
+      'hi':
+          'पहले यह इन्वेंटरी आइटम सिंक करें, फिर FPC खरीदारों के लिए लिस्ट करें।',
       'mr': 'आधी हा साठा आइटम सिंक करा, मग FPC खरेदीदारांसाठी लिस्ट करा.',
     },
     'listing_created_for_fpc': {
@@ -2574,9 +2620,12 @@ class UiStrings {
       'mr': 'सक्रिय FPC लिस्टिंग नाही',
     },
     'list_products_for_fpc_message': {
-      'en': 'Use List for sale on a synced inventory product to show it to every FPC buyer.',
-      'hi': 'सिंक उत्पाद पर बिक्री में डालें दबाएँ ताकि वह सभी FPC खरीदारों को दिखे।',
-      'mr': 'सिंक उत्पादनावर विक्रीसाठी नोंदवा वापरा, म्हणजे ते सर्व FPC खरेदीदारांना दिसेल.',
+      'en':
+          'Use List for sale on a synced inventory product to show it to every FPC buyer.',
+      'hi':
+          'सिंक उत्पाद पर बिक्री में डालें दबाएँ ताकि वह सभी FPC खरीदारों को दिखे।',
+      'mr':
+          'सिंक उत्पादनावर विक्रीसाठी नोंदवा वापरा, म्हणजे ते सर्व FPC खरेदीदारांना दिसेल.',
     },
     'buy_from_farmers': {
       'en': 'Buy from farmers',
@@ -2589,9 +2638,12 @@ class UiStrings {
       'mr': 'शेतकरी लिस्टिंग सापडली नाही',
     },
     'no_farmer_listing_message': {
-      'en': 'Active farmer listings will appear here after farmers list inventory for FPC buyers.',
-      'hi': 'किसान जब FPC खरीदारों के लिए इन्वेंटरी लिस्ट करेंगे, तब सक्रिय लिस्टिंग यहाँ दिखेगी।',
-      'mr': 'शेतकरी FPC खरेदीदारांसाठी साठा लिस्ट केल्यावर सक्रिय लिस्टिंग येथे दिसेल.',
+      'en':
+          'Active farmer listings will appear here after farmers list inventory for FPC buyers.',
+      'hi':
+          'किसान जब FPC खरीदारों के लिए इन्वेंटरी लिस्ट करेंगे, तब सक्रिय लिस्टिंग यहाँ दिखेगी।',
+      'mr':
+          'शेतकरी FPC खरेदीदारांसाठी साठा लिस्ट केल्यावर सक्रिय लिस्टिंग येथे दिसेल.',
     },
     'mark_interest': {
       'en': 'Mark interest',
@@ -2618,11 +2670,7 @@ class UiStrings {
       'hi': '{count} FPC खरीदार रुचि',
       'mr': '{count} FPC खरेदीदार रस',
     },
-    'per_unit': {
-      'en': 'per unit',
-      'hi': 'प्रति इकाई',
-      'mr': 'प्रति एकक',
-    },
+    'per_unit': {'en': 'per unit', 'hi': 'प्रति इकाई', 'mr': 'प्रति एकक'},
     'nearby_market_choices': {
       'en': 'Nearby market choices',
       'hi': 'नज़दीकी बाजार विकल्प',
@@ -4115,6 +4163,7 @@ class UiStrings {
       'mr': 'उपलब्ध नाही',
     },
     'high': {'en': 'High', 'hi': 'उच्च', 'mr': 'जास्त'},
+    'critical': {'en': 'Critical', 'hi': 'गंभीर', 'mr': 'गंभीर'},
     'map_marked_farm': {
       'en': 'Map marked farm',
       'hi': 'मैप पर चिह्नित खेत',
@@ -4478,8 +4527,30 @@ class UiStrings {
     },
     'search_village_field_area': {
       'en': 'Search village or field area',
-      'hi': 'गांव या खेत क्षेत्र खोजें',
-      'mr': 'गाव किंवा शेत क्षेत्र शोधा',
+      'hi': 'गांव या खेत की जगह खोजें',
+      'mr': 'गाव किंवा शेताची जागा शोधा',
+    },
+    'no_map_places_found': {
+      'en': 'No matching village or place was found.',
+      'hi': 'ऐसा कोई गांव या स्थान नहीं मिला।',
+      'mr': 'असे गाव किंवा ठिकाण सापडले नाही.',
+    },
+    'map_search_not_configured': {
+      'en': 'Online place search is unavailable. Use GPS or a downloaded map.',
+      'hi':
+          'ऑनलाइन स्थान खोज उपलब्ध नहीं है। GPS या डाउनलोड किया नक्शा उपयोग करें।',
+      'mr':
+          'ऑनलाइन ठिकाण शोध उपलब्ध नाही. GPS किंवा डाउनलोड केलेला नकाशा वापरा.',
+    },
+    'map_search_failed': {
+      'en': 'Place search failed. Check the internet and try again.',
+      'hi': 'स्थान खोज नहीं हो सकी। इंटरनेट जांचकर फिर कोशिश करें।',
+      'mr': 'ठिकाण शोधता आले नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
+    },
+    'place_found': {
+      'en': 'Place found',
+      'hi': 'स्थान मिल गया',
+      'mr': 'ठिकाण सापडले',
     },
     'radius_km': {
       'en': 'Radius km',
@@ -4563,10 +4634,49 @@ class UiStrings {
       'mr': 'ऑफलाइन boundary marking साठी {region} लोड झाला.',
     },
     'centered_on_draw_boundary': {
-      'en': 'Centered on {region}. Switch to Draw and mark the farm boundary.',
-      'hi': '{region} पर केंद्रित हुआ। Draw पर जाएं और खेत सीमा चिह्नित करें।',
+      'en':
+          '{region} is shown on the map. Tap field corners to mark the boundary.',
+      'hi':
+          '{region} नक्शे पर दिख रहा है। खेत की सीमा बनाने के लिए कोनों पर टैप करें।',
       'mr':
-          '{region} वर मध्यभागी आणले. Draw वर जा आणि शेत सीमा चिन्हांकित करा.',
+          '{region} नकाशावर दाखवले आहे. शेत सीमा काढण्यासाठी कोपऱ्यांवर टॅप करा.',
+    },
+    'roads_view': {'en': 'Roads view', 'hi': 'सड़क नक्शा', 'mr': 'रस्ते नकाशा'},
+    'farm_view': {'en': 'Farm view', 'hi': 'खेत दृश्य', 'mr': 'शेत दृश्य'},
+    'roads_view_short': {'en': 'Roads', 'hi': 'सड़क', 'mr': 'रस्ते'},
+    'farm_view_short': {'en': 'Farm', 'hi': 'खेत', 'mr': 'शेत'},
+    'choose_map_view': {
+      'en': '1. Choose map view',
+      'hi': '1. नक्शा दृश्य चुनें',
+      'mr': '1. नकाशा दृश्य निवडा',
+    },
+    'choose_marking_mode': {
+      'en': '2. Move map or mark farm',
+      'hi': '2. नक्शा चलाएं या खेत चिह्नित करें',
+      'mr': '2. नकाशा हलवा किंवा शेत चिन्हांकित करा',
+    },
+    'map_view_label': {
+      'en': 'Map view',
+      'hi': 'नक्शा दृश्य',
+      'mr': 'नकाशा दृश्य',
+    },
+    'map_action_label': {
+      'en': 'Map action',
+      'hi': 'नक्शे पर काम',
+      'mr': 'नकाशावरील कृती',
+    },
+    'move_map': {'en': 'Move map', 'hi': 'नक्शा चलाएं', 'mr': 'नकाशा हलवा'},
+    'move_map_short': {'en': 'Move', 'hi': 'चलाएं', 'mr': 'हलवा'},
+    'mark_farm': {
+      'en': 'Mark farm',
+      'hi': 'खेत चिन्हित करें',
+      'mr': 'शेत चिन्हांकित करा',
+    },
+    'mark_farm_short': {'en': 'Mark', 'hi': 'चिन्हित', 'mr': 'रेखाटा'},
+    'searched_place_marking': {
+      'en': 'Marking near {region}',
+      'hi': '{region} के पास सीमा बनाएं',
+      'mr': '{region} जवळ सीमा रेखाटा',
     },
     'downloaded_region_summary': {
       'en':
@@ -4589,6 +4699,12 @@ class UiStrings {
       'hi': 'खेत सीमा बनाएं',
       'mr': 'शेत सीमा रेखाटा',
     },
+    'browse': {'en': 'Browse', 'hi': 'नक्शा देखें', 'mr': 'नकाशा पाहा'},
+    'browse_map_then_draw': {
+      'en': 'Find the field and position the map, then switch to Draw.',
+      'hi': 'खेत खोजकर नक्शा सही जगह पर लाएं, फिर सीमा बनाएं चुनें।',
+      'mr': 'शेत शोधून नकाशा योग्य जागी आणा, मग सीमा रेखाटा निवडा.',
+    },
     'draw_your_farm': {
       'en': 'Draw Your Farm',
       'hi': 'अपना खेत बनाएं',
@@ -4608,8 +4724,8 @@ class UiStrings {
     'my_farm': {'en': 'My Farm', 'hi': 'मेरा खेत', 'mr': 'माझे शेत'},
     'undo_last_point': {
       'en': 'Undo last point',
-      'hi': 'आखिरी बिंदु हटाएं',
-      'mr': 'शेवटचा बिंदू मागे घ्या',
+      'hi': 'पिछला बिंदु हटाएं',
+      'mr': 'मागचा बिंदू काढा',
     },
     'save': {'en': 'Save', 'hi': 'सेव करें', 'mr': 'जतन करा'},
     'tap_map_add_boundary_points': {
@@ -4682,9 +4798,59 @@ class UiStrings {
       'hi': 'पुष्टि के लिए {count} और बिंदु जोड़ें',
       'mr': 'पुष्टीसाठी आणखी {count} बिंदू जोडा',
     },
+    'too_few_boundary_points': {
+      'en': 'More corners needed',
+      'hi': 'और कोने जोड़ें',
+      'mr': 'आणखी कोपरे जोडा',
+    },
+    'add_three_corners_to_save_boundary': {
+      'en': 'Add at least 3 corners to save the farm boundary.',
+      'hi': 'खेत की सीमा सहेजने के लिए कम से कम 3 कोने जोड़ें।',
+      'mr': 'शेताची सीमा जतन करण्यासाठी किमान 3 कोपरे जोडा.',
+    },
+    'invalid_farm_boundary': {
+      'en': 'Fix the farm boundary',
+      'hi': 'खेत की सीमा ठीक करें',
+      'mr': 'शेताची सीमा दुरुस्त करा',
+    },
+    'boundary_point_repeated': {
+      'en':
+          'One corner is marked more than once. Undo it and mark each corner only once.',
+      'hi':
+          'एक कोना एक से अधिक बार चिन्हित है। उसे हटाकर हर कोना केवल एक बार चिन्हित करें।',
+      'mr':
+          'एक कोपरा एकापेक्षा जास्त वेळा चिन्हांकित केला आहे. तो काढून प्रत्येक कोपरा एकदाच चिन्हांकित करा.',
+    },
+    'boundary_lines_cross': {
+      'en':
+          'Boundary lines cannot cross each other. Undo the last points and trace around the farm edge.',
+      'hi':
+          'सीमा रेखाएं एक-दूसरे को पार नहीं कर सकतीं। पिछले बिंदु हटाकर खेत के किनारे के चारों ओर चिन्हित करें।',
+      'mr':
+          'सीमेच्या रेषा एकमेकांना छेदू शकत नाहीत. मागचे बिंदू काढून शेताच्या कडेने सीमा रेखाटा.',
+    },
+    'boundary_has_no_area': {
+      'en':
+          'The marked points do not enclose an area. Mark corners around the farm, not along one line.',
+      'hi':
+          'चिन्हित बिंदु कोई क्षेत्र नहीं घेरते। एक रेखा पर नहीं, खेत के चारों ओर कोने चिन्हित करें।',
+      'mr':
+          'चिन्हांकित बिंदूंमध्ये क्षेत्र तयार होत नाही. एका रेषेत नाही, शेताभोवती कोपरे चिन्हांकित करा.',
+    },
+    'clear_boundary': {
+      'en': 'Clear boundary',
+      'hi': 'पूरी सीमा मिटाएं',
+      'mr': 'संपूर्ण सीमा पुसा',
+    },
     'undo': {'en': 'Undo', 'hi': 'पूर्ववत करें', 'mr': 'मागे घ्या'},
     'redraw': {'en': 'Redraw', 'hi': 'फिर बनाएं', 'mr': 'पुन्हा रेखाटा'},
     'confirm': {'en': 'Confirm', 'hi': 'पुष्टि करें', 'mr': 'पुष्टी करा'},
+    'save_farm_boundary': {
+      'en': 'Save farm boundary',
+      'hi': 'खेत की सीमा सहेजें',
+      'mr': 'शेत सीमा जतन करा',
+    },
+    'save_short': {'en': 'Save', 'hi': 'सहेजें', 'mr': 'जतन करा'},
     'draw_boundary': {
       'en': 'Draw boundary',
       'hi': 'सीमा बनाएं',
@@ -6592,10 +6758,75 @@ class UiStrings {
       'hi': 'FPO डैशबोर्ड',
       'mr': 'FPO डॅशबोर्ड',
     },
+    'pending_reviews': {
+      'en': 'Pending reviews',
+      'hi': 'लंबित समीक्षा',
+      'mr': 'प्रलंबित तपासणी',
+    },
+    'active_listings': {
+      'en': 'Active listings',
+      'hi': 'सक्रिय लिस्टिंग',
+      'mr': 'सक्रिय लिस्टिंग',
+    },
+    'some_dashboard_stats_unavailable': {
+      'en': 'Some dashboard totals could not be refreshed.',
+      'hi': 'कुछ डैशबोर्ड आंकड़े रीफ्रेश नहीं हो सके।',
+      'mr': 'काही डॅशबोर्ड आकडे रीफ्रेश झाले नाहीत.',
+    },
     'admin_login': {
       'en': 'Admin login',
       'hi': 'एडमिन लॉगिन',
       'mr': 'अ‍ॅडमिन लॉगिन',
+    },
+    'admin_login_subtitle': {
+      'en': 'Review farmers, FPC activity and stakeholder applications.',
+      'hi': 'किसानों, FPC गतिविधि और हितधारक आवेदनों की समीक्षा करें।',
+      'mr': 'शेतकरी, FPC कामकाज आणि भागधारक अर्जांचे पुनरावलोकन करा.',
+    },
+    'admin_email': {
+      'en': 'Admin email',
+      'hi': 'एडमिन ईमेल',
+      'mr': 'अ‍ॅडमिन ईमेल',
+    },
+    'admin_email_hint': {
+      'en': 'admin@example.com',
+      'hi': 'admin@example.com',
+      'mr': 'admin@example.com',
+    },
+    'admin_login_cta': {
+      'en': 'Login to admin workspace',
+      'hi': 'एडमिन कार्यक्षेत्र में लॉगिन करें',
+      'mr': 'अ‍ॅडमिन कार्यक्षेत्रात लॉगिन करा',
+    },
+    'admin_login_verifying': {
+      'en': 'Verifying admin',
+      'hi': 'एडमिन सत्यापित हो रहा है',
+      'mr': 'अ‍ॅडमिन पडताळत आहे',
+    },
+    'admin_login_note': {
+      'en': 'Only approved admin accounts can open this workspace.',
+      'hi': 'केवल स्वीकृत एडमिन खाते यह कार्यक्षेत्र खोल सकते हैं।',
+      'mr': 'फक्त मंजूर अ‍ॅडमिन खाती हे कार्यक्षेत्र उघडू शकतात.',
+    },
+    'create_admin_account': {
+      'en': 'Create admin account',
+      'hi': 'एडमिन account बनाएं',
+      'mr': 'अ‍ॅडमिन account तयार करा',
+    },
+    'admin_signup': {
+      'en': 'Admin signup',
+      'hi': 'एडमिन signup',
+      'mr': 'अ‍ॅडमिन signup',
+    },
+    'admin_signup_subtitle': {
+      'en': 'Create an admin account for this workspace.',
+      'hi': 'इस workspace के लिए एडमिन account बनाएं।',
+      'mr': 'या workspace साठी अ‍ॅडमिन account तयार करा.',
+    },
+    'admin_signup_note': {
+      'en': 'Signup creates admin access for this workspace.',
+      'hi': 'Signup के बाद यह account एडमिन workspace खोल सकता है।',
+      'mr': 'Signup नंतर हे account अ‍ॅडमिन workspace उघडू शकते.',
     },
     'sign_in_satellite_monitoring': {
       'en': 'Sign in to satellite monitoring',
@@ -6617,6 +6848,53 @@ class UiStrings {
       'en': 'Create Account',
       'hi': 'account बनाएं',
       'mr': 'account तयार करा',
+    },
+    'creating_account': {
+      'en': 'Creating account',
+      'hi': 'account बन रहा है',
+      'mr': 'account तयार होत आहे',
+    },
+    'full_name': {'en': 'Full name', 'hi': 'पूरा नाम', 'mr': 'पूर्ण नाव'},
+    'full_name_hint': {
+      'en': 'Enter account holder name',
+      'hi': 'Account holder नाम लिखें',
+      'mr': 'Account holder नाव लिहा',
+    },
+    'organization_name': {
+      'en': 'Organization name',
+      'hi': 'संस्था का नाम',
+      'mr': 'संस्थेचे नाव',
+    },
+    'organization_name_hint': {
+      'en': 'Kalsubai Farms',
+      'hi': 'Kalsubai Farms',
+      'mr': 'Kalsubai Farms',
+    },
+    'enter_organization_name': {
+      'en': 'Enter organization name',
+      'hi': 'संस्था का नाम लिखें',
+      'mr': 'संस्थेचे नाव लिहा',
+    },
+    'fpc_name': {'en': 'FPC name', 'hi': 'FPC नाम', 'mr': 'FPC नाव'},
+    'fpc_name_hint': {
+      'en': 'Enter FPC or FPO name',
+      'hi': 'FPC या FPO नाम लिखें',
+      'mr': 'FPC किंवा FPO नाव लिहा',
+    },
+    'enter_fpc_name': {
+      'en': 'Enter FPC name',
+      'hi': 'FPC नाम लिखें',
+      'mr': 'FPC नाव लिहा',
+    },
+    'mobile_number_hint': {
+      'en': '10 digit mobile number',
+      'hi': '10 अंकों का मोबाइल नंबर',
+      'mr': '10 अंकी मोबाइल नंबर',
+    },
+    'enter_valid_mobile_number': {
+      'en': 'Enter a valid mobile number',
+      'hi': 'मान्य मोबाइल नंबर लिखें',
+      'mr': 'वैध मोबाइल नंबर लिहा',
     },
     'setup_satellite_monitoring': {
       'en': 'Set up satellite monitoring access',
@@ -6724,9 +7002,29 @@ class UiStrings {
           'शेतकरी पडताळणी, खरेदी आणि field tools साठी तुमच्या नोंदणीकृत FPC account ने login करा.',
     },
     'fpc_login_info': {
-      'en': 'Use your Firebase email and password for the FPC workspace.',
-      'hi': 'FPC workspace के लिए अपना Firebase ईमेल और पासवर्ड उपयोग करें।',
-      'mr': 'FPC workspace साठी तुमचा Firebase ईमेल आणि पासवर्ड वापरा.',
+      'en':
+          'Use the email and password configured in Supabase for your FPC account.',
+      'hi':
+          'अपने FPC account के लिए Supabase में configured ईमेल और पासवर्ड उपयोग करें।',
+      'mr':
+          'तुमच्या FPC account साठी Supabase मध्ये configured ईमेल आणि पासवर्ड वापरा.',
+    },
+    'create_fpc_account': {
+      'en': 'Create FPC account',
+      'hi': 'FPC account बनाएं',
+      'mr': 'FPC account तयार करा',
+    },
+    'fpc_signup': {'en': 'FPC signup', 'hi': 'FPC signup', 'mr': 'FPC signup'},
+    'fpc_signup_subtitle': {
+      'en':
+          'Create an FPC account for farmer verification and procurement tools.',
+      'hi': 'किसान सत्यापन और खरीद tools के लिए FPC account बनाएं।',
+      'mr': 'शेतकरी पडताळणी आणि खरेदी tools साठी FPC account तयार करा.',
+    },
+    'fpc_signup_note': {
+      'en': 'Signup creates FPC access for this workspace.',
+      'hi': 'Signup के बाद यह account FPC workspace खोल सकता है।',
+      'mr': 'Signup नंतर हे account FPC workspace उघडू शकते.',
     },
     'management': {'en': 'Management', 'hi': 'प्रबंधन', 'mr': 'व्यवस्थापन'},
     'farmers': {'en': 'Farmers', 'hi': 'किसान', 'mr': 'शेतकरी'},
@@ -6757,37 +7055,6 @@ class UiStrings {
       'hi': 'कटाई QR स्कैन करें और खरीद सेव करें',
       'mr': 'कापणी QR स्कॅन करा आणि खरेदी जतन करा',
     },
-    'fpo_privacy_data_desc': {
-      'en': 'FPO login, staff actions, procurement, and grading records',
-      'hi': 'FPO लॉगिन, स्टाफ कार्रवाई, खरीद और ग्रेडिंग रिकॉर्ड',
-      'mr': 'FPO लॉगिन, कर्मचारी कृती, खरेदी आणि ग्रेडिंग नोंदी',
-    },
-    'fpo_privacy_data_details': {
-      'en':
-          'Kalsubai Farms stores your FPO/FPC login, organization identity, farmer verification scans, procurement review actions, received harvest lots, grading records, and farm-operation records so your workspace can manage farmer service and traceability. You can request deletion of the FPO/FPC account and associated workspace data from this dashboard.',
-      'hi':
-          'Kalsubai Farms आपके FPO/FPC लॉगिन, संगठन पहचान, किसान सत्यापन स्कैन, खरीद समीक्षा कार्रवाई, प्राप्त हार्वेस्ट लॉट, ग्रेडिंग रिकॉर्ड और फार्म-ऑपरेशन रिकॉर्ड को किसान सेवा और traceability workspace चलाने के लिए रखता है। आप इसी डैशबोर्ड से FPO/FPC खाते और जुड़े workspace डेटा को हटाने का अनुरोध कर सकते हैं।',
-      'mr':
-          'Kalsubai Farms तुमचा FPO/FPC लॉगिन, संस्था ओळख, शेतकरी पडताळणी स्कॅन, खरेदी पुनरावलोकन कृती, प्राप्त कापणी लॉट, ग्रेडिंग नोंदी आणि शेत-ऑपरेशन नोंदी शेतकरी सेवा आणि traceability workspace साठी साठवते. या डॅशबोर्डवरून FPO/FPC खाते आणि संबंधित workspace डेटा हटवण्याची विनंती करता येते.',
-    },
-    'delete_fpo_account_data': {
-      'en': 'Delete FPO/FPC account and data',
-      'hi': 'FPO/FPC खाता और डेटा हटाएँ',
-      'mr': 'FPO/FPC खाते आणि डेटा हटवा',
-    },
-    'delete_fpo_account_data_desc': {
-      'en': 'Request deletion of this workspace login and associated records',
-      'hi': 'इस workspace लॉगिन और जुड़े रिकॉर्ड हटाने का अनुरोध करें',
-      'mr': 'या workspace लॉगिन आणि संबंधित नोंदी हटवण्याची विनंती करा',
-    },
-    'delete_fpo_account_data_body': {
-      'en':
-          'This sends a deletion request for the FPO/FPC login, organization profile, staff actions, farmer verification scans, procurement records, grading records, and received harvest-lot records. Support may contact you to verify ownership before permanent deletion.',
-      'hi':
-          'यह FPO/FPC लॉगिन, संगठन प्रोफ़ाइल, स्टाफ कार्रवाई, किसान सत्यापन स्कैन, खरीद रिकॉर्ड, ग्रेडिंग रिकॉर्ड और प्राप्त हार्वेस्ट-लॉट रिकॉर्ड हटाने का अनुरोध भेजता है। स्थायी हटाने से पहले सपोर्ट स्वामित्व सत्यापित करने के लिए संपर्क कर सकता है।',
-      'mr':
-          'यामुळे FPO/FPC लॉगिन, संस्था प्रोफाइल, कर्मचारी कृती, शेतकरी पडताळणी स्कॅन, खरेदी नोंदी, ग्रेडिंग नोंदी आणि प्राप्त कापणी-लॉट नोंदी हटवण्याची विनंती पाठवली जाते. कायमचे हटवण्यापूर्वी सपोर्ट मालकी पडताळण्यासाठी संपर्क करू शकते.',
-    },
     'field_maps': {'en': 'Field Maps', 'hi': 'खेत मैप', 'mr': 'शेत नकाशे'},
     'offline_map_areas': {
       'en': 'Offline map areas',
@@ -6803,6 +7070,39 @@ class UiStrings {
       'en': 'Farm Diagnostics',
       'hi': 'खेत डायग्नोस्टिक्स',
       'mr': 'शेत डायग्नोस्टिक्स',
+    },
+    'farm_guidance': {
+      'en': 'Farm guidance',
+      'hi': 'खेत मार्गदर्शन',
+      'mr': 'शेत मार्गदर्शन',
+    },
+    'preparing_farm_guidance': {
+      'en': 'Preparing practical guidance from this farm scan…',
+      'hi': 'इस खेत जांच से व्यावहारिक मार्गदर्शन तैयार किया जा रहा है…',
+      'mr': 'या शेत तपासणीतून उपयोगी मार्गदर्शन तयार केले जात आहे…',
+    },
+    'farm_guidance_unavailable': {
+      'en':
+          'Guidance is temporarily unavailable. The scan results below are still usable.',
+      'hi':
+          'मार्गदर्शन अभी उपलब्ध नहीं है। नीचे दिए जांच परिणाम फिर भी उपयोगी हैं।',
+      'mr':
+          'मार्गदर्शन सध्या उपलब्ध नाही. खालील तपासणी निकाल तरीही वापरता येतील.',
+    },
+    'no_farm_guidance': {
+      'en': 'No additional action is suggested from this scan.',
+      'hi': 'इस जांच से कोई अतिरिक्त कार्रवाई सुझाई नहीं गई है।',
+      'mr': 'या तपासणीतून अतिरिक्त कृती सुचवलेली नाही.',
+    },
+    'issues_detected': {
+      'en': 'Issues detected',
+      'hi': 'मिली समस्याएं',
+      'mr': 'आढळलेल्या समस्या',
+    },
+    'no_major_diagnostic_issues': {
+      'en': 'No major issues were detected in the latest farm scan.',
+      'hi': 'नवीनतम खेत जांच में कोई बड़ी समस्या नहीं मिली।',
+      'mr': 'नवीनतम शेत तपासणीत मोठी समस्या आढळली नाही.',
     },
     'farm_health_reports': {
       'en': 'Farm health reports',
@@ -7153,6 +7453,2257 @@ class UiStrings {
       'en': '{crop} - {quantity} - {total}',
       'hi': '{crop} - {quantity} - {total}',
       'mr': '{crop} - {quantity} - {total}',
+    },
+    'skip': {'en': 'Skip', 'hi': 'छोड़ें', 'mr': 'वगळा'},
+    'continue': {'en': 'Continue', 'hi': 'आगे बढ़ें', 'mr': 'पुढे जा'},
+    'typing': {'en': 'Typing…', 'hi': 'लिख रहा है…', 'mr': 'लिहित आहे…'},
+    'review_and_submit': {
+      'en': 'Review and submit',
+      'hi': 'जांचें और जमा करें',
+      'mr': 'तपासा आणि जमा करा',
+    },
+    'submit': {'en': 'Submit', 'hi': 'जमा करें', 'mr': 'जमा करा'},
+    'pan_to_farm_mark_boundary': {
+      'en': 'Move the map to the farm and mark its boundary points.',
+      'hi': 'नक्शे को खेत तक ले जाएं और सीमा के कोने चिन्हित करें।',
+      'mr': 'नकाशा शेतापर्यंत न्या आणि सीमेचे कोपरे चिन्हांकित करा.',
+    },
+    'skip_boundary_for_now': {
+      'en': 'Skip — I will do this later',
+      'hi': 'अभी छोड़ें — मैं बाद में करूंगा',
+      'mr': 'आत्ता वगळा — मी नंतर करेन',
+    },
+    'type_answer': {
+      'en': 'Type answer',
+      'hi': 'उत्तर लिखें',
+      'mr': 'उत्तर लिहा',
+    },
+    'select_date': {
+      'en': 'Select date',
+      'hi': 'तारीख चुनें',
+      'mr': 'तारीख निवडा',
+    },
+    'no_data_available': {
+      'en': 'No data available',
+      'hi': 'कोई जानकारी उपलब्ध नहीं है',
+      'mr': 'माहिती उपलब्ध नाही',
+    },
+    'no_dates_available': {
+      'en': 'No dates available',
+      'hi': 'कोई तारीख उपलब्ध नहीं है',
+      'mr': 'तारीख उपलब्ध नाही',
+    },
+    'add_farm': {'en': 'Add Farm', 'hi': 'खेत जोड़ें', 'mr': 'शेत जोडा'},
+    'satellite_index': {
+      'en': 'Satellite index',
+      'hi': 'उपग्रह सूचकांक',
+      'mr': 'उपग्रह निर्देशांक',
+    },
+    'loading_satellite_data': {
+      'en': 'Loading satellite data…',
+      'hi': 'उपग्रह जानकारी लोड हो रही है…',
+      'mr': 'उपग्रह माहिती लोड होत आहे…',
+    },
+    'farm_location_required': {
+      'en': 'Farm location is required',
+      'hi': 'खेत की जगह चुनना जरूरी है',
+      'mr': 'शेताची जागा निवडणे आवश्यक आहे',
+    },
+    'no_date': {'en': 'No date', 'hi': 'तारीख नहीं है', 'mr': 'तारीख नाही'},
+    'unnamed_farmer': {
+      'en': 'Unnamed farmer',
+      'hi': 'नाम उपलब्ध नहीं',
+      'mr': 'नाव उपलब्ध नाही',
+    },
+    'how_enter_millet_land': {
+      'en': 'How do you want to enter millet land area?',
+      'hi': 'मोटे अनाज का खेत क्षेत्र कैसे भरना है?',
+      'mr': 'भरडधान्याखालील क्षेत्र कसे भरायचे?',
+    },
+    'one_total_area': {
+      'en': 'One total area',
+      'hi': 'कुल एक क्षेत्र',
+      'mr': 'एकूण एक क्षेत्र',
+    },
+    'per_millet_type': {
+      'en': 'By millet type',
+      'hi': 'हर अनाज के अनुसार',
+      'mr': 'प्रत्येक धान्य प्रकारानुसार',
+    },
+    'select_millet_types_first': {
+      'en': 'Select millet types above first',
+      'hi': 'पहले ऊपर मोटे अनाज के प्रकार चुनें',
+      'mr': 'आधी वर भरडधान्याचे प्रकार निवडा',
+    },
+    'land_under_crop': {
+      'en': 'Land under {crop}',
+      'hi': '{crop} के नीचे क्षेत्र',
+      'mr': '{crop} खालील क्षेत्र',
+    },
+    'total_land_under_millet': {
+      'en': 'Total land under millet',
+      'hi': 'मोटे अनाज का कुल क्षेत्र',
+      'mr': 'भरडधान्याखालील एकूण क्षेत्र',
+    },
+    'sign_out': {'en': 'Sign out', 'hi': 'बाहर निकलें', 'mr': 'बाहेर पडा'},
+    'yes': {'en': 'Yes', 'hi': 'हां', 'mr': 'होय'},
+    'no': {'en': 'No', 'hi': 'नहीं', 'mr': 'नाही'},
+    'fpc_profile': {
+      'en': 'FPC profile',
+      'hi': 'FPC प्रोफाइल',
+      'mr': 'FPC प्रोफाइल',
+    },
+    'fpc_settings': {
+      'en': 'FPC settings',
+      'hi': 'FPC सेटिंग',
+      'mr': 'FPC सेटिंग्ज',
+    },
+    'fpc_activity': {
+      'en': 'FPC activity',
+      'hi': 'FPC गतिविधि',
+      'mr': 'FPC कामकाज',
+    },
+    'fpc_help': {'en': 'FPC help', 'hi': 'FPC सहायता', 'mr': 'FPC मदत'},
+    'auto_refresh_fpc_ledgers': {
+      'en': 'Auto refresh FPC ledgers',
+      'hi': 'FPC बही अपने आप ताज़ा करें',
+      'mr': 'FPC नोंदवही आपोआप ताजी करा',
+    },
+    'auto_refresh_fpc_ledgers_desc': {
+      'en': 'Reload procurement and marketplace data when opened.',
+      'hi': 'खोलते समय खरीद और बाजार की जानकारी फिर लोड करें।',
+      'mr': 'उघडताना खरेदी आणि बाजाराची माहिती पुन्हा लोड करा.',
+    },
+    'review_queue_alerts': {
+      'en': 'Review queue alerts',
+      'hi': 'समीक्षा सूची सूचना',
+      'mr': 'तपासणी यादी सूचना',
+    },
+    'review_queue_alerts_desc': {
+      'en': 'Highlight grading jobs that need FPC action.',
+      'hi': 'FPC कार्रवाई वाले ग्रेडिंग काम अलग दिखाएं।',
+      'mr': 'FPC कृती आवश्यक असलेली ग्रेडिंग कामे ठळक दाखवा.',
+    },
+    'marketplace_interest_alerts': {
+      'en': 'Marketplace interest alerts',
+      'hi': 'बाजार रुचि सूचना',
+      'mr': 'बाजारातील रस सूचना',
+    },
+    'marketplace_interest_alerts_desc': {
+      'en': 'Keep buyer interest visible for listed farmer lots.',
+      'hi': 'किसान के बिक्री लॉट पर खरीदार की रुचि दिखाते रहें।',
+      'mr': 'शेतकऱ्याच्या विक्री लॉटवरील खरेदीदारांचा रस दिसू द्या.',
+    },
+    'scanner_sound_feedback': {
+      'en': 'Scanner sound feedback',
+      'hi': 'स्कैन होने पर आवाज',
+      'mr': 'स्कॅन झाल्यावर आवाज',
+    },
+    'scanner_sound_feedback_desc': {
+      'en': 'Use sound after valid farmer or harvest QR scans.',
+      'hi': 'सही किसान या कटाई QR स्कैन के बाद आवाज चलाएं।',
+      'mr': 'योग्य शेतकरी किंवा कापणी QR स्कॅननंतर आवाज द्या.',
+    },
+    'open_fpc_profile': {
+      'en': 'Open FPC profile',
+      'hi': 'FPC प्रोफाइल खोलें',
+      'mr': 'FPC प्रोफाइल उघडा',
+    },
+    'not_added': {
+      'en': 'Not added',
+      'hi': 'जानकारी नहीं जोड़ी',
+      'mr': 'माहिती जोडलेली नाही',
+    },
+    'not_signed_in': {
+      'en': 'Not signed in',
+      'hi': 'लॉगिन नहीं है',
+      'mr': 'लॉगिन केलेले नाही',
+    },
+    'fpc_workspace_label': {
+      'en': 'FPC workspace',
+      'hi': 'FPC कार्यक्षेत्र',
+      'mr': 'FPC कार्यक्षेत्र',
+    },
+    'fpc_account_used_for_verification': {
+      'en': 'FPC account used for farmer verification and procurement',
+      'hi': 'किसान सत्यापन और खरीद के लिए उपयोग होने वाला FPC खाता',
+      'mr': 'शेतकरी पडताळणी आणि खरेदीसाठी वापरले जाणारे FPC खाते',
+    },
+    'account_details': {
+      'en': 'Account details',
+      'hi': 'खाते की जानकारी',
+      'mr': 'खात्याची माहिती',
+    },
+    'contact_person': {
+      'en': 'Contact person',
+      'hi': 'संपर्क व्यक्ति',
+      'mr': 'संपर्क व्यक्ती',
+    },
+    'fpc_fpo_name': {
+      'en': 'FPC / FPO name',
+      'hi': 'FPC / FPO का नाम',
+      'mr': 'FPC / FPO चे नाव',
+    },
+    'email': {'en': 'Email', 'hi': 'ईमेल', 'mr': 'ईमेल'},
+    'access_and_sync': {
+      'en': 'Access and sync',
+      'hi': 'पहुंच और जानकारी मिलान',
+      'mr': 'प्रवेश आणि माहिती जुळवणी',
+    },
+    'server_role': {
+      'en': 'Server role',
+      'hi': 'सर्वर भूमिका',
+      'mr': 'सर्व्हर भूमिका',
+    },
+    'user_id': {'en': 'User ID', 'hi': 'उपयोगकर्ता ID', 'mr': 'वापरकर्ता ID'},
+    'profile_sync': {
+      'en': 'Profile sync',
+      'hi': 'प्रोफाइल जानकारी मिलान',
+      'mr': 'प्रोफाइल माहिती जुळवणी',
+    },
+    'auth_metadata_fpc_profile': {
+      'en': 'Auth metadata and FPC profile table',
+      'hi': 'लॉगिन जानकारी और FPC प्रोफाइल तालिका',
+      'mr': 'लॉगिन माहिती आणि FPC प्रोफाइल तक्ता',
+    },
+    'verify_farmer_short': {
+      'en': 'Verify farmer',
+      'hi': 'किसान सत्यापित करें',
+      'mr': 'शेतकरी पडताळा',
+    },
+    'receive_lot': {
+      'en': 'Receive lot',
+      'hi': 'लॉट प्राप्त करें',
+      'mr': 'लॉट स्वीकारा',
+    },
+    'review_queue': {
+      'en': 'Review queue',
+      'hi': 'समीक्षा सूची',
+      'mr': 'तपासणी यादी',
+    },
+    'workspace_settings': {
+      'en': 'Workspace settings',
+      'hi': 'कार्य क्षेत्र सेटिंग',
+      'mr': 'कार्य क्षेत्र सेटिंग्ज',
+    },
+    'operations': {'en': 'Operations', 'hi': 'कामकाज', 'mr': 'कामकाज'},
+    'today': {'en': 'Today', 'hi': 'आज', 'mr': 'आज'},
+    'fpc_operations': {
+      'en': 'FPC operations',
+      'hi': 'FPC कामकाज',
+      'mr': 'FPC कामकाज',
+    },
+    'daily_fpc_work_checklist': {
+      'en': 'Daily work checklist for farmer service, grading and buying',
+      'hi': 'किसान सेवा, ग्रेडिंग और खरीद की रोज़ की जांच सूची',
+      'mr': 'शेतकरी सेवा, ग्रेडिंग आणि खरेदीची रोजची तपासणी यादी',
+    },
+    'farmer_service_flow': {
+      'en': 'Farmer service flow',
+      'hi': 'किसान सेवा प्रक्रिया',
+      'mr': 'शेतकरी सेवा प्रक्रिया',
+    },
+    'marketplace_flow': {
+      'en': 'Marketplace flow',
+      'hi': 'बाजार प्रक्रिया',
+      'mr': 'बाजार प्रक्रिया',
+    },
+    'review_queue_flow': {
+      'en': 'Review queue flow',
+      'hi': 'समीक्षा सूची प्रक्रिया',
+      'mr': 'तपासणी यादी प्रक्रिया',
+    },
+    'fpc_support': {'en': 'FPC support', 'hi': 'FPC सहायता', 'mr': 'FPC मदत'},
+    'fpc_support_desc': {
+      'en': 'Operational help for profile QR, harvest QR and ledger sync',
+      'hi': 'प्रोफाइल QR, कटाई QR और बही मिलान के लिए सहायता',
+      'mr': 'प्रोफाइल QR, कापणी QR आणि नोंदवही जुळवणीसाठी मदत',
+    },
+    'if_farmer_qr_does_not_scan': {
+      'en': 'If farmer QR does not scan',
+      'hi': 'यदि किसान QR स्कैन न हो',
+      'mr': 'शेतकरी QR स्कॅन होत नसेल तर',
+    },
+    'if_harvest_receiving_fails': {
+      'en': 'If harvest receiving fails',
+      'hi': 'यदि कटाई लॉट प्राप्त न हो',
+      'mr': 'कापणी लॉट स्वीकारता येत नसेल तर',
+    },
+    'if_fpc_login_fails': {
+      'en': 'If FPC login fails',
+      'hi': 'यदि FPC लॉगिन न हो',
+      'mr': 'FPC लॉगिन होत नसेल तर',
+    },
+    'scan_verified_farmer_profile_qr': {
+      'en': 'Scan verified farmer profile QR.',
+      'hi': 'सत्यापित किसान प्रोफाइल QR स्कैन करें।',
+      'mr': 'पडताळलेला शेतकरी प्रोफाइल QR स्कॅन करा.',
+    },
+    'check_farmer_details_before_procurement': {
+      'en': 'Check farmer and farm details before procurement.',
+      'hi': 'खरीद से पहले किसान और खेत की जानकारी जांचें।',
+      'mr': 'खरेदीपूर्वी शेतकरी आणि शेताची माहिती तपासा.',
+    },
+    'grade_lot_or_send_review': {
+      'en': 'Grade the grain lot or send it to review.',
+      'hi': 'अनाज लॉट की ग्रेडिंग करें या समीक्षा के लिए भेजें।',
+      'mr': 'धान्य लॉटची ग्रेडिंग करा किंवा तपासणीसाठी पाठवा.',
+    },
+    'receive_harvest_qr_into_ledger': {
+      'en': 'Receive approved harvest QR into the FPC ledger.',
+      'hi': 'स्वीकृत कटाई QR को FPC बही में दर्ज करें।',
+      'mr': 'मंजूर कापणी QR ची FPC नोंदवहीत नोंद करा.',
+    },
+    'open_buyer_listings': {
+      'en': 'Open buyer listings from the marketplace tab.',
+      'hi': 'बाजार टैब से खरीदार लिस्टिंग खोलें।',
+      'mr': 'बाजार टॅबमधून खरेदीदार यादी उघडा.',
+    },
+    'review_lot_market_details': {
+      'en': 'Review crop, quantity, grade and village details.',
+      'hi': 'फसल, मात्रा, ग्रेड और गांव की जानकारी जांचें।',
+      'mr': 'पीक, प्रमाण, ग्रेड आणि गावाची माहिती तपासा.',
+    },
+    'mark_buyer_interest': {
+      'en': 'Mark buyer interest for lots the FPC wants to follow up.',
+      'hi': 'जिन लॉट पर आगे बात करनी है, उन पर खरीदार रुचि दर्ज करें।',
+      'mr': 'ज्या लॉटचा पाठपुरावा करायचा आहे त्यावर खरेदीदारांचा रस नोंदवा.',
+    },
+    'use_receiver_after_final_qr': {
+      'en': 'Use receiver after the final harvest QR is available.',
+      'hi': 'अंतिम कटाई QR मिलने के बाद प्राप्ति पेज उपयोग करें।',
+      'mr': 'अंतिम कापणी QR मिळाल्यानंतर स्वीकार पान वापरा.',
+    },
+    'open_pending_grading_review': {
+      'en': 'Open grading review for pending analysis jobs.',
+      'hi': 'लंबित जांच कामों के लिए ग्रेडिंग समीक्षा खोलें।',
+      'mr': 'प्रलंबित तपासणी कामांसाठी ग्रेडिंग पुनरावलोकन उघडा.',
+    },
+    'approve_reject_or_recapture': {
+      'en': 'Approve good lots, reject failed lots or request recapture.',
+      'hi': 'अच्छे लॉट मंजूर करें, गलत लॉट अस्वीकार करें या नया फोटो मांगें।',
+      'mr': 'चांगले लॉट मंजूर करा, चुकीचे लॉट नाकारा किंवा नवीन फोटो मागा.',
+    },
+    'keep_review_notes_clear': {
+      'en': 'Keep notes clear so farmers know the next action.',
+      'hi': 'नोट साफ लिखें ताकि किसान अगला कदम समझ सके।',
+      'mr': 'नोंद स्पष्ट लिहा, म्हणजे शेतकऱ्याला पुढची कृती समजेल.',
+    },
+    'ask_farmer_open_verified_qr': {
+      'en': 'Ask the farmer to open the verified profile QR from their app.',
+      'hi': 'किसान से ऐप में सत्यापित प्रोफाइल QR खोलने को कहें।',
+      'mr': 'शेतकऱ्याला अ‍ॅपमधील पडताळलेला प्रोफाइल QR उघडायला सांगा.',
+    },
+    'do_not_scan_harvest_qr_verification': {
+      'en': 'Do not scan harvest QR in the farmer verification page.',
+      'hi': 'किसान सत्यापन पेज पर कटाई QR स्कैन न करें।',
+      'mr': 'शेतकरी पडताळणी पानावर कापणी QR स्कॅन करू नका.',
+    },
+    'regenerate_old_farmer_qr': {
+      'en': 'If the QR is old or incomplete, ask the farmer to regenerate it.',
+      'hi': 'QR पुराना या अधूरा हो तो किसान से नया QR बनवाएं।',
+      'mr':
+          'QR जुना किंवा अपूर्ण असल्यास शेतकऱ्याला नवीन QR तयार करायला सांगा.',
+    },
+    'use_receiver_not_verification': {
+      'en': 'Use the Receiver tab, not the Farmer Verification tab.',
+      'hi': 'प्राप्ति टैब उपयोग करें, किसान सत्यापन टैब नहीं।',
+      'mr': 'स्वीकार टॅब वापरा, शेतकरी पडताळणी टॅब नाही.',
+    },
+    'scan_final_approved_harvest_qr': {
+      'en': 'Scan only the final approved harvest trace QR.',
+      'hi': 'केवल अंतिम स्वीकृत कटाई ट्रेस QR स्कैन करें।',
+      'mr': 'फक्त अंतिम मंजूर कापणी ट्रेस QR स्कॅन करा.',
+    },
+    'check_internet_before_receiving': {
+      'en': 'Check internet connection before saving the received lot.',
+      'hi': 'प्राप्त लॉट सहेजने से पहले इंटरनेट जांचें।',
+      'mr': 'स्वीकारलेला लॉट जतन करण्यापूर्वी इंटरनेट तपासा.',
+    },
+    'confirm_fpc_signup_email': {
+      'en': 'Confirm the email was created from FPC signup.',
+      'hi': 'पक्का करें कि ईमेल FPC साइनअप से बनाया गया था।',
+      'mr': 'ईमेल FPC नोंदणीमधून तयार झाला आहे याची खात्री करा.',
+    },
+    'confirm_fpc_server_role': {
+      'en': 'Confirm the account has FPC server role access.',
+      'hi': 'पक्का करें कि खाते को FPC सर्वर भूमिका मिली है।',
+      'mr': 'खात्याला FPC सर्व्हर भूमिका मिळाली आहे याची खात्री करा.',
+    },
+    'ask_admin_verify_fpc_profile': {
+      'en': 'Ask admin to verify the FPC profile if access is blocked.',
+      'hi': 'पहुंच रुकी हो तो एडमिन से FPC प्रोफाइल सत्यापित कराएं।',
+      'mr': 'प्रवेश बंद असल्यास अ‍ॅडमिनकडून FPC प्रोफाइल पडताळून घ्या.',
+    },
+    'decrease_amount_by': {
+      'en': 'Decrease by Rs {amount}',
+      'hi': 'राशि Rs {amount} घटाएं',
+      'mr': 'रक्कम Rs {amount} ने कमी करा',
+    },
+    'increase_amount_by': {
+      'en': 'Increase by Rs {amount}',
+      'hi': 'राशि Rs {amount} बढ़ाएं',
+      'mr': 'रक्कम Rs {amount} ने वाढवा',
+    },
+    'amount_changes_in_steps': {
+      'en': 'Amount changes in Rs {amount} steps',
+      'hi': 'राशि Rs {amount} के अंतर से बदलती है',
+      'mr': 'रक्कम Rs {amount} च्या टप्प्याने बदलते',
+    },
+    'account_numbers_must_match': {
+      'en': 'Account numbers must match before submission.',
+      'hi': 'जमा करने से पहले दोनों खाता नंबर एक जैसे होने चाहिए।',
+      'mr': 'जमा करण्यापूर्वी दोन्ही खाते क्रमांक जुळले पाहिजेत.',
+    },
+    'pay_now_buy_shares': {
+      'en': 'Pay now and buy shares',
+      'hi': 'अभी भुगतान करें और शेयर खरीदें',
+      'mr': 'आता पैसे भरा आणि शेअर्स खरेदी करा',
+    },
+    'farmer_land_ownership_record': {
+      'en': 'Farmer land ownership record',
+      'hi': 'किसान भूमि स्वामित्व रिकॉर्ड',
+      'mr': 'शेतकरी जमीन मालकी नोंद',
+    },
+    'farmer_land_record_entry_help': {
+      'en':
+          'Enter the values exactly as shown on the farmer 7/12 extract. Identity fields are required; complete details help finish review faster.',
+      'hi':
+          'किसान के 7/12 उतारे में जैसा लिखा है, वैसी ही जानकारी भरें। पहचान की जानकारी जरूरी है; पूरी जानकारी से समीक्षा जल्दी होगी।',
+      'mr':
+          'शेतकऱ्याच्या 7/12 उताऱ्यावर जशी माहिती आहे तशीच भरा. ओळखीची माहिती आवश्यक आहे; पूर्ण माहितीमुळे तपासणी लवकर होईल.',
+    },
+    'bank_name': {'en': 'Bank name', 'hi': 'बैंक का नाम', 'mr': 'बँकेचे नाव'},
+    'select_bank': {'en': 'Select bank', 'hi': 'बैंक चुनें', 'mr': 'बँक निवडा'},
+    'policy_checklist': {
+      'en': 'Policy checklist',
+      'hi': 'नीति जांच सूची',
+      'mr': 'धोरण तपासणी यादी',
+    },
+    'unlock_remaining_policy_checks': {
+      'en': 'Accept the first policy to open the remaining policy checks.',
+      'hi': 'बाकी नीति जांच खोलने के लिए पहली नीति स्वीकार करें।',
+      'mr': 'उरलेल्या धोरण तपासण्या उघडण्यासाठी पहिले धोरण मान्य करा.',
+    },
+    'refresh_workspace': {
+      'en': 'Refresh workspace',
+      'hi': 'कार्य क्षेत्र ताज़ा करें',
+      'mr': 'कार्य क्षेत्र ताजे करा',
+    },
+    'mark_under_review': {
+      'en': 'Mark under review',
+      'hi': 'समीक्षा में डालें',
+      'mr': 'तपासणी सुरू म्हणून नोंदवा',
+    },
+    'open_full_review': {
+      'en': 'Open full review',
+      'hi': 'पूरी समीक्षा खोलें',
+      'mr': 'पूर्ण तपासणी उघडा',
+    },
+    'amount_and_shares': {
+      'en': 'Rs {amount} / {shares} shares',
+      'hi': 'Rs {amount} / {shares} शेयर',
+      'mr': 'Rs {amount} / {shares} शेअर्स',
+    },
+    'search_stakeholder_applications': {
+      'en': 'Search stakeholder applications',
+      'hi': 'हितधारक आवेदन खोजें',
+      'mr': 'भागधारक अर्ज शोधा',
+    },
+    'search_stakeholder_hint': {
+      'en': 'Farmer name, phone, ID or PAN',
+      'hi': 'किसान नाम, फोन, ID या PAN',
+      'mr': 'शेतकरी नाव, फोन, ID किंवा PAN',
+    },
+    'farmer_stakeholder_request': {
+      'en': 'Farmer stakeholder request',
+      'hi': 'किसान हितधारक आवेदन',
+      'mr': 'शेतकरी भागधारक अर्ज',
+    },
+    'no_uploaded_documents_for_request': {
+      'en': 'No uploaded documents were found for this request.',
+      'hi': 'इस आवेदन के लिए कोई दस्तावेज़ नहीं मिला।',
+      'mr': 'या अर्जासाठी अपलोड केलेले दस्तऐवज सापडले नाहीत.',
+    },
+    'no_admin_history': {
+      'en': 'No admin history yet.',
+      'hi': 'अभी कोई एडमिन इतिहास नहीं है।',
+      'mr': 'अजून अ‍ॅडमिन इतिहास नाही.',
+    },
+    'stakeholder_application_updated': {
+      'en': 'Stakeholder application updated to {status}.',
+      'hi': 'हितधारक आवेदन की स्थिति {status} कर दी गई।',
+      'mr': 'भागधारक अर्जाची स्थिती {status} केली.',
+    },
+    'could_not_open_stakeholder_document': {
+      'en': 'Could not open the stakeholder document.',
+      'hi': 'हितधारक दस्तावेज़ नहीं खुल सका।',
+      'mr': 'भागधारक दस्तऐवज उघडता आला नाही.',
+    },
+    'last_synced_value': {
+      'en': 'Last synced {value}',
+      'hi': 'अंतिम जानकारी मिलान {value}',
+      'mr': 'शेवटची माहिती जुळवणी {value}',
+    },
+    'retry': {
+      'en': 'Retry',
+      'hi': 'फिर कोशिश करें',
+      'mr': 'पुन्हा प्रयत्न करा',
+    },
+    'harvest_plan_map': {
+      'en': 'Harvest plan map',
+      'hi': 'कटाई योजना नक्शा',
+      'mr': 'कापणी नियोजन नकाशा',
+    },
+    'health_score': {
+      'en': 'Health Score',
+      'hi': 'खेत स्वास्थ्य अंक',
+      'mr': 'शेत आरोग्य गुण',
+    },
+    'refresh_scan': {
+      'en': 'Refresh Scan',
+      'hi': 'जांच ताज़ा करें',
+      'mr': 'तपासणी ताजी करा',
+    },
+    'full_map_view': {
+      'en': 'Full Map View',
+      'hi': 'पूरा नक्शा देखें',
+      'mr': 'पूर्ण नकाशा पाहा',
+    },
+    'what_to_do_today': {
+      'en': 'What you should do today',
+      'hi': 'आज आपको क्या करना चाहिए',
+      'mr': 'आज काय करावे',
+    },
+    'stakeholder_shares': {
+      'en': 'Stakeholder shares',
+      'hi': 'हितधारक शेयर',
+      'mr': 'भागधारक शेअर्स',
+    },
+    'bought_shares_linked_profile': {
+      'en': 'Bought shares are linked to this farmer profile.',
+      'hi': 'खरीदे गए शेयर इस किसान प्रोफाइल से जुड़े हैं।',
+      'mr': 'खरेदी केलेले शेअर्स या शेतकरी प्रोफाइलशी जोडले आहेत.',
+    },
+    'bought_shares': {
+      'en': 'Bought shares',
+      'hi': 'खरीदे गए शेयर',
+      'mr': 'खरेदी केलेले शेअर्स',
+    },
+    'moisture_reading': {
+      'en': 'Moisture reading',
+      'hi': 'नमी की रीडिंग',
+      'mr': 'ओलाव्याची नोंद',
+    },
+    'source_confidence': {
+      'en': '{source} • {confidence}% confidence',
+      'hi': '{source} • {confidence}% भरोसा',
+      'mr': '{source} • {confidence}% खात्री',
+    },
+    'grade_from_cloud_score': {
+      'en': 'Grade from cloud score',
+      'hi': 'क्लाउड अंक से मिला ग्रेड',
+      'mr': 'क्लाउड गुणांवरून मिळालेला ग्रेड',
+    },
+    'score_label_out_of_100': {
+      'en': 'Score: {score}/100',
+      'hi': 'अंक: {score}/100',
+      'mr': 'गुण: {score}/100',
+    },
+    'cloud_grade_explanation': {
+      'en': 'The visible grade is calculated from the cloud grading score.',
+      'hi': 'दिखाया गया ग्रेड क्लाउड से मिले ग्रेडिंग अंक से निकाला गया है।',
+      'mr':
+          'दाखवलेला ग्रेड क्लाउडमधून मिळालेल्या ग्रेडिंग गुणांवरून काढला आहे.',
+    },
+    'kalsubai_farms_platform': {
+      'en': 'Kalsubai Farms Platform',
+      'hi': 'कलसुबाई फार्म्स मंच',
+      'mr': 'कळसूबाई फार्म्स मंच',
+    },
+    'choose_module': {
+      'en': 'Choose a module',
+      'hi': 'एक सुविधा चुनें',
+      'mr': 'एक सुविधा निवडा',
+    },
+    'survey_form': {
+      'en': 'Survey Form',
+      'hi': 'सर्वे फॉर्म',
+      'mr': 'सर्वेक्षण फॉर्म',
+    },
+    'collect_farmer_baseline_data': {
+      'en': 'Collect farmer baseline data',
+      'hi': 'किसान की शुरुआती जानकारी दर्ज करें',
+      'mr': 'शेतकऱ्याची प्राथमिक माहिती नोंदवा',
+    },
+    'run_diagnostics': {
+      'en': 'Run Diagnostics',
+      'hi': 'खेत की जांच करें',
+      'mr': 'शेताची तपासणी करा',
+    },
+    'season_value': {
+      'en': 'Season: {value}',
+      'hi': 'मौसम: {value}',
+      'mr': 'हंगाम: {value}',
+    },
+    'index_statistics': {
+      'en': 'Index Statistics',
+      'hi': 'सूचकांक आंकड़े',
+      'mr': 'निर्देशांक आकडेवारी',
+    },
+    'unsupported_repeat_group': {
+      'en': 'This repeated section is not supported: {group}',
+      'hi': 'यह दोहराया गया भाग उपलब्ध नहीं है: {group}',
+      'mr': 'हा पुनरावृत्ती विभाग उपलब्ध नाही: {group}',
+    },
+    'aadhaar_input_hint': {
+      'en': 'XXXX XXXX XXXX',
+      'hi': 'XXXX XXXX XXXX',
+      'mr': 'XXXX XXXX XXXX',
+    },
+    'minimum_characters': {
+      'en': 'Enter at least {count} characters',
+      'hi': 'कम से कम {count} अक्षर लिखें',
+      'mr': 'किमान {count} अक्षरे लिहा',
+    },
+    'maximum_characters': {
+      'en': 'Enter no more than {count} characters',
+      'hi': '{count} से अधिक अक्षर न लिखें',
+      'mr': '{count} पेक्षा जास्त अक्षरे लिहू नका',
+    },
+    'invalid_format': {
+      'en': 'Invalid format',
+      'hi': 'जानकारी का रूप सही नहीं है',
+      'mr': 'माहितीचा नमुना योग्य नाही',
+    },
+    'currency_rs': {'en': 'Rs', 'hi': 'रु.', 'mr': 'रु.'},
+    'trend_slope_r_squared': {
+      'en': 'Slope: {slope} {unit}/day · R² {rSquared}',
+      'hi': 'ढलान: {slope} {unit}/दिन · R² {rSquared}',
+      'mr': 'उतार: {slope} {unit}/दिवस · R² {rSquared}',
+    },
+    'optional_boundary_hint': {
+      'en': 'Draw if time permits; submission is allowed without it.',
+      'hi': 'समय हो तो सीमा बनाएं; इसके बिना भी फॉर्म जमा किया जा सकता है।',
+      'mr': 'वेळ असल्यास सीमा रेखाटा; त्याशिवायही फॉर्म जमा करता येईल.',
+    },
+    'crop_variety_notes_hint': {
+      'en': 'Variety, local name, or field notes',
+      'hi': 'किस्म, स्थानीय नाम या खेत की टिप्पणी',
+      'mr': 'वाण, स्थानिक नाव किंवा शेताची नोंद',
+    },
+    'production_history_years_hint': {
+      'en': 'Production history for 2023, 2024, and 2025.',
+      'hi': '2023, 2024 और 2025 का उत्पादन इतिहास।',
+      'mr': '2023, 2024 आणि 2025 चा उत्पादन इतिहास.',
+    },
+    'select_disease_name': {
+      'en': 'Select disease name',
+      'hi': 'रोग का नाम चुनें',
+      'mr': 'रोगाचे नाव निवडा',
+    },
+    'select_affected_crop': {
+      'en': 'Select affected crop',
+      'hi': 'प्रभावित फसल चुनें',
+      'mr': 'बाधित पीक निवडा',
+    },
+    'write_key_symptoms': {
+      'en': 'Write key symptoms',
+      'hi': 'मुख्य लक्षण लिखें',
+      'mr': 'मुख्य लक्षणे लिहा',
+    },
+    'treatment_examples_hint': {
+      'en': 'Fungicide, biocontrol, etc.',
+      'hi': 'फफूंदनाशक, जैविक नियंत्रण आदि।',
+      'mr': 'बुरशीनाशक, जैविक नियंत्रण इत्यादी.',
+    },
+    'add_each_crop_details_hint': {
+      'en': 'Add each crop with area, variety, production, and estimated cost.',
+      'hi': 'हर फसल का क्षेत्र, किस्म, उत्पादन और अनुमानित लागत भरें।',
+      'mr': 'प्रत्येक पिकाचे क्षेत्र, वाण, उत्पादन आणि अंदाजित खर्च भरा.',
+    },
+    'main_crop_agronomy_hint': {
+      'en':
+          'Seed, nursery, land preparation, transplanting, pest, fertilizer, monitoring, and harvest details.',
+      'hi':
+          'बीज, नर्सरी, भूमि तैयारी, रोपाई, कीट, खाद, निगरानी और कटाई की जानकारी।',
+      'mr':
+          'बियाणे, रोपवाटिका, जमीन तयारी, पुनर्लागवड, कीड, खत, पाहणी आणि कापणीची माहिती.',
+    },
+    'other_crop_agronomy_hint': {
+      'en':
+          'Fill seed, land preparation, pest, fertilizer, monitoring, harvest, and selling details.',
+      'hi':
+          'बीज, भूमि तैयारी, कीट, खाद, निगरानी, कटाई और बिक्री की जानकारी भरें।',
+      'mr':
+          'बियाणे, जमीन तयारी, कीड, खत, पाहणी, कापणी आणि विक्रीची माहिती भरा.',
+    },
+    'survey_family_information': {
+      'en': 'Family Information',
+      'hi': 'परिवार की जानकारी',
+      'mr': 'कुटुंबाची माहिती',
+    },
+    'survey_land_farming': {
+      'en': 'Land / Farming',
+      'hi': 'भूमि / खेती',
+      'mr': 'जमीन / शेती',
+    },
+    'survey_forest_patta': {
+      'en': 'Forest Patta',
+      'hi': 'वन पट्टा',
+      'mr': 'वनपट्टा',
+    },
+    'survey_farm_boundary': {
+      'en': 'Farm Boundary',
+      'hi': 'खेत की सीमा',
+      'mr': 'शेताची सीमा',
+    },
+    'survey_main_crop': {
+      'en': 'Main Crop',
+      'hi': 'मुख्य फसल',
+      'mr': 'मुख्य पीक',
+    },
+    'survey_kharif_crops': {
+      'en': 'Kharif Crops',
+      'hi': 'खरीफ फसलें',
+      'mr': 'खरीप पिके',
+    },
+    'survey_main_crop_agronomy': {
+      'en': 'Main Crop Agronomy',
+      'hi': 'मुख्य फसल की खेती',
+      'mr': 'मुख्य पिकाची शेती',
+    },
+    'survey_other_crop_agronomy': {
+      'en': 'Other Crop Agronomy',
+      'hi': 'अन्य फसल की खेती',
+      'mr': 'इतर पिकाची शेती',
+    },
+    'survey_main_crop_three_year': {
+      'en': 'Main Crop 3-Year Production',
+      'hi': 'मुख्य फसल का 3 साल का उत्पादन',
+      'mr': 'मुख्य पिकाचे 3 वर्षांचे उत्पादन',
+    },
+    'survey_income_food_products': {
+      'en': 'Income & Food Products',
+      'hi': 'आय और खाद्य उत्पाद',
+      'mr': 'उत्पन्न आणि अन्न उत्पादने',
+    },
+    'survey_disease': {'en': 'Disease', 'hi': 'रोग', 'mr': 'रोग'},
+    'survey_farmer_name': {
+      'en': 'Farmer Name',
+      'hi': 'किसान का नाम',
+      'mr': 'शेतकऱ्याचे नाव',
+    },
+    'survey_village': {'en': 'Village', 'hi': 'गांव', 'mr': 'गाव'},
+    'survey_gram_panchayat': {
+      'en': 'Gram Panchayat',
+      'hi': 'ग्राम पंचायत',
+      'mr': 'ग्रामपंचायत',
+    },
+    'survey_taluka': {'en': 'Taluka', 'hi': 'तालुका', 'mr': 'तालुका'},
+    'survey_district': {'en': 'District', 'hi': 'जिला', 'mr': 'जिल्हा'},
+    'survey_mobile_no': {
+      'en': 'Mobile No.',
+      'hi': 'मोबाइल नंबर',
+      'mr': 'मोबाइल क्रमांक',
+    },
+    'survey_aadhaar_no': {
+      'en': 'Aadhaar No.',
+      'hi': 'आधार नंबर',
+      'mr': 'आधार क्रमांक',
+    },
+    'survey_date_of_birth': {
+      'en': 'Date of Birth',
+      'hi': 'जन्म तारीख',
+      'mr': 'जन्मतारीख',
+    },
+    'survey_education': {'en': 'Education', 'hi': 'शिक्षा', 'mr': 'शिक्षण'},
+    'survey_gender': {'en': 'Gender', 'hi': 'लिंग', 'mr': 'लिंग'},
+    'survey_category': {'en': 'Category', 'hi': 'वर्ग', 'mr': 'प्रवर्ग'},
+    'survey_income_sources': {
+      'en': 'Income sources',
+      'hi': 'आय के स्रोत',
+      'mr': 'उत्पन्नाचे स्रोत',
+    },
+    'survey_farming_type': {
+      'en': 'Farming type',
+      'hi': 'खेती का प्रकार',
+      'mr': 'शेतीचा प्रकार',
+    },
+    'survey_owns_farmland': {
+      'en': 'Owns farmland?',
+      'hi': 'क्या अपनी खेती की जमीन है?',
+      'mr': 'स्वतःची शेती जमीन आहे का?',
+    },
+    'survey_total_land_area': {
+      'en': 'Total land area',
+      'hi': 'कुल भूमि क्षेत्र',
+      'mr': 'एकूण जमीन क्षेत्र',
+    },
+    'survey_irrigated_land': {
+      'en': 'Irrigated land',
+      'hi': 'सिंचित भूमि',
+      'mr': 'बागायती जमीन',
+    },
+    'survey_dry_land': {
+      'en': 'Dry land',
+      'hi': 'सूखी भूमि',
+      'mr': 'जिरायती जमीन',
+    },
+    'survey_fallow_land': {
+      'en': 'Fallow land',
+      'hi': 'परती भूमि',
+      'mr': 'पडीक जमीन',
+    },
+    'survey_leased_land': {
+      'en': 'Leased land',
+      'hi': 'पट्टे की भूमि',
+      'mr': 'भाडेपट्ट्याची जमीन',
+    },
+    'survey_rain_based_area': {
+      'en': 'Rain-based area',
+      'hi': 'वर्षा आधारित क्षेत्र',
+      'mr': 'पावसावर आधारित क्षेत्र',
+    },
+    'survey_has_forest_patta': {
+      'en': 'Has forest patta?',
+      'hi': 'क्या वन पट्टा है?',
+      'mr': 'वनपट्टा आहे का?',
+    },
+    'survey_forest_patta_area': {
+      'en': 'Forest patta area',
+      'hi': 'वन पट्टा क्षेत्र',
+      'mr': 'वनपट्टा क्षेत्र',
+    },
+    'survey_applied_forest_patta': {
+      'en': 'Applied for forest patta?',
+      'hi': 'क्या वन पट्टे के लिए आवेदन किया है?',
+      'mr': 'वनपट्ट्यासाठी अर्ज केला आहे का?',
+    },
+    'survey_boundary_polygon_optional': {
+      'en': 'Farm Boundary Polygon (optional)',
+      'hi': 'खेत की सीमा बनाएं (वैकल्पिक)',
+      'mr': 'शेताची सीमा रेखाटा (ऐच्छिक)',
+    },
+    'survey_main_crop_label': {
+      'en': 'Main crop',
+      'hi': 'मुख्य फसल',
+      'mr': 'मुख्य पीक',
+    },
+    'survey_other_crop_name': {
+      'en': 'Other crop name',
+      'hi': 'अन्य फसल का नाम',
+      'mr': 'इतर पिकाचे नाव',
+    },
+    'survey_other_crop_details': {
+      'en': 'Other crop details',
+      'hi': 'अन्य फसल की जानकारी',
+      'mr': 'इतर पिकाची माहिती',
+    },
+    'survey_land_main_crop': {
+      'en': 'Land under main crop',
+      'hi': 'मुख्य फसल का क्षेत्र',
+      'mr': 'मुख्य पिकाखालील क्षेत्र',
+    },
+    'survey_land_other_crop': {
+      'en': 'Land under other crop',
+      'hi': 'अन्य फसल का क्षेत्र',
+      'mr': 'इतर पिकाखालील क्षेत्र',
+    },
+    'survey_kharif_crops_taken': {
+      'en': 'Crops taken in Kharif season',
+      'hi': 'खरीफ में ली गई फसलें',
+      'mr': 'खरीप हंगामात घेतलेली पिके',
+    },
+    'survey_rice_ragi_practices': {
+      'en': 'Rice/Ragi crop agronomy practices',
+      'hi': 'धान/रागी की खेती के तरीके',
+      'mr': 'भात/नाचणी शेती पद्धती',
+    },
+    'survey_bajra_other_practices': {
+      'en': 'Bajra/Other crop agronomy practices',
+      'hi': 'बाजरा/अन्य फसल की खेती के तरीके',
+      'mr': 'बाजरी/इतर पीक शेती पद्धती',
+    },
+    'survey_main_crop_three_year_label': {
+      'en': 'Main crop production for last 3 years',
+      'hi': 'पिछले 3 साल का मुख्य फसल उत्पादन',
+      'mr': 'मागील 3 वर्षांचे मुख्य पीक उत्पादन',
+    },
+    'survey_annual_agri_income': {
+      'en': 'Annual agricultural income',
+      'hi': 'सालाना कृषि आय',
+      'mr': 'वार्षिक शेती उत्पन्न',
+    },
+    'survey_non_agri_income': {
+      'en': 'Non-agricultural income',
+      'hi': 'गैर-कृषि आय',
+      'mr': 'शेतीबाहेरील उत्पन्न',
+    },
+    'survey_cultivation_cost': {
+      'en': 'Total cost of cultivation',
+      'hi': 'खेती की कुल लागत',
+      'mr': 'शेतीचा एकूण खर्च',
+    },
+    'survey_total_annual_income': {
+      'en': 'Total annual income',
+      'hi': 'कुल सालाना आय',
+      'mr': 'एकूण वार्षिक उत्पन्न',
+    },
+    'survey_makes_food_products': {
+      'en': 'Makes food products?',
+      'hi': 'क्या खाद्य उत्पाद बनाते हैं?',
+      'mr': 'अन्न उत्पादने तयार करता का?',
+    },
+    'survey_food_products_list': {
+      'en': 'Food products list',
+      'hi': 'खाद्य उत्पादों की सूची',
+      'mr': 'अन्न उत्पादनांची यादी',
+    },
+    'survey_food_training_received': {
+      'en': 'Food product training received?',
+      'hi': 'क्या खाद्य उत्पाद बनाने का प्रशिक्षण मिला है?',
+      'mr': 'अन्न उत्पादनाचे प्रशिक्षण मिळाले आहे का?',
+    },
+    'survey_food_training_source': {
+      'en': 'Food product training source',
+      'hi': 'खाद्य उत्पाद प्रशिक्षण का स्रोत',
+      'mr': 'अन्न उत्पादन प्रशिक्षणाचा स्रोत',
+    },
+    'survey_disease_observed': {
+      'en': 'Any Disease Observed?',
+      'hi': 'क्या कोई रोग दिखाई दिया?',
+      'mr': 'कोणताही रोग दिसला का?',
+    },
+    'survey_disease_name': {
+      'en': 'Disease Name',
+      'hi': 'रोग का नाम',
+      'mr': 'रोगाचे नाव',
+    },
+    'survey_affected_crop': {
+      'en': 'Affected Crop',
+      'hi': 'प्रभावित फसल',
+      'mr': 'बाधित पीक',
+    },
+    'survey_disease_severity': {
+      'en': 'Disease Severity',
+      'hi': 'रोग की गंभीरता',
+      'mr': 'रोगाची तीव्रता',
+    },
+    'survey_symptoms_observed': {
+      'en': 'Symptoms Observed',
+      'hi': 'दिखाई दिए लक्षण',
+      'mr': 'दिसलेली लक्षणे',
+    },
+    'survey_treatment_taken': {
+      'en': 'Treatment Taken',
+      'hi': 'किया गया उपचार',
+      'mr': 'केलेली उपाययोजना',
+    },
+    'option_illiterate': {'en': 'Illiterate', 'hi': 'निरक्षर', 'mr': 'निरक्षर'},
+    'option_primary': {'en': 'Primary', 'hi': 'प्राथमिक', 'mr': 'प्राथमिक'},
+    'option_secondary': {'en': 'Secondary', 'hi': 'माध्यमिक', 'mr': 'माध्यमिक'},
+    'option_graduate': {'en': 'Graduate', 'hi': 'स्नातक', 'mr': 'पदवीधर'},
+    'option_male': {'en': 'Male', 'hi': 'पुरुष', 'mr': 'पुरुष'},
+    'option_female': {'en': 'Female', 'hi': 'महिला', 'mr': 'महिला'},
+    'option_other_exact': {'en': 'Other', 'hi': 'अन्य', 'mr': 'इतर'},
+    'option_general': {'en': 'General', 'hi': 'सामान्य', 'mr': 'सर्वसाधारण'},
+    'option_farming': {'en': 'Farming', 'hi': 'खेती', 'mr': 'शेती'},
+    'option_private_job': {
+      'en': 'Private Job',
+      'hi': 'निजी नौकरी',
+      'mr': 'खाजगी नोकरी',
+    },
+    'option_government_job': {
+      'en': 'Government Job',
+      'hi': 'सरकारी नौकरी',
+      'mr': 'सरकारी नोकरी',
+    },
+    'option_business': {'en': 'Business', 'hi': 'व्यवसाय', 'mr': 'व्यवसाय'},
+    'option_rainfed': {
+      'en': 'Rainfed',
+      'hi': 'वर्षा आधारित',
+      'mr': 'पावसावर आधारित',
+    },
+    'option_irrigated': {'en': 'Irrigated', 'hi': 'सिंचित', 'mr': 'बागायती'},
+    'option_paddy_rice': {
+      'en': 'Paddy (Rice)',
+      'hi': 'धान (चावल)',
+      'mr': 'भात (तांदूळ)',
+    },
+    'option_nachani_ragi': {
+      'en': 'Nachani (Ragi)',
+      'hi': 'नाचनी (रागी)',
+      'mr': 'नाचणी (रागी)',
+    },
+    'option_mild': {'en': 'Mild', 'hi': 'हल्का', 'mr': 'सौम्य'},
+    'option_moderate': {'en': 'Moderate', 'hi': 'मध्यम', 'mr': 'मध्यम'},
+    'option_severe': {'en': 'Severe', 'hi': 'गंभीर', 'mr': 'तीव्र'},
+    'option_blast': {'en': 'Blast', 'hi': 'ब्लास्ट रोग', 'mr': 'करपा रोग'},
+    'option_brown_spot': {
+      'en': 'Brown spot',
+      'hi': 'भूरा धब्बा',
+      'mr': 'तपकिरी ठिपका',
+    },
+    'option_rust': {'en': 'Rust', 'hi': 'रतुआ', 'mr': 'तांबेरा'},
+    'option_smut': {'en': 'Smut', 'hi': 'कंडुआ', 'mr': 'काणी'},
+    'disease_rice_blast': {
+      'en': 'Rice blast',
+      'hi': 'धान ब्लास्ट रोग',
+      'mr': 'भात करपा',
+    },
+    'disease_sheath_blight': {
+      'en': 'Sheath blight',
+      'hi': 'पर्णच्छद झुलसा',
+      'mr': 'पर्णकोष करपा',
+    },
+    'disease_bacterial_leaf_blight': {
+      'en': 'Bacterial leaf blight',
+      'hi': 'जीवाणु पत्ती झुलसा',
+      'mr': 'जिवाणूजन्य पान करपा',
+    },
+    'disease_downy_mildew': {
+      'en': 'Downy mildew',
+      'hi': 'डाउनी मिल्ड्यू रोग',
+      'mr': 'केवडा रोग',
+    },
+    'disease_leaf_spot': {
+      'en': 'Leaf spot',
+      'hi': 'पत्ती धब्बा रोग',
+      'mr': 'पानांवरील ठिपके',
+    },
+    'disease_charcoal_rot': {
+      'en': 'Charcoal rot',
+      'hi': 'चारकोल सड़न',
+      'mr': 'कोळसा कुज',
+    },
+    'land_record_image_uploaded': {
+      'en': '7/12 image uploaded',
+      'hi': '7/12 फोटो अपलोड हो गया',
+      'mr': '7/12 फोटो अपलोड झाला',
+    },
+    'image_optional': {
+      'en': 'Image optional',
+      'hi': 'फोटो देना वैकल्पिक है',
+      'mr': 'फोटो देणे ऐच्छिक आहे',
+    },
+    'add_land_image_if_incomplete': {
+      'en': 'Add a 7/12 image if the fields are incomplete',
+      'hi': 'जानकारी अधूरी हो तो 7/12 फोटो जोड़ें',
+      'mr': 'माहिती अपूर्ण असल्यास 7/12 फोटो जोडा',
+    },
+    'retake_photo': {
+      'en': 'Retake photo',
+      'hi': 'फोटो फिर लें',
+      'mr': 'फोटो पुन्हा घ्या',
+    },
+    'camera': {'en': 'Camera', 'hi': 'कैमरा', 'mr': 'कॅमेरा'},
+    'replace_image': {
+      'en': 'Replace image',
+      'hi': 'फोटो बदलें',
+      'mr': 'फोटो बदला',
+    },
+    'gallery': {'en': 'Gallery', 'hi': 'गैलरी', 'mr': 'गॅलरी'},
+    'document_uploaded': {
+      'en': '{document} uploaded',
+      'hi': '{document} अपलोड हो गया',
+      'mr': '{document} अपलोड झाला',
+    },
+    'document_optional': {
+      'en': '{document} optional',
+      'hi': '{document} वैकल्पिक',
+      'mr': '{document} ऐच्छिक',
+    },
+    'image_uploaded': {
+      'en': 'Image uploaded',
+      'hi': 'फोटो अपलोड हो गया',
+      'mr': 'फोटो अपलोड झाला',
+    },
+    'not_provided': {
+      'en': 'Not provided',
+      'hi': 'जानकारी नहीं दी',
+      'mr': 'माहिती दिलेली नाही',
+    },
+    'ending_value': {
+      'en': 'Ending {value}',
+      'hi': 'अंतिम अंक {value}',
+      'mr': 'शेवटचे अंक {value}',
+    },
+    'fpc_overview': {
+      'en': 'FPC overview',
+      'hi': 'FPC की मुख्य जानकारी',
+      'mr': 'FPC ची मुख्य माहिती',
+    },
+    'farmer_verification': {
+      'en': 'Farmer verification',
+      'hi': 'किसान सत्यापन',
+      'mr': 'शेतकरी पडताळणी',
+    },
+    'scan_farmer_profile_qr': {
+      'en': 'Scan farmer profile QR',
+      'hi': 'किसान प्रोफाइल QR स्कैन करें',
+      'mr': 'शेतकरी प्रोफाइल QR स्कॅन करा',
+    },
+    'buyer_listings': {
+      'en': 'Buyer listings',
+      'hi': 'खरीदार लिस्टिंग',
+      'mr': 'खरेदीदार यादी',
+    },
+    'received_lot_ledger': {
+      'en': 'Received lot ledger',
+      'hi': 'प्राप्त लॉट बही',
+      'mr': 'स्वीकारलेले लॉट नोंदवही',
+    },
+    'counter_grading_flow': {
+      'en': 'Counter grading flow',
+      'hi': 'काउंटर ग्रेडिंग प्रक्रिया',
+      'mr': 'काउंटर ग्रेडिंग प्रक्रिया',
+    },
+    'approve_grading_jobs': {
+      'en': 'Approve grading jobs',
+      'hi': 'ग्रेडिंग काम मंजूर करें',
+      'mr': 'ग्रेडिंग कामे मंजूर करा',
+    },
+    'account_role_details': {
+      'en': 'Account and role details',
+      'hi': 'खाता और भूमिका की जानकारी',
+      'mr': 'खाते आणि भूमिकेची माहिती',
+    },
+    'workspace_preferences': {
+      'en': 'Workspace preferences',
+      'hi': 'कार्य क्षेत्र पसंद',
+      'mr': 'कार्य क्षेत्र प्राधान्ये',
+    },
+    'activity': {'en': 'Activity', 'hi': 'गतिविधि', 'mr': 'कामकाज'},
+    'operational_checklist': {
+      'en': 'Operational checklist',
+      'hi': 'कामकाज जांच सूची',
+      'mr': 'कामकाज तपासणी यादी',
+    },
+    'help': {'en': 'Help', 'hi': 'सहायता', 'mr': 'मदत'},
+    'support_and_sops': {
+      'en': 'Support and SOPs',
+      'hi': 'सहायता और कार्य विधि',
+      'mr': 'मदत आणि कार्यपद्धती',
+    },
+    'admin_overview': {
+      'en': 'Admin overview',
+      'hi': 'एडमिन मुख्य जानकारी',
+      'mr': 'अ‍ॅडमिन मुख्य माहिती',
+    },
+    'farmer_records': {
+      'en': 'Farmer records',
+      'hi': 'किसान रिकॉर्ड',
+      'mr': 'शेतकरी नोंदी',
+    },
+    'overview': {'en': 'Overview', 'hi': 'मुख्य जानकारी', 'mr': 'मुख्य माहिती'},
+    'production_review_console': {
+      'en': 'Production review console',
+      'hi': 'उत्पादन समीक्षा कार्यक्षेत्र',
+      'mr': 'उत्पादन तपासणी कार्यक्षेत्र',
+    },
+    'production_review_console_desc': {
+      'en':
+          'Review farmer, FPC and stakeholder activity, approvals, payments, documents and history.',
+      'hi':
+          'किसान, FPC और हितधारक कामकाज, मंजूरी, भुगतान, दस्तावेज़ और इतिहास जांचें।',
+      'mr':
+          'शेतकरी, FPC आणि भागधारक कामकाज, मंजुरी, पैसे, दस्तऐवज आणि इतिहास तपासा.',
+    },
+    'approval_gate_protected': {
+      'en': 'Approval gate stays protected',
+      'hi': 'मंजूरी सुरक्षा चालू रहती है',
+      'mr': 'मंजुरी सुरक्षा कायम राहते',
+    },
+    'stakeholder_payments_locked_desc': {
+      'en':
+          'Stakeholder payments remain locked until admin approval is recorded.',
+      'hi': 'एडमिन मंजूरी दर्ज होने तक हितधारक भुगतान बंद रहता है।',
+      'mr': 'अ‍ॅडमिन मंजुरी नोंद होईपर्यंत भागधारक पेमेंट बंद राहते.',
+    },
+    'review_history_visible': {
+      'en': 'Review history is visible',
+      'hi': 'समीक्षा इतिहास दिखाई देता है',
+      'mr': 'तपासणी इतिहास दिसतो',
+    },
+    'review_history_visible_desc': {
+      'en':
+          'Every stakeholder decision keeps its status, note, actor and time in the review sheet.',
+      'hi':
+          'हर हितधारक निर्णय की स्थिति, नोट, करने वाला और समय समीक्षा सूची में रहता है।',
+      'mr':
+          'प्रत्येक भागधारक निर्णयाची स्थिती, नोंद, करणारी व्यक्ती आणि वेळ तपासणी यादीत राहते.',
+    },
+    'farmer_applications_sync_records': {
+      'en': 'Farmer applications and sync records',
+      'hi': 'किसान आवेदन और जानकारी मिलान रिकॉर्ड',
+      'mr': 'शेतकरी अर्ज आणि माहिती जुळवणी नोंदी',
+    },
+    'farmer_and_linked_farm_counts': {
+      'en': '{farmers} farmer records • {farms} linked farms',
+      'hi': '{farmers} किसान रिकॉर्ड • {farms} जुड़े खेत',
+      'mr': '{farmers} शेतकरी नोंदी • {farms} जोडलेली शेतं',
+    },
+    'no_farmer_profiles_found': {
+      'en': 'No farmer profiles found',
+      'hi': 'कोई किसान प्रोफाइल नहीं मिला',
+      'mr': 'शेतकरी प्रोफाइल सापडले नाही',
+    },
+    'farmer_records_after_signup': {
+      'en': 'Farmer records will appear here after signup or sync.',
+      'hi': 'साइनअप या जानकारी मिलान के बाद किसान रिकॉर्ड यहां दिखेंगे।',
+      'mr': 'नोंदणी किंवा माहिती जुळवणीनंतर शेतकरी नोंदी येथे दिसतील.',
+    },
+    'fpc_record_count': {
+      'en': '{count} grading and procurement records',
+      'hi': '{count} ग्रेडिंग और खरीद रिकॉर्ड',
+      'mr': '{count} ग्रेडिंग आणि खरेदी नोंदी',
+    },
+    'no_fpc_records_found': {
+      'en': 'No FPC records found',
+      'hi': 'कोई FPC रिकॉर्ड नहीं मिला',
+      'mr': 'FPC नोंदी सापडल्या नाहीत',
+    },
+    'fpc_records_appear_here': {
+      'en': 'FPC grading and procurement records will appear here.',
+      'hi': 'FPC ग्रेडिंग और खरीद रिकॉर्ड यहां दिखेंगे।',
+      'mr': 'FPC ग्रेडिंग आणि खरेदी नोंदी येथे दिसतील.',
+    },
+    'stakeholder_approval_queue': {
+      'en': 'Stakeholder approval queue',
+      'hi': 'हितधारक मंजूरी सूची',
+      'mr': 'भागधारक मंजुरी यादी',
+    },
+    'stakeholder_queue_counts': {
+      'en':
+          '{submitted} submitted • {review} under review • {approved} approved • {paid} paid',
+      'hi':
+          '{submitted} जमा • {review} समीक्षा में • {approved} मंजूर • {paid} भुगतान',
+      'mr':
+          '{submitted} जमा • {review} तपासणीत • {approved} मंजूर • {paid} पेमेंट',
+    },
+    'no_stakeholder_applications_found': {
+      'en': 'No stakeholder applications found',
+      'hi': 'कोई हितधारक आवेदन नहीं मिला',
+      'mr': 'भागधारक अर्ज सापडले नाहीत',
+    },
+    'stakeholder_applications_appear_here': {
+      'en': 'Applications submitted by farmer stakeholders appear here.',
+      'hi': 'किसान हितधारकों के जमा आवेदन यहां दिखेंगे।',
+      'mr': 'शेतकरी भागधारकांनी जमा केलेले अर्ज येथे दिसतील.',
+    },
+    'application': {'en': 'Application', 'hi': 'आवेदन', 'mr': 'अर्ज'},
+    'kyc_and_land_record': {
+      'en': 'KYC and land record',
+      'hi': 'KYC और भूमि रिकॉर्ड',
+      'mr': 'KYC आणि जमीन नोंद',
+    },
+    'bank_and_nominee': {
+      'en': 'Bank and nominee',
+      'hi': 'बैंक और नामित व्यक्ति',
+      'mr': 'बँक आणि नामनिर्देशित व्यक्ती',
+    },
+    'uploaded_proof_documents': {
+      'en': 'Uploaded proof documents',
+      'hi': 'अपलोड किए प्रमाण दस्तावेज़',
+      'mr': 'अपलोड केलेले पुरावा दस्तऐवज',
+    },
+    'admin_record': {
+      'en': 'Admin record',
+      'hi': 'एडमिन रिकॉर्ड',
+      'mr': 'अ‍ॅडमिन नोंद',
+    },
+    'approve_application': {
+      'en': 'Approve application',
+      'hi': 'आवेदन मंजूर करें',
+      'mr': 'अर्ज मंजूर करा',
+    },
+    'reject_application': {
+      'en': 'Reject application',
+      'hi': 'आवेदन अस्वीकार करें',
+      'mr': 'अर्ज नाकारा',
+    },
+    'passbook': {'en': 'Passbook', 'hi': 'पासबुक', 'mr': 'पासबुक'},
+    'farmer_signature': {
+      'en': 'Farmer signature',
+      'hi': 'किसान हस्ताक्षर',
+      'mr': 'शेतकरी सही',
+    },
+    'nominee_signature': {
+      'en': 'Nominee signature',
+      'hi': 'नामित व्यक्ति हस्ताक्षर',
+      'mr': 'नामनिर्देशित व्यक्तीची सही',
+    },
+    'nominee_2_signature': {
+      'en': 'Nominee 2 signature',
+      'hi': 'दूसरे नामित व्यक्ति के हस्ताक्षर',
+      'mr': 'दुसऱ्या नामनिर्देशित व्यक्तीची सही',
+    },
+    'transfer_proof': {
+      'en': 'Transfer proof',
+      'hi': 'भुगतान प्रमाण',
+      'mr': 'पेमेंट पुरावा',
+    },
+    'map_data_sources': {
+      'en': 'Map data sources',
+      'hi': 'नक्शा जानकारी स्रोत',
+      'mr': 'नकाशा माहिती स्रोत',
+    },
+    'offline_map_saved_boundary': {
+      'en': 'Offline map\nSaved farm boundary visible',
+      'hi': 'ऑफलाइन नक्शा\nसहेजी गई खेत सीमा दिख रही है',
+      'mr': 'ऑफलाइन नकाशा\nजतन केलेली शेत सीमा दिसत आहे',
+    },
+    'locate_farm_area': {
+      'en': 'Locate farm area',
+      'hi': 'खेत की जगह दिखाएं',
+      'mr': 'शेताची जागा दाखवा',
+    },
+    'harvest_first': {
+      'en': 'Harvest first',
+      'hi': 'पहले कटाई करें',
+      'mr': 'सर्वप्रथम कापणी करा',
+    },
+    'best_section': {
+      'en': 'Best section',
+      'hi': 'सबसे अच्छा हिस्सा',
+      'mr': 'सर्वोत्तम भाग',
+    },
+    'health_score_value': {
+      'en': 'Health {value}/100',
+      'hi': 'सेहत {value}/100',
+      'mr': 'आरोग्य {value}/100',
+    },
+    'harvest_after_check': {
+      'en': 'Harvest after check',
+      'hi': 'जांच के बाद कटाई करें',
+      'mr': 'तपासणीनंतर कापणी करा',
+    },
+    'watch_weather_moisture': {
+      'en': 'Watch weather and moisture',
+      'hi': 'मौसम और नमी पर नजर रखें',
+      'mr': 'हवामान आणि ओलावा पाहा',
+    },
+    'inspect_before_harvest': {
+      'en': 'Inspect before harvest',
+      'hi': 'कटाई से पहले जांचें',
+      'mr': 'कापणीपूर्वी तपासा',
+    },
+    'disease_rain_risk_area': {
+      'en': 'Disease or rain risk area',
+      'hi': 'बीमारी या बारिश के जोखिम वाला क्षेत्र',
+      'mr': 'रोग किंवा पावसाच्या जोखमीचा भाग',
+    },
+    'a_grade_harvest': {
+      'en': 'A grade harvest',
+      'hi': 'A ग्रेड कटाई',
+      'mr': 'A ग्रेड कापणी',
+    },
+    'b_check_first': {
+      'en': 'B check first',
+      'hi': 'B पहले जांचें',
+      'mr': 'B आधी तपासा',
+    },
+    'c_inspect_delay': {
+      'en': 'C inspect/delay',
+      'hi': 'C जांचें/रोकें',
+      'mr': 'C तपासा/थांबा',
+    },
+    'crop_score_value': {
+      'en': 'Crop {value}/100',
+      'hi': 'फसल {value}/100',
+      'mr': 'पीक {value}/100',
+    },
+    'weather_value': {
+      'en': 'Weather {value}',
+      'hi': 'मौसम {value}',
+      'mr': 'हवामान {value}',
+    },
+    'disease_value': {
+      'en': 'Disease {value}',
+      'hi': 'बीमारी {value}',
+      'mr': 'रोग {value}',
+    },
+    'spots_count': {
+      'en': '{count} spots',
+      'hi': '{count} जगह',
+      'mr': '{count} ठिकाणे',
+    },
+    'save_boundary_for_harvest_zones': {
+      'en': 'Save the farm boundary to see exact A, B and C harvest zones.',
+      'hi': 'सही A, B और C कटाई क्षेत्र देखने के लिए खेत की सीमा सहेजें।',
+      'mr': 'अचूक A, B आणि C कापणी विभाग पाहण्यासाठी शेत सीमा जतन करा.',
+    },
+    'stage_risk_value': {
+      'en': '{stage} • Risk {risk}',
+      'hi': '{stage} • जोखिम {risk}',
+      'mr': '{stage} • जोखीम {risk}',
+    },
+    'farm_insights': {
+      'en': 'Farm Insights',
+      'hi': 'खेत की जानकारी',
+      'mr': 'शेत निरीक्षणे',
+    },
+    'affected_area': {
+      'en': 'Affected Area',
+      'hi': 'प्रभावित क्षेत्र',
+      'mr': 'प्रभावित क्षेत्र',
+    },
+    'hotspots': {'en': 'Hotspots', 'hi': 'जोखिम स्थान', 'mr': 'जोखीम स्थळे'},
+    'overall_risk': {
+      'en': 'Overall Risk',
+      'hi': 'कुल जोखिम',
+      'mr': 'एकूण जोखीम',
+    },
+    'field_status': {
+      'en': 'Field Status',
+      'hi': 'खेत की स्थिति',
+      'mr': 'शेताची स्थिती',
+    },
+    'no_active_spot': {
+      'en': 'No active spot',
+      'hi': 'कोई सक्रिय जगह नहीं',
+      'mr': 'सक्रिय ठिकाण नाही',
+    },
+    'take_action': {'en': 'Take action', 'hi': 'उपाय करें', 'mr': 'उपाय करा'},
+    'monitor': {'en': 'Monitor', 'hi': 'नजर रखें', 'mr': 'लक्ष ठेवा'},
+    'rain_weather': {
+      'en': 'Rain & Weather',
+      'hi': 'बारिश और मौसम',
+      'mr': 'पाऊस आणि हवामान',
+    },
+    'field_risk': {'en': 'Field Risk', 'hi': 'खेत जोखिम', 'mr': 'शेत जोखीम'},
+    'crop_condition': {
+      'en': 'Crop Condition',
+      'hi': 'फसल की स्थिति',
+      'mr': 'पिकाची स्थिती',
+    },
+    'water_need': {
+      'en': 'Water Need',
+      'hi': 'पानी की जरूरत',
+      'mr': 'पाण्याची गरज',
+    },
+    'spots_to_check': {
+      'en': '{count} spots to check',
+      'hi': '{count} जगहों की जांच करें',
+      'mr': '{count} ठिकाणे तपासा',
+    },
+    'high_risk': {'en': 'High risk', 'hi': 'अधिक जोखिम', 'mr': 'उच्च जोखीम'},
+    'medium_risk': {
+      'en': 'Medium risk',
+      'hi': 'मध्यम जोखिम',
+      'mr': 'मध्यम जोखीम',
+    },
+    'minimum_short': {'en': 'Min', 'hi': 'न्यूनतम', 'mr': 'किमान'},
+    'maximum_short': {'en': 'Max', 'hi': 'अधिकतम', 'mr': 'कमाल'},
+    'standard_deviation_short': {
+      'en': 'Std dev',
+      'hi': 'मानक विचलन',
+      'mr': 'मानक विचलन',
+    },
+    'rain_24h_value': {
+      'en': '24h rain {value} mm',
+      'hi': '24 घंटे की बारिश {value} मिमी',
+      'mr': '24 तासांचा पाऊस {value} मिमी',
+    },
+    'rain_7d_value': {
+      'en': '7d rain {value} mm',
+      'hi': '7 दिन की बारिश {value} मिमी',
+      'mr': '7 दिवसांचा पाऊस {value} मिमी',
+    },
+    'finger_millet_ragi': {
+      'en': 'Finger Millet (Ragi)',
+      'hi': 'रागी (मंडुआ)',
+      'mr': 'नाचणी (रागी)',
+    },
+    'local': {'en': 'Local', 'hi': 'स्थानीय', 'mr': 'स्थानिक'},
+    'weather_and_alerts': {
+      'en': 'Weather & Alerts',
+      'hi': 'मौसम और अलर्ट',
+      'mr': 'हवामान आणि इशारे',
+    },
+    'last_screen_label': {
+      'en': 'Last screen',
+      'hi': 'पिछली स्क्रीन',
+      'mr': 'मागील स्क्रीन',
+    },
+    'images': {'en': 'Images', 'hi': 'तस्वीरें', 'mr': 'छायाचित्रे'},
+    'paid_amount': {
+      'en': 'Paid amount',
+      'hi': 'भुगतान राशि',
+      'mr': 'भरलेली रक्कम',
+    },
+    'shareholder_record': {
+      'en': 'Shareholder record',
+      'hi': 'शेयरधारक रिकॉर्ड',
+      'mr': 'भागधारक नोंद',
+    },
+    'observation_date': {
+      'en': 'Observation Date',
+      'hi': 'निरीक्षण तिथि',
+      'mr': 'निरीक्षण दिनांक',
+    },
+    'satellite_view': {
+      'en': 'Satellite View',
+      'hi': 'उपग्रह दृश्य',
+      'mr': 'उपग्रह दृश्य',
+    },
+    'mean': {'en': 'Mean', 'hi': 'औसत', 'mr': 'सरासरी'},
+    'historical_trend': {
+      'en': 'Historical Trend',
+      'hi': 'पिछला रुझान',
+      'mr': 'मागील कल',
+    },
+    'signatures': {'en': 'Signatures', 'hi': 'हस्ताक्षर', 'mr': 'सह्या'},
+    'bank': {'en': 'Bank', 'hi': 'बैंक', 'mr': 'बँक'},
+    'declaration': {'en': 'Declaration', 'hi': 'घोषणा', 'mr': 'घोषणा'},
+    'pan_kyc_identity_verification': {
+      'en': 'PAN KYC for identity verification',
+      'hi': 'पहचान सत्यापन के लिए PAN KYC',
+      'mr': 'ओळख पडताळणीसाठी PAN KYC',
+    },
+    'pan_review_instruction': {
+      'en':
+          'Enter PAN details or upload the PAN card for Kalsubai Farms review.',
+      'hi':
+          'Kalsubai Farms की समीक्षा के लिए PAN विवरण भरें या PAN कार्ड अपलोड करें।',
+      'mr':
+          'Kalsubai Farms तपासणीसाठी PAN माहिती भरा किंवा PAN कार्ड अपलोड करा.',
+    },
+    'pan_card_details': {
+      'en': 'PAN Card Details',
+      'hi': 'PAN कार्ड विवरण',
+      'mr': 'PAN कार्ड माहिती',
+    },
+    'pan_number': {'en': 'PAN number', 'hi': 'PAN नंबर', 'mr': 'PAN क्रमांक'},
+    'pan_example': {
+      'en': 'Example: ABCDE1234F',
+      'hi': 'उदाहरण: ABCDE1234F',
+      'mr': 'उदाहरण: ABCDE1234F',
+    },
+    'pan_name_optional': {
+      'en': 'Name as per PAN optional',
+      'hi': 'PAN के अनुसार नाम वैकल्पिक',
+      'mr': 'PAN प्रमाणे नाव ऐच्छिक',
+    },
+    'pan_details_upload_optional': {
+      'en': 'PAN details accepted. Upload is optional.',
+      'hi': 'PAN विवरण स्वीकार है। अपलोड वैकल्पिक है।',
+      'mr': 'PAN माहिती स्वीकारली. अपलोड ऐच्छिक आहे.',
+    },
+    'upload_pan_card': {
+      'en': 'Upload PAN Card',
+      'hi': 'PAN कार्ड अपलोड करें',
+      'mr': 'PAN कार्ड अपलोड करा',
+    },
+    'upload_pan_document': {
+      'en': 'Upload PAN document',
+      'hi': 'PAN दस्तावेज़ अपलोड करें',
+      'mr': 'PAN दस्तऐवज अपलोड करा',
+    },
+    'enter_land_details': {
+      'en': 'Enter 7/12 land details',
+      'hi': '7/12 भूमि विवरण भरें',
+      'mr': '7/12 जमीन माहिती भरा',
+    },
+    'required_land_fields_complete': {
+      'en': 'Required 7/12 fields are complete.',
+      'hi': 'जरूरी 7/12 जानकारी पूरी है।',
+      'mr': 'आवश्यक 7/12 माहिती पूर्ण आहे.',
+    },
+    'bank_details_title': {
+      'en': 'Bank Details',
+      'hi': 'बैंक विवरण',
+      'mr': 'बँक माहिती',
+    },
+    'bank_details_secure': {
+      'en': 'Your bank details are secure',
+      'hi': 'आपके बैंक विवरण सुरक्षित हैं',
+      'mr': 'तुमची बँक माहिती सुरक्षित आहे',
+    },
+    'bank_data_use': {
+      'en': 'Used only for verification, review and future payouts.',
+      'hi': 'केवल सत्यापन, समीक्षा और भविष्य के भुगतान के लिए उपयोग होगा।',
+      'mr': 'केवळ पडताळणी, तपासणी आणि भविष्यातील पेमेंटसाठी वापरली जाईल.',
+    },
+    'bank_account_details': {
+      'en': 'Bank Account Details',
+      'hi': 'बैंक खाता विवरण',
+      'mr': 'बँक खाते माहिती',
+    },
+    'account_holder_name': {
+      'en': 'Account holder name',
+      'hi': 'खाताधारक का नाम',
+      'mr': 'खातेधारकाचे नाव',
+    },
+    'account_number': {
+      'en': 'Account number',
+      'hi': 'खाता नंबर',
+      'mr': 'खाते क्रमांक',
+    },
+    'confirm_account_number': {
+      'en': 'Confirm account number',
+      'hi': 'खाता नंबर फिर भरें',
+      'mr': 'खाते क्रमांक पुन्हा भरा',
+    },
+    'ifsc_code': {'en': 'IFSC code', 'hi': 'IFSC कोड', 'mr': 'IFSC कोड'},
+    'upi_optional': {
+      'en': 'UPI ID optional',
+      'hi': 'UPI ID वैकल्पिक',
+      'mr': 'UPI ID ऐच्छिक',
+    },
+    'bank_details_upload_optional': {
+      'en': 'Bank details accepted. Upload is optional.',
+      'hi': 'बैंक विवरण स्वीकार है। अपलोड वैकल्पिक है।',
+      'mr': 'बँक माहिती स्वीकारली. अपलोड ऐच्छिक आहे.',
+    },
+    'upload_passbook': {
+      'en': 'Upload Passbook',
+      'hi': 'पासबुक अपलोड करें',
+      'mr': 'पासबुक अपलोड करा',
+    },
+    'step_farmer_details': {
+      'en': 'Step 1: Farmer Details',
+      'hi': 'चरण 1: किसान विवरण',
+      'mr': 'टप्पा 1: शेतकरी माहिती',
+    },
+    'farmer_details_step_help': {
+      'en':
+          'Fill farmer identity, land holding and nominee details before selecting amount.',
+      'hi':
+          'राशि चुनने से पहले किसान की पहचान, भूमि और नामित व्यक्ति का विवरण भरें।',
+      'mr':
+          'रक्कम निवडण्यापूर्वी शेतकरी ओळख, जमीन आणि नामनिर्देशित व्यक्तीची माहिती भरा.',
+    },
+    'contract_same_details': {
+      'en': 'Use the same details that will appear in the contract.',
+      'hi': 'समझौते में आने वाला ही विवरण भरें।',
+      'mr': 'करारात येणारीच माहिती वापरा.',
+    },
+    'father_name': {
+      'en': 'Father name',
+      'hi': 'पिता का नाम',
+      'mr': 'वडिलांचे नाव',
+    },
+    'database_edit_correction': {
+      'en': 'Fetched from database. Edit only if correction is needed.',
+      'hi': 'डेटाबेस से मिला। सुधार जरूरी हो तभी बदलें।',
+      'mr': 'डेटाबेसमधून मिळाले. दुरुस्ती आवश्यक असेल तरच बदला.',
+    },
+    'login_edit_correction': {
+      'en': 'Fetched from login. Edit if correction is needed.',
+      'hi': 'लॉगिन से मिला। सुधार जरूरी हो तो बदलें।',
+      'mr': 'लॉगिनमधून मिळाले. दुरुस्ती आवश्यक असेल तर बदला.',
+    },
+    'full_address': {
+      'en': 'Full address',
+      'hi': 'पूरा पता',
+      'mr': 'पूर्ण पत्ता',
+    },
+    'address_post_landmark_help': {
+      'en': 'House, road, post and landmark if available.',
+      'hi': 'घर, सड़क, डाक और पहचान चिह्न, यदि उपलब्ध हो।',
+      'mr': 'घर, रस्ता, पोस्ट आणि ओळखचिन्ह, उपलब्ध असल्यास.',
+    },
+    'pincode': {'en': 'Pincode', 'hi': 'पिन कोड', 'mr': 'पिनकोड'},
+    'total_farm_land_acres': {
+      'en': 'Total farm land in acres',
+      'hi': 'कुल खेत भूमि एकड़ में',
+      'mr': 'एकूण शेतजमीन एकरमध्ये',
+    },
+    'example_2_5': {
+      'en': 'Example: 2.5',
+      'hi': 'उदाहरण: 2.5',
+      'mr': 'उदाहरण: 2.5',
+    },
+    'nominee_details': {
+      'en': 'Nominee details',
+      'hi': 'नामित व्यक्ति का विवरण',
+      'mr': 'नामनिर्देशित व्यक्तीची माहिती',
+    },
+    'nominee_selection_help': {
+      'en':
+          'Select one or two nominees and draw a signature or thumb mark for each nominee.',
+      'hi':
+          'एक या दो नामित व्यक्ति चुनें और प्रत्येक के हस्ताक्षर या अंगूठा निशान बनाएं।',
+      'mr':
+          'एक किंवा दोन नामनिर्देशित व्यक्ती निवडा आणि प्रत्येकाची सही किंवा अंगठा काढा.',
+    },
+    'nominee_1_name': {
+      'en': 'Nominee 1 full name',
+      'hi': 'नामित 1 का पूरा नाम',
+      'mr': 'नामनिर्देशित 1 चे पूर्ण नाव',
+    },
+    'nominee_1_mobile': {
+      'en': 'Nominee 1 mobile number',
+      'hi': 'नामित 1 का मोबाइल नंबर',
+      'mr': 'नामनिर्देशित 1 चा मोबाइल क्रमांक',
+    },
+    'nominee_1_address': {
+      'en': 'Nominee 1 full address',
+      'hi': 'नामित 1 का पूरा पता',
+      'mr': 'नामनिर्देशित 1 चा पूर्ण पत्ता',
+    },
+    'address_village_landmark_help': {
+      'en': 'House, road, village and landmark if available.',
+      'hi': 'घर, सड़क, गांव और पहचान चिह्न, यदि उपलब्ध हो।',
+      'mr': 'घर, रस्ता, गाव आणि ओळखचिन्ह, उपलब्ध असल्यास.',
+    },
+    'nominee_1_signature_title': {
+      'en': 'Nominee 1 signature / thumb mark',
+      'hi': 'नामित 1 हस्ताक्षर / अंगूठा निशान',
+      'mr': 'नामनिर्देशित 1 सही / अंगठा',
+    },
+    'nominee_1_signature_help': {
+      'en': 'Draw nominee 1 signature or thumb mark in the box.',
+      'hi': 'बॉक्स में नामित 1 के हस्ताक्षर या अंगूठा निशान बनाएं।',
+      'mr': 'चौकटीत नामनिर्देशित 1 ची सही किंवा अंगठा काढा.',
+    },
+    'nominee_2_name': {
+      'en': 'Nominee 2 full name',
+      'hi': 'नामित 2 का पूरा नाम',
+      'mr': 'नामनिर्देशित 2 चे पूर्ण नाव',
+    },
+    'nominee_2_mobile': {
+      'en': 'Nominee 2 mobile number',
+      'hi': 'नामित 2 का मोबाइल नंबर',
+      'mr': 'नामनिर्देशित 2 चा मोबाइल क्रमांक',
+    },
+    'nominee_2_address': {
+      'en': 'Nominee 2 full address',
+      'hi': 'नामित 2 का पूरा पता',
+      'mr': 'नामनिर्देशित 2 चा पूर्ण पत्ता',
+    },
+    'nominee_2_signature_title': {
+      'en': 'Nominee 2 signature / thumb mark',
+      'hi': 'नामित 2 हस्ताक्षर / अंगूठा निशान',
+      'mr': 'नामनिर्देशित 2 सही / अंगठा',
+    },
+    'nominee_2_signature_help': {
+      'en': 'Draw nominee 2 signature or thumb mark in the box.',
+      'hi': 'बॉक्स में नामित 2 के हस्ताक्षर या अंगूठा निशान बनाएं।',
+      'mr': 'चौकटीत नामनिर्देशित 2 ची सही किंवा अंगठा काढा.',
+    },
+    'farmer_nominee_complete': {
+      'en': 'Farmer and nominee details are complete.',
+      'hi': 'किसान और नामित व्यक्ति का विवरण पूरा है।',
+      'mr': 'शेतकरी आणि नामनिर्देशित व्यक्तीची माहिती पूर्ण आहे.',
+    },
+    'step_select_amount': {
+      'en': 'Step 2: Select Amount',
+      'hi': 'चरण 2: राशि चुनें',
+      'mr': 'टप्पा 2: रक्कम निवडा',
+    },
+    'select_amount_before_kyc': {
+      'en': 'Choose the share application amount before KYC.',
+      'hi': 'KYC से पहले शेयर आवेदन राशि चुनें।',
+      'mr': 'KYC पूर्वी भाग अर्जाची रक्कम निवडा.',
+    },
+    'step_pan_kyc': {
+      'en': 'Step 3: PAN KYC',
+      'hi': 'चरण 3: PAN KYC',
+      'mr': 'टप्पा 3: PAN KYC',
+    },
+    'pan_or_upload_proof': {
+      'en': 'Enter PAN details or upload PAN card proof.',
+      'hi': 'PAN विवरण भरें या PAN कार्ड प्रमाण अपलोड करें।',
+      'mr': 'PAN माहिती भरा किंवा PAN कार्ड पुरावा अपलोड करा.',
+    },
+    'step_land_record': {
+      'en': 'Step 4: 7/12 Land Record',
+      'hi': 'चरण 4: 7/12 भूमि रिकॉर्ड',
+      'mr': 'टप्पा 4: 7/12 जमीन नोंद',
+    },
+    'land_fields_or_image': {
+      'en':
+          'Fill the land record fields or upload a clear 7/12 land record image.',
+      'hi': 'भूमि रिकॉर्ड भरें या साफ 7/12 तस्वीर अपलोड करें।',
+      'mr': 'जमीन नोंद माहिती भरा किंवा स्पष्ट 7/12 छायाचित्र अपलोड करा.',
+    },
+    'step_bank_details': {
+      'en': 'Step 5: Bank Details',
+      'hi': 'चरण 5: बैंक विवरण',
+      'mr': 'टप्पा 5: बँक माहिती',
+    },
+    'bank_or_passbook_proof': {
+      'en':
+          'Enter bank account details or upload passbook/cancelled cheque proof.',
+      'hi': 'बैंक खाता विवरण भरें या पासबुक/रद्द चेक प्रमाण अपलोड करें।',
+      'mr': 'बँक खाते माहिती भरा किंवा पासबुक/रद्द चेक पुरावा अपलोड करा.',
+    },
+    'step_policy_contract': {
+      'en': 'Step 6: Policy Check & Contract',
+      'hi': 'चरण 6: नीति जांच और समझौता',
+      'mr': 'टप्पा 6: धोरण तपासणी आणि करार',
+    },
+    'policy_contract_help': {
+      'en':
+          'Review every policy point, check consent, draw farmer signature and submit for admin review.',
+      'hi':
+          'हर नीति बिंदु पढ़ें, सहमति दें, किसान हस्ताक्षर बनाएं और एडमिन समीक्षा के लिए जमा करें।',
+      'mr':
+          'प्रत्येक धोरण मुद्दा वाचा, संमती द्या, शेतकरी सही काढा आणि अ‍ॅडमिन तपासणीसाठी जमा करा.',
+    },
+    'nominee': {
+      'en': 'Nominee',
+      'hi': 'नामित व्यक्ति',
+      'mr': 'नामनिर्देशित व्यक्ती',
+    },
+    'bank_details_lower': {
+      'en': 'Bank details',
+      'hi': 'बैंक विवरण',
+      'mr': 'बँक माहिती',
+    },
+    'farmer_signature_thumb': {
+      'en': 'Farmer signature / thumb mark',
+      'hi': 'किसान हस्ताक्षर / अंगूठा निशान',
+      'mr': 'शेतकरी सही / अंगठा',
+    },
+    'farmer_signature_help': {
+      'en': 'Draw farmer signature or thumb mark after reading the contract.',
+      'hi': 'समझौता पढ़ने के बाद किसान हस्ताक्षर या अंगूठा निशान बनाएं।',
+      'mr': 'करार वाचल्यानंतर शेतकरी सही किंवा अंगठा काढा.',
+    },
+    'application_flow': {
+      'en': 'Application flow',
+      'hi': 'आवेदन प्रक्रिया',
+      'mr': 'अर्ज प्रक्रिया',
+    },
+    'application_flow_help': {
+      'en':
+          'Complete the steps in order. Payment starts only after admin approval.',
+      'hi': 'चरण क्रम से पूरे करें। एडमिन मंजूरी के बाद ही भुगतान शुरू होगा।',
+      'mr': 'टप्पे क्रमाने पूर्ण करा. अ‍ॅडमिन मंजुरीनंतरच पेमेंट सुरू होईल.',
+    },
+    'address': {'en': 'Address', 'hi': 'पता', 'mr': 'पत्ता'},
+    'kyc_payment_records': {
+      'en': 'KYC and payment records',
+      'hi': 'KYC और भुगतान रिकॉर्ड',
+      'mr': 'KYC आणि पेमेंट नोंदी',
+    },
+    'name_as_per_pan': {
+      'en': 'Name as per PAN',
+      'hi': 'PAN के अनुसार नाम',
+      'mr': 'PAN प्रमाणे नाव',
+    },
+    'pan_document': {
+      'en': 'PAN document',
+      'hi': 'PAN दस्तावेज़',
+      'mr': 'PAN दस्तऐवज',
+    },
+    'nominee_1_signature': {
+      'en': 'Nominee 1 signature',
+      'hi': 'नामित 1 हस्ताक्षर',
+      'mr': 'नामनिर्देशित 1 सही',
+    },
+    'account_holder': {
+      'en': 'Account holder',
+      'hi': 'खाताधारक',
+      'mr': 'खातेधारक',
+    },
+    'bank_account': {'en': 'Bank account', 'hi': 'बैंक खाता', 'mr': 'बँक खाते'},
+    'payment_method': {
+      'en': 'Payment method',
+      'hi': 'भुगतान तरीका',
+      'mr': 'पेमेंट पद्धत',
+    },
+    'payment_status': {
+      'en': 'Payment status',
+      'hi': 'भुगतान स्थिति',
+      'mr': 'पेमेंट स्थिती',
+    },
+    'transfer_reference': {
+      'en': 'Transfer reference',
+      'hi': 'हस्तांतरण संदर्भ',
+      'mr': 'हस्तांतरण संदर्भ',
+    },
+    'farmer_record': {
+      'en': 'Farmer record',
+      'hi': 'किसान रिकॉर्ड',
+      'mr': 'शेतकरी नोंद',
+    },
+    'submitted_stakeholder_details': {
+      'en': 'Submitted stakeholder details',
+      'hi': 'जमा हितधारक विवरण',
+      'mr': 'जमा भागधारक माहिती',
+    },
+    'stakeholder_details_saved': {
+      'en': 'Farmer, nominee, KYC, land and bank details saved for review.',
+      'hi':
+          'किसान, नामित व्यक्ति, KYC, भूमि और बैंक विवरण समीक्षा के लिए सहेजा गया।',
+      'mr':
+          'शेतकरी, नामनिर्देशित व्यक्ती, KYC, जमीन आणि बँक माहिती तपासणीसाठी जतन केली.',
+    },
+    'farmer_full_name': {
+      'en': 'Farmer full name',
+      'hi': 'किसान का पूरा नाम',
+      'mr': 'शेतकऱ्याचे पूर्ण नाव',
+    },
+    'mobile_and_aadhaar': {
+      'en': 'Mobile and Aadhaar',
+      'hi': 'मोबाइल और आधार',
+      'mr': 'मोबाइल आणि आधार',
+    },
+    'land_record': {
+      'en': 'Land record',
+      'hi': 'भूमि रिकॉर्ड',
+      'mr': 'जमीन नोंद',
+    },
+    'contract_signatures': {
+      'en': 'Contract signatures',
+      'hi': 'समझौता हस्ताक्षर',
+      'mr': 'करार सह्या',
+    },
+    'admin_note': {'en': 'Admin note', 'hi': 'एडमिन नोट', 'mr': 'अ‍ॅडमिन नोंद'},
+    'start_payment': {
+      'en': 'Start Payment',
+      'hi': 'भुगतान शुरू करें',
+      'mr': 'पेमेंट सुरू करा',
+    },
+    'approved_complete_payment': {
+      'en':
+          'Your application is approved. Complete payment to buy the approved shares.',
+      'hi': 'आपका आवेदन मंजूर है। मंजूर शेयर खरीदने के लिए भुगतान पूरा करें।',
+      'mr': 'तुमचा अर्ज मंजूर आहे. मंजूर भाग खरेदीसाठी पेमेंट पूर्ण करा.',
+    },
+    'farmer_record_before_allocation': {
+      'en': 'Farmer record before allocation',
+      'hi': 'आवंटन से पहले किसान रिकॉर्ड',
+      'mr': 'वाटपापूर्वीची शेतकरी नोंद',
+    },
+    'short_record_linked': {
+      'en': 'Short record linked to this application.',
+      'hi': 'इस आवेदन से जुड़ा संक्षिप्त रिकॉर्ड।',
+      'mr': 'या अर्जाशी जोडलेली थोडक्यात नोंद.',
+    },
+    'farmer_stakeholder_checklist': {
+      'en': 'Farmer stakeholder checklist',
+      'hi': 'किसान हितधारक जांच सूची',
+      'mr': 'शेतकरी भागधारक तपासणी यादी',
+    },
+    'identity': {'en': 'Identity', 'hi': 'पहचान', 'mr': 'ओळख'},
+    'farm_record': {'en': 'Farm record', 'hi': 'खेत रिकॉर्ड', 'mr': 'शेत नोंद'},
+    'payout_record': {
+      'en': 'Payout record',
+      'hi': 'भुगतान रिकॉर्ड',
+      'mr': 'पेमेंट नोंद',
+    },
+    'saved_proofs': {
+      'en': 'Saved proofs',
+      'hi': 'सहेजे प्रमाण',
+      'mr': 'जतन केलेले पुरावे',
+    },
+    'questions': {'en': 'Questions', 'hi': 'प्रश्न', 'mr': 'प्रश्न'},
+    'fields': {'en': 'Fields', 'hi': 'जानकारी', 'mr': 'माहिती'},
+    'image': {'en': 'Image', 'hi': 'तस्वीर', 'mr': 'छायाचित्र'},
+    'manual_land_extract': {
+      'en': 'Manual 7/12 extract',
+      'hi': 'मैन्युअल 7/12 उतारा',
+      'mr': 'हस्तचलित 7/12 उतारा',
+    },
+    'required_land_identity': {
+      'en': 'Required land identity',
+      'hi': 'जरूरी भूमि पहचान',
+      'mr': 'आवश्यक जमीन ओळख',
+    },
+    'manual_land_details_enough': {
+      'en': 'These details are enough when no 7/12 image is uploaded.',
+      'hi': '7/12 तस्वीर अपलोड न होने पर यह विवरण पर्याप्त है।',
+      'mr': '7/12 छायाचित्र अपलोड नसल्यास ही माहिती पुरेशी आहे.',
+    },
+    'survey_gat_number': {
+      'en': 'Survey/Gat number',
+      'hi': 'सर्वे/गट नंबर',
+      'mr': 'सर्वे/गट क्रमांक',
+    },
+    'gat_example': {
+      'en': 'Example: Gat 45/2',
+      'hi': 'उदाहरण: गट 45/2',
+      'mr': 'उदाहरण: गट 45/2',
+    },
+    'subdivision_optional': {
+      'en': 'Sub-division optional',
+      'hi': 'उप-विभाग वैकल्पिक',
+      'mr': 'हिस्सा ऐच्छिक',
+    },
+    'hissa_example': {
+      'en': 'Example: Hissa 1A',
+      'hi': 'उदाहरण: हिस्सा 1A',
+      'mr': 'उदाहरण: हिस्सा 1A',
+    },
+    'land_area': {
+      'en': 'Land area',
+      'hi': 'भूमि क्षेत्र',
+      'mr': 'जमिनीचे क्षेत्र',
+    },
+    'two_acres_example': {
+      'en': 'Example: 2 acres',
+      'hi': 'उदाहरण: 2 एकड़',
+      'mr': 'उदाहरण: 2 एकर',
+    },
+    'owner_name_land_record': {
+      'en': 'Owner name on 7/12',
+      'hi': '7/12 पर मालिक का नाम',
+      'mr': '7/12 वरील मालकाचे नाव',
+    },
+    'detailed_land_fields': {
+      'en': 'Detailed 7/12 fields',
+      'hi': 'विस्तृत 7/12 जानकारी',
+      'mr': 'सविस्तर 7/12 माहिती',
+    },
+    'land_extract_faster_review': {
+      'en': 'Fill what is visible on the extract for faster review.',
+      'hi': 'जल्द समीक्षा के लिए उतारे पर दिख रही जानकारी भरें।',
+      'mr': 'लवकर तपासणीसाठी उताऱ्यावर दिसणारी माहिती भरा.',
+    },
+    'cultivable_area_optional': {
+      'en': 'Cultivable area optional',
+      'hi': 'कृषि योग्य क्षेत्र वैकल्पिक',
+      'mr': 'लागवडीयोग्य क्षेत्र ऐच्छिक',
+    },
+    'one_seventy_five_acres_example': {
+      'en': 'Example: 1.75 acres',
+      'hi': 'उदाहरण: 1.75 एकड़',
+      'mr': 'उदाहरण: 1.75 एकर',
+    },
+    'khata_optional': {
+      'en': 'Khata number optional',
+      'hi': 'खाता नंबर वैकल्पिक',
+      'mr': 'खाते क्रमांक ऐच्छिक',
+    },
+    'crop_land_use_optional': {
+      'en': 'Crop/land use optional',
+      'hi': 'फसल/भूमि उपयोग वैकल्पिक',
+      'mr': 'पीक/जमीन वापर ऐच्छिक',
+    },
+    'irrigation_optional': {
+      'en': 'Irrigation source optional',
+      'hi': 'सिंचाई स्रोत वैकल्पिक',
+      'mr': 'सिंचन स्रोत ऐच्छिक',
+    },
+    'irrigation_example': {
+      'en': 'Example: Well, borewell, rainfed',
+      'hi': 'उदाहरण: कुआं, बोरवेल, वर्षा आधारित',
+      'mr': 'उदाहरण: विहीर, बोअरवेल, जिरायत',
+    },
+    'mutation_optional': {
+      'en': 'Mutation/Ferfar entry optional',
+      'hi': 'नामांतरण/फेरफार प्रविष्टि वैकल्पिक',
+      'mr': 'फेरफार नोंद ऐच्छिक',
+    },
+    'land_revenue_optional': {
+      'en': 'Land revenue optional',
+      'hi': 'भू-राजस्व वैकल्पिक',
+      'mr': 'जमीन महसूल ऐच्छिक',
+    },
+    'revenue_example': {
+      'en': 'Example: Rs 12.50',
+      'hi': 'उदाहरण: रु 12.50',
+      'mr': 'उदाहरण: रु 12.50',
+    },
+    'other_rights_optional': {
+      'en': 'Other rights/loan charge optional',
+      'hi': 'अन्य अधिकार/ऋण भार वैकल्पिक',
+      'mr': 'इतर हक्क/कर्ज बोजा ऐच्छिक',
+    },
+    'application_interest_only': {
+      'en': 'Application is interest only',
+      'hi': 'आवेदन केवल रुचि दर्ज करता है',
+      'mr': 'अर्ज केवळ इच्छा नोंदवतो',
+    },
+    'interest_not_allocation': {
+      'en':
+          'This form records interest for farmer stakeholder shares. It is not a confirmed allocation.',
+      'hi':
+          'यह फॉर्म किसान हितधारक शेयर में रुचि दर्ज करता है। यह पक्का आवंटन नहीं है।',
+      'mr':
+          'हा फॉर्म शेतकरी भागधारक भागांतील इच्छा नोंदवतो. हे निश्चित वाटप नाही.',
+    },
+    'admin_review_required': {
+      'en': 'Admin review is required',
+      'hi': 'एडमिन समीक्षा जरूरी है',
+      'mr': 'अ‍ॅडमिन तपासणी आवश्यक आहे',
+    },
+    'admin_reviews_stakeholder_details': {
+      'en':
+          'Kalsubai Farms will review farmer identity, land record, PAN, bank and nominee details before approval.',
+      'hi':
+          'Kalsubai Farms मंजूरी से पहले किसान पहचान, भूमि रिकॉर्ड, PAN, बैंक और नामित व्यक्ति की जांच करेगा।',
+      'mr':
+          'Kalsubai Farms मंजुरीपूर्वी शेतकरी ओळख, जमीन नोंद, PAN, बँक आणि नामनिर्देशित व्यक्तीची माहिती तपासेल.',
+    },
+    'no_guaranteed_return': {
+      'en': 'No guaranteed return',
+      'hi': 'कोई गारंटीकृत रिटर्न नहीं',
+      'mr': 'कोणताही हमीचा परतावा नाही',
+    },
+    'payment_no_return_guarantee': {
+      'en':
+          'Payment starts only after admin approval. No return, buyback, dividend or profit is guaranteed.',
+      'hi':
+          'एडमिन मंजूरी के बाद ही भुगतान शुरू होगा। रिटर्न, बायबैक, लाभांश या लाभ की गारंटी नहीं है।',
+      'mr':
+          'अ‍ॅडमिन मंजुरीनंतरच पेमेंट सुरू होईल. परतावा, बायबॅक, लाभांश किंवा नफ्याची हमी नाही.',
+    },
+    'data_signature_consent': {
+      'en': 'Data use and signature consent',
+      'hi': 'डेटा उपयोग और हस्ताक्षर सहमति',
+      'mr': 'माहिती वापर आणि सही संमती',
+    },
+    'stakeholder_data_use': {
+      'en':
+          'Submitted farmer, KYC, bank and nominee details are used only for stakeholder review, compliance and records.',
+      'hi':
+          'जमा किसान, KYC, बैंक और नामित व्यक्ति विवरण केवल हितधारक समीक्षा, अनुपालन और रिकॉर्ड के लिए उपयोग होता है।',
+      'mr':
+          'जमा शेतकरी, KYC, बँक आणि नामनिर्देशित व्यक्तीची माहिती केवळ भागधारक तपासणी, अनुपालन आणि नोंदींसाठी वापरली जाते.',
+    },
+    'offline_boundary_preview': {
+      'en': 'Offline boundary preview',
+      'hi': 'ऑफलाइन सीमा पूर्वावलोकन',
+      'mr': 'ऑफलाइन सीमा पूर्वदृश्य',
+    },
+    'grading': {'en': 'Grading', 'hi': 'ग्रेडिंग', 'mr': 'ग्रेडिंग'},
+    'workspace': {
+      'en': 'Workspace',
+      'hi': 'कार्य क्षेत्र',
+      'mr': 'कार्यक्षेत्र',
+    },
+    'fpc': {'en': 'FPC', 'hi': 'FPC', 'mr': 'FPC'},
+    'below_threshold': {
+      'en': 'Below threshold',
+      'hi': 'सीमा से नीचे',
+      'mr': 'मर्यादेपेक्षा कमी',
+    },
+    'linked_farms': {
+      'en': 'Linked farms',
+      'hi': 'जुड़े खेत',
+      'mr': 'जोडलेली शेते',
+    },
+    'latest_activity': {
+      'en': 'Latest activity',
+      'hi': 'नवीनतम गतिविधि',
+      'mr': 'ताजी क्रिया',
+    },
+    'workflow': {'en': 'Workflow', 'hi': 'कार्यप्रवाह', 'mr': 'कार्यप्रवाह'},
+    'value': {'en': 'Value', 'hi': 'मान', 'mr': 'मूल्य'},
+    'record_id': {'en': 'Record ID', 'hi': 'रिकॉर्ड ID', 'mr': 'नोंद ID'},
+    'amount_shares': {
+      'en': 'Amount / shares',
+      'hi': 'राशि / शेयर',
+      'mr': 'रक्कम / भाग',
+    },
+    'payment': {'en': 'Payment', 'hi': 'भुगतान', 'mr': 'पेमेंट'},
+    'latest_update': {
+      'en': 'Latest update',
+      'hi': 'नवीनतम अपडेट',
+      'mr': 'ताजे अपडेट',
+    },
+    'proofs': {'en': 'Proofs', 'hi': 'प्रमाण', 'mr': 'पुरावे'},
+    'application_id': {
+      'en': 'Application ID',
+      'hi': 'आवेदन ID',
+      'mr': 'अर्ज ID',
+    },
+    'submitted': {'en': 'Submitted', 'hi': 'जमा', 'mr': 'जमा'},
+    'reviewed': {'en': 'Reviewed', 'hi': 'समीक्षित', 'mr': 'तपासले'},
+    'father': {'en': 'Father', 'hi': 'पिता', 'mr': 'वडील'},
+    'land_acres': {'en': 'Land acres', 'hi': 'भूमि एकड़', 'mr': 'जमीन एकर'},
+    'pan_source': {'en': 'PAN source', 'hi': 'PAN स्रोत', 'mr': 'PAN स्रोत'},
+    'bank_source': {'en': 'Bank source', 'hi': 'बैंक स्रोत', 'mr': 'बँक स्रोत'},
+    'transfer_ref': {
+      'en': 'Transfer ref',
+      'hi': 'हस्तांतरण संदर्भ',
+      'mr': 'हस्तांतरण संदर्भ',
+    },
+    'paid': {'en': 'Paid', 'hi': 'भुगतान हुआ', 'mr': 'पेमेंट झाले'},
+    'all': {'en': 'All', 'hi': 'सभी', 'mr': 'सर्व'},
+    'step_size': {'en': 'Step size', 'hi': 'चरण अंतर', 'mr': 'टप्पा अंतर'},
+    'share_unit': {'en': 'Share unit', 'hi': 'शेयर इकाई', 'mr': 'भाग एकक'},
+    'application_amount': {
+      'en': 'Application amount',
+      'hi': 'आवेदन राशि',
+      'mr': 'अर्ज रक्कम',
+    },
+    'shares': {'en': 'Shares', 'hi': 'शेयर', 'mr': 'भाग'},
+    'shareholder_status': {
+      'en': 'Shareholder status',
+      'hi': 'शेयरधारक स्थिति',
+      'mr': 'भागधारक स्थिती',
+    },
+    'approved_amount': {
+      'en': 'Approved amount',
+      'hi': 'मंजूर राशि',
+      'mr': 'मंजूर रक्कम',
+    },
+    'shares_to_buy': {
+      'en': 'Shares to buy',
+      'hi': 'खरीदने वाले शेयर',
+      'mr': 'खरेदीचे भाग',
+    },
+    'draft_restored': {
+      'en': 'Draft restored',
+      'hi': 'ड्राफ़्ट फिर मिला',
+      'mr': 'मसुदा पुनर्संचयित',
+    },
+    'previous_progress_restored': {
+      'en': 'Your previous progress has been restored.',
+      'hi': 'आपकी पिछली प्रगति फिर मिल गई।',
+      'mr': 'तुमची मागील प्रगती पुनर्संचयित झाली.',
+    },
+    'loading_ellipsis': {
+      'en': 'Loading...',
+      'hi': 'लोड हो रहा है...',
+      'mr': 'लोड होत आहे...',
+    },
+    'no_form_configuration': {
+      'en': 'No form configuration found.',
+      'hi': 'कोई फॉर्म कॉन्फ़िगरेशन नहीं मिला।',
+      'mr': 'फॉर्म कॉन्फिगरेशन सापडले नाही.',
+    },
+    'edit_survey': {
+      'en': 'Edit Survey',
+      'hi': 'सर्वे संपादित करें',
+      'mr': 'सर्वेक्षण संपादित करा',
+    },
+    'step': {'en': 'Step', 'hi': 'चरण', 'mr': 'टप्पा'},
+    'of': {'en': 'of', 'hi': 'में से', 'mr': 'पैकी'},
+    'submitting_ellipsis': {
+      'en': 'Submitting...',
+      'hi': 'जमा हो रहा है...',
+      'mr': 'जमा होत आहे...',
+    },
+    'next': {'en': 'Next', 'hi': 'अगला', 'mr': 'पुढे'},
+    'add_another_crop': {
+      'en': 'Add another crop',
+      'hi': 'एक और फसल जोड़ें',
+      'mr': 'आणखी एक पीक जोडा',
+    },
+    'crop_name': {'en': 'Crop name', 'hi': 'फसल का नाम', 'mr': 'पिकाचे नाव'},
+    'location_and_training': {
+      'en': 'Location and training',
+      'hi': 'स्थान और प्रशिक्षण',
+      'mr': 'स्थळ आणि प्रशिक्षण',
+    },
+    'seed_land_preparation': {
+      'en': 'Seed and land preparation',
+      'hi': 'बीज और भूमि तैयारी',
+      'mr': 'बियाणे आणि जमीन तयारी',
+    },
+    'transplanting_crop_care': {
+      'en': 'Transplanting and crop care',
+      'hi': 'रोपाई और फसल देखभाल',
+      'mr': 'रोपांतर आणि पीक काळजी',
+    },
+    'pest_growth_harvest': {
+      'en': 'Pest, growth, harvest',
+      'hi': 'कीट, वृद्धि, कटाई',
+      'mr': 'कीड, वाढ, कापणी',
+    },
+    'select_one_or_more': {
+      'en': 'Select one or more',
+      'hi': 'एक या अधिक चुनें',
+      'mr': 'एक किंवा अधिक निवडा',
     },
   };
 }

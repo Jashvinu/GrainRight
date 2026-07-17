@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import '../../utils/pii_masking.dart';
 
@@ -31,9 +32,9 @@ class SummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Review and submit',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            Text(
+              UiStrings.t('review_and_submit'),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
             ),
             const SizedBox(height: 12),
             for (final entry in entries)
@@ -53,7 +54,7 @@ class SummaryCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.check_rounded),
-                label: const Text('Submit'),
+                label: Text(UiStrings.t('submit')),
               ),
             ),
           ],
