@@ -1,7 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
-import { normalizePhone, phoneVariants } from "../_shared/farmer-links.ts";
+import {
+  normalizePhone,
+  optionalSchemaError,
+  phoneVariants,
+} from "../_shared/farmer-links.ts";
+
+const farmerIdentitySelect =
+  "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path";
+const farmerIdentityLegacySelect =
+  "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path";
 
 function createServiceClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -23,6 +32,7 @@ function rowToProfile(row: Record<string, unknown>) {
     farmerName,
     defaultLocation,
     agriRecordId: String(row.agri_record_id ?? ""),
+    aadhaarNumber: String(row.aadhaar_number ?? ""),
     aadhaarMasked: String(row.aadhaar_masked ?? ""),
     aadhaarLast4: String(row.aadhaar_last4 ?? ""),
     identityDocumentPath: String(row.identity_document_path ?? ""),
@@ -32,6 +42,52 @@ function rowToProfile(row: Record<string, unknown>) {
       farmerName.trim().length > 0,
     lots: [],
   };
+}
+
+function missingAadhaarNumberColumn(error: unknown): boolean {
+  return optionalSchemaError(error) &&
+    String(
+      (error as { code?: unknown; message?: unknown; details?: unknown })
+        ?.code ??
+        (error as { message?: unknown })?.message ??
+        (error as { details?: unknown })?.details ??
+        error ??
+        "",
+    ).toLowerCase().includes("aadhaar_number");
+}
+
+async function selectFarmerRows(
+  supabase: any,
+  table: string,
+  phoneValues: string[],
+  orderByProfileCompleted = false,
+) {
+  let query = supabase
+    .from(table)
+    .select(farmerIdentitySelect)
+    .in("phone", phoneValues);
+  if (orderByProfileCompleted) {
+    query = query.order("profile_completed_at", {
+      ascending: false,
+      nullsFirst: false,
+    });
+  }
+  const result = await query;
+  if (!result.error || !missingAadhaarNumberColumn(result.error)) {
+    return result;
+  }
+
+  let fallbackQuery = supabase
+    .from(table)
+    .select(farmerIdentityLegacySelect)
+    .in("phone", phoneValues);
+  if (orderByProfileCompleted) {
+    fallbackQuery = fallbackQuery.order("profile_completed_at", {
+      ascending: false,
+      nullsFirst: false,
+    });
+  }
+  return await fallbackQuery;
 }
 
 function hasStakeholderAgriRecord(profile: ReturnType<typeof rowToProfile>) {
@@ -76,12 +132,11 @@ Deno.serve(async (req) => {
 
     const supabase = createServiceClient();
     const phoneValues = phoneVariants(phone);
-    const { data: registryRows, error: registryError } = await supabase
-      .from("farmer_phone_registry")
-      .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
-      )
-      .in("phone", phoneValues);
+    const { data: registryRows, error: registryError } = await selectFarmerRows(
+      supabase,
+      "farmer_phone_registry",
+      phoneValues,
+    );
 
     if (registryError) throw registryError;
     const registry = Array.isArray(registryRows)
@@ -126,13 +181,12 @@ Deno.serve(async (req) => {
 
     // Backward-compatible fallback for projects that already seeded
     // farmer_phone_profiles before the dedicated registry table existed.
-    const { data: profileRows, error: profileError } = await supabase
-      .from("farmer_phone_profiles")
-      .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, profile_completed_at, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
-      )
-      .in("phone", phoneValues)
-      .order("profile_completed_at", { ascending: false, nullsFirst: false });
+    const { data: profileRows, error: profileError } = await selectFarmerRows(
+      supabase,
+      "farmer_phone_profiles",
+      phoneValues,
+      true,
+    );
 
     if (profileError) throw profileError;
     const profiles = Array.isArray(profileRows)

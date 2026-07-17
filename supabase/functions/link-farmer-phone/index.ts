@@ -3,11 +3,21 @@ import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
 import {
   normalizePhone,
+  optionalSchemaError,
   phoneVariants,
   pruneDuplicateActiveFarmerProfiles,
   requireUserId,
   text,
 } from "../_shared/farmer-links.ts";
+
+const linkedFarmerSelect =
+  "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at";
+const linkedFarmerLegacySelect =
+  "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at";
+const linkedProfileSelect =
+  "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path";
+const linkedProfileLegacySelect =
+  "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path";
 
 function createServiceClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -16,6 +26,61 @@ function createServiceClient() {
     throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   }
   return createClient(url, key);
+}
+
+function missingAadhaarNumberColumn(error: unknown): boolean {
+  return optionalSchemaError(error) &&
+    String(
+      (error as { code?: unknown; message?: unknown; details?: unknown })
+        ?.code ??
+        (error as { message?: unknown })?.message ??
+        (error as { details?: unknown })?.details ??
+        error ??
+        "",
+    ).toLowerCase().includes("aadhaar_number");
+}
+
+function withoutAadhaarNumber(row: Record<string, unknown>) {
+  const copy = { ...row };
+  delete copy.aadhaar_number;
+  return copy;
+}
+
+async function selectLinkedFarmerRows(
+  supabase: any,
+  table: string,
+  phoneValues: string[],
+) {
+  const result = await supabase
+    .from(table)
+    .select(linkedFarmerSelect)
+    .in("phone", phoneValues);
+  if (!result.error || !missingAadhaarNumberColumn(result.error)) {
+    return result;
+  }
+  return await supabase
+    .from(table)
+    .select(linkedFarmerLegacySelect)
+    .in("phone", phoneValues);
+}
+
+async function upsertLinkedProfile(
+  supabase: any,
+  row: Record<string, unknown>,
+) {
+  const result = await supabase
+    .from("farmer_phone_profiles")
+    .upsert(row, { onConflict: "user_id" })
+    .select(linkedProfileSelect)
+    .maybeSingle();
+  if (!result.error || !missingAadhaarNumberColumn(result.error)) {
+    return result;
+  }
+  return await supabase
+    .from("farmer_phone_profiles")
+    .upsert(withoutAadhaarNumber(row), { onConflict: "user_id" })
+    .select(linkedProfileLegacySelect)
+    .maybeSingle();
 }
 
 Deno.serve(async (req) => {
@@ -60,12 +125,12 @@ Deno.serve(async (req) => {
     if (userId instanceof Response) return userId;
 
     const phoneValues = phoneVariants(phone);
-    const { data: registryRows, error: registryError } = await supabase
-      .from("farmer_phone_registry")
-      .select(
-        "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at",
-      )
-      .in("phone", phoneValues);
+    const { data: registryRows, error: registryError } =
+      await selectLinkedFarmerRows(
+        supabase,
+        "farmer_phone_registry",
+        phoneValues,
+      );
 
     if (registryError) throw registryError;
     const registry = Array.isArray(registryRows)
@@ -89,12 +154,12 @@ Deno.serve(async (req) => {
 
     let verifiedProfile = activeRegistry;
     if (!verifiedProfile) {
-      const { data: profileRows, error: profileLookupError } = await supabase
-        .from("farmer_phone_profiles")
-        .select(
-          "phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, identity_document_bucket, identity_ocr_confidence, identity_source, identity_verified_at",
-        )
-        .in("phone", phoneValues);
+      const { data: profileRows, error: profileLookupError } =
+        await selectLinkedFarmerRows(
+          supabase,
+          "farmer_phone_profiles",
+          phoneValues,
+        );
 
       if (profileLookupError) throw profileLookupError;
       const normalizedProfileRows =
@@ -139,6 +204,7 @@ Deno.serve(async (req) => {
       preferred_language: text(verifiedProfile.preferred_language) ||
         preferredLanguage,
       agri_record_id: text(verifiedProfile.agri_record_id),
+      aadhaar_number: text(verifiedProfile.aadhaar_number),
       aadhaar_masked: text(verifiedProfile.aadhaar_masked),
       aadhaar_last4: text(verifiedProfile.aadhaar_last4),
       identity_document_bucket:
@@ -155,13 +221,10 @@ Deno.serve(async (req) => {
       updated_at: now,
     };
 
-    const { data: profile, error: profileError } = await supabase
-      .from("farmer_phone_profiles")
-      .upsert(linkedProfile, { onConflict: "user_id" })
-      .select(
-        "user_id, phone, farmer_id, farmer_name, default_location, preferred_language, status, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path",
-      )
-      .maybeSingle();
+    const { data: profile, error: profileError } = await upsertLinkedProfile(
+      supabase,
+      linkedProfile,
+    );
 
     if (profileError) throw profileError;
 

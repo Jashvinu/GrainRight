@@ -28,6 +28,74 @@ export function bearerToken(req: Request): string {
   return header.replace(/^Bearer\s+/i, "").trim();
 }
 
+function metadataRoles(metadata: unknown): string[] {
+  if (!metadata || typeof metadata !== "object") return [];
+  const source = metadata as Record<string, unknown>;
+  const result: string[] = [];
+  const role = text(source.role).toLowerCase();
+  if (role.length > 0) result.push(role);
+
+  const roles = source.roles;
+  if (Array.isArray(roles)) {
+    result.push(
+      ...roles
+        .map((value) => text(value).toLowerCase())
+        .filter((value) => value.length > 0),
+    );
+  } else if (typeof roles === "string") {
+    result.push(
+      ...roles
+        .split(",")
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0),
+    );
+  }
+  return result;
+}
+
+function jwtPayload(token: string): Record<string, unknown> {
+  try {
+    const payload = token.split(".")[1] ?? "";
+    if (payload.length === 0) return {};
+    const padded = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch (_) {
+    return {};
+  }
+}
+
+export function hasServerRole(
+  user: any,
+  allowedRoles: string[],
+  accessToken = "",
+): boolean {
+  const allowed = new Set(
+    allowedRoles.map((role) => text(role).toLowerCase())
+      .filter((role) => role.length > 0),
+  );
+  const tokenClaims = accessToken.length > 0 ? jwtPayload(accessToken) : {};
+  const metadataCandidates = [
+    user?.app_metadata,
+    user?.appMetadata,
+    user?.raw_app_meta_data,
+    user?.rawAppMetaData,
+    tokenClaims.app_metadata,
+    tokenClaims.appMetadata,
+    tokenClaims.raw_app_meta_data,
+    tokenClaims.rawAppMetaData,
+  ];
+
+  for (const metadata of metadataCandidates) {
+    if (metadataRoles(metadata).some((role) => allowed.has(role))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function requireUserId(
   supabase: any,
   req: Request,
@@ -67,7 +135,11 @@ export function optionalSchemaError(error: unknown): boolean {
   return raw.includes("column") ||
     raw.includes("schema cache") ||
     raw.includes("pgrst204") ||
-    raw.includes("42703");
+    raw.includes("pgrst205") ||
+    raw.includes("42703") ||
+    raw.includes("42p01") ||
+    raw.includes("could not find the table") ||
+    raw.includes("relation") && raw.includes("does not exist");
 }
 
 function rows(data: unknown): Array<Record<string, unknown>> {
