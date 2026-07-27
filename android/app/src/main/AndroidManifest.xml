@@ -11,6 +11,7 @@
     <application
         android:label="${appLabel}"
         android:icon="@mipmap/ic_launcher"
+        android:enableOnBackInvokedCallback="true"
         android:resizeableActivity="true">
         <activity
             android:name="kalsubai.wrkfarm.MainActivity"

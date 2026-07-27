@@ -14,18 +14,24 @@ import 'services/local_notification_service.dart';
 import 'app.dart';
 
 void main() {
-  runZonedGuarded(() async {
+  runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
     _installGlobalErrorHandlers();
-
-    final bootstrap = await _bootstrapProductionApp();
-    if (bootstrap.supabaseReady) {
-      runApp(KalsubaiFarmsApp(initialLocale: bootstrap.locale));
-      _deferWorkmanagerBootstrap();
-    } else {
-      runApp(_StartupRecoveryApp(initialLocale: bootstrap.locale));
-    }
+    runApp(const _StartupLoadingApp());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_completeProductionBootstrap());
+    });
   }, _reportUncaughtError);
+}
+
+Future<void> _completeProductionBootstrap() async {
+  final bootstrap = await _bootstrapProductionApp();
+  if (bootstrap.supabaseReady) {
+    runApp(KalsubaiFarmsApp(initialLocale: bootstrap.locale));
+    _deferPlatformServicesBootstrap();
+  } else {
+    runApp(_StartupRecoveryApp(initialLocale: bootstrap.locale));
+  }
 }
 
 void _installGlobalErrorHandlers() {
@@ -52,16 +58,11 @@ void _reportUncaughtError(Object error, StackTrace? stack) {
 Future<_BootstrapResult> _bootstrapProductionApp() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await initializeDateFormatting();
+  final dateFormattingFuture = _initializeDateFormattingSafely();
+  final localeFuture = _loadInitialLocale();
 
   try {
     await RuntimeConfig.initialize();
-  } catch (error, stack) {
-    _reportUncaughtError(error, stack);
-  }
-
-  try {
-    await LocalNotificationService.instance.initialize();
   } catch (error, stack) {
     _reportUncaughtError(error, stack);
   }
@@ -77,25 +78,44 @@ Future<_BootstrapResult> _bootstrapProductionApp() async {
     _reportUncaughtError(error, stack);
   }
 
-  var language = 'en';
+  await dateFormattingFuture;
+  final locale = await localeFuture;
+
+  return _BootstrapResult(locale: locale, supabaseReady: supabaseReady);
+}
+
+Future<void> _initializeDateFormattingSafely() async {
   try {
-    final prefs = await SharedPreferences.getInstance();
-    language = prefs.getString('app_language') ?? 'en';
+    await initializeDateFormatting();
   } catch (error, stack) {
     _reportUncaughtError(error, stack);
   }
-
-  return _BootstrapResult(
-    locale: Locale(language),
-    supabaseReady: supabaseReady,
-  );
 }
 
-void _deferWorkmanagerBootstrap() {
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+Future<Locale> _loadInitialLocale() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    return Locale(prefs.getString('app_language') ?? 'en');
+  } catch (error, stack) {
+    _reportUncaughtError(error, stack);
+    return const Locale('en');
+  }
+}
+
+void _deferPlatformServicesBootstrap() {
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_initializeWorkmanager());
+    unawaited(_initializeDeferredPlatformServices());
   });
+}
+
+Future<void> _initializeDeferredPlatformServices() async {
+  try {
+    await LocalNotificationService.instance.initialize();
+  } catch (error, stack) {
+    _reportUncaughtError(error, stack);
+  }
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  await _initializeWorkmanager();
 }
 
 Future<void> _initializeWorkmanager() async {
@@ -111,6 +131,45 @@ class _BootstrapResult {
   final bool supabaseReady;
 
   const _BootstrapResult({required this.locale, required this.supabaseReady});
+}
+
+class _StartupLoadingApp extends StatelessWidget {
+  const _StartupLoadingApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFFFAF7F0),
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Kalsubai Farms',
+                  style: TextStyle(
+                    color: Color(0xFF0B5D2A),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(height: 20),
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: Color(0xFF0B5D2A),
+                  ),                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StartupRecoveryApp extends StatelessWidget {
@@ -160,7 +219,8 @@ class _StartupRecoveryApp extends StatelessWidget {
 String _startupRecoveryMessage(String languageCode) {
   return switch (languageCode) {
     'hi' => 'ऐप अभी पूरी तरह शुरू नहीं हो सका। इंटरनेट जांचें और ऐप फिर खोलें।',
-    'mr' => 'अ‍ॅप सध्या पूर्णपणे सुरू झाले नाही. इंटरनेट तपासा आणि अ‍ॅप पुन्हा उघडा.',
+    'mr' =>
+      'अ‍ॅप सध्या पूर्णपणे सुरू झाले नाही. इंटरनेट तपासा आणि अ‍ॅप पुन्हा उघडा.',
     _ =>
       'The app could not start fully right now. Check your internet connection and open it again.',
   };

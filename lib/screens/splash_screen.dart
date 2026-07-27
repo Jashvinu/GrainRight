@@ -16,6 +16,7 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
+  static const _minimumIntroDuration = Duration(milliseconds: 450);
   late final AnimationController _controller;
   late final Animation<double> _fade;
   late final Animation<Offset> _rise;
@@ -25,7 +26,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 480),
     );
     _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
     _rise = Tween<Offset>(
@@ -45,10 +46,19 @@ class _SplashScreenState extends State<SplashScreen>
     final serverRole = '${user?.appMetadata['role'] ?? ''}'
         .trim()
         .toLowerCase();
-    final userRole = '${user?.userMetadata?['role'] ?? ''}'
-        .trim()
-        .toLowerCase();
-    final role = serverRole.isNotEmpty ? serverRole : userRole;
+    final role = serverRole;
+    const fpcRoles = {
+      'fpc',
+      'fpo',
+      'fpo_fpc',
+      'fpo/fpc',
+      'fpc_admin',
+      'field_officer',
+    };
+    final isFpcSession = fpcRoles.contains(role);
+    final fpcRoute = authenticated && isFpcSession
+        ? await auth.resolveFpcLoginRoute(user)
+        : null;
     final isFarmerSession =
         auth.verifiedFarmer.value != null ||
         role == 'farmer' ||
@@ -59,7 +69,7 @@ class _SplashScreenState extends State<SplashScreen>
     }
 
     final elapsed = DateTime.now().difference(start).inMilliseconds;
-    final remaining = 1450 - elapsed;
+    final remaining = _minimumIntroDuration.inMilliseconds - elapsed;
     if (remaining > 0) {
       await Future<void>.delayed(Duration(milliseconds: remaining));
     }
@@ -71,8 +81,12 @@ class _SplashScreenState extends State<SplashScreen>
         Get.offAllNamed('/farmer');
       } else if (serverRole == 'admin') {
         Get.offAllNamed('/admin');
-      } else if ({'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)) {
-        Get.offAllNamed('/fpo');
+      } else if (isFpcSession) {
+        if (fpcRoute == null) {
+          await auth.logout();
+          return;
+        }
+        Get.offAllNamed(fpcRoute);
       } else {
         Get.offAllNamed('/home');
       }
@@ -96,7 +110,7 @@ class _SplashScreenState extends State<SplashScreen>
         .round();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFE7F0E2),
+      backgroundColor: AppTheme.surface,
       body: SafeArea(
         child: Center(
           child: FadeTransition(
@@ -138,7 +152,7 @@ class _LoadingTrack extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 1250),
+      duration: const Duration(milliseconds: 420),
       curve: Curves.easeOutCubic,
       builder: (context, value, _) {
         return SizedBox(

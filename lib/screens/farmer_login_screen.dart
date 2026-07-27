@@ -1311,31 +1311,38 @@ class _SecureStrip extends StatelessWidget {
     return Row(
       children: [
         const Expanded(child: Divider(color: Color(0xFFD1D5DB))),
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-            border: Border.all(color: const Color(0xFFE1E8DE)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.shield_outlined,
-                color: AppTheme.green,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                UiStrings.t('secure_private'),
-                style: const TextStyle(
+        Flexible(
+          flex: 8,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              border: Border.all(color: const Color(0xFFE1E8DE)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.shield_outlined,
                   color: AppTheme.green,
-                  fontWeight: FontWeight.w800,
+                  size: 20,
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    UiStrings.t('secure_private'),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppTheme.green,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const Expanded(child: Divider(color: Color(0xFFD1D5DB))),

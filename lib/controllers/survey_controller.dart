@@ -25,6 +25,7 @@ class SurveyController extends GetxController {
   final hasError = false.obs;
   final errorMessage = ''.obs;
   final deletingSurveyIds = <String>{}.obs;
+  Future<void>? _pendingSurveySync;
 
   @override
   void onInit() {
@@ -94,17 +95,29 @@ class SurveyController extends GetxController {
     }
   }
 
-  Future<void> syncPendingSurveys() async {
-    if (isSyncingPending.value) return;
+  Future<void> syncPendingSurveys() {
+    final activeSync = _pendingSurveySync;
+    if (activeSync != null) return activeSync;
+
+    final sync = _syncPendingSurveysOnce();
+    _pendingSurveySync = sync;
+    return sync.whenComplete(() {
+      if (identical(_pendingSurveySync, sync)) {
+        _pendingSurveySync = null;
+      }
+    });
+  }
+
+  Future<void> _syncPendingSurveysOnce() async {
     if (Supabase.instance.client.auth.currentUser == null) return;
 
-    await loadPendingSubmissions();
-    if (pendingSubmissions.isEmpty) return;
-    if (!await _offlineQueueService.isOnline()) return;
-
     isSyncingPending.value = true;
-    var syncedAny = false;
     try {
+      await loadPendingSubmissions();
+      if (pendingSubmissions.isEmpty) return;
+      if (!await _offlineQueueService.isOnline()) return;
+
+      var syncedAny = false;
       for (final item in pendingSubmissions.toList()) {
         await _offlineQueueService.markSyncing(item.localId);
         await loadPendingSubmissions();
@@ -127,19 +140,19 @@ class SurveyController extends GetxController {
         }
         await loadPendingSubmissions();
       }
+
+      if (syncedAny) {
+        try {
+          surveys.value = await _service.fetchAll();
+          hasError.value = false;
+          Get.snackbar('Synced', 'Offline surveys synced to the database');
+        } catch (e, st) {
+          debugPrint('[SurveyController.syncPendingSurveys.refresh] $e\n$st');
+        }
+      }
     } finally {
       isSyncingPending.value = false;
       await loadPendingSubmissions();
-    }
-
-    if (syncedAny) {
-      try {
-        surveys.value = await _service.fetchAll();
-        hasError.value = false;
-        Get.snackbar('Synced', 'Offline surveys synced to the database');
-      } catch (e, st) {
-        debugPrint('[SurveyController.syncPendingSurveys.refresh] $e\n$st');
-      }
     }
   }
 

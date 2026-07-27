@@ -19,8 +19,8 @@ class StartupBinding extends Bindings {
   void dependencies() {
     Get.put(LanguageController());
     if (loadStartupControllers) {
-      Get.put(SurveyController());
-      Get.put(ConnectivitySyncController());
+      Get.lazyPut(SurveyController.new, fenix: true);
+      Get.lazyPut(ConnectivitySyncController.new, fenix: true);
     }
     Get.put(MainAuthController());
   }
@@ -28,6 +28,19 @@ class StartupBinding extends Bindings {
 
 class AppBindings {
   const AppBindings._();
+
+  static void bindSurveyFlow() {
+    if (!Get.isRegistered<SurveyController>()) {
+      Get.put(SurveyController());
+    } else {
+      Get.find<SurveyController>();
+    }
+    if (!Get.isRegistered<ConnectivitySyncController>()) {
+      Get.put(ConnectivitySyncController());
+    } else {
+      Get.find<ConnectivitySyncController>();
+    }
+  }
 
   static void ensureSatelliteAuth() {
     if (!Get.isRegistered<AuthController>()) {
