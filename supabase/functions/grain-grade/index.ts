@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
+import { assertLinkedFarm } from "../_shared/farmer-links.ts";
 import {
   applyRagiRules,
   type Grade,
@@ -269,12 +270,68 @@ Deno.serve(async (req) => {
     const actorRoleRaw = String(body.actor_role ?? "farmer").toLowerCase();
     const actorRole = actorRoleRaw === "fpc" ? "fpc" : "farmer";
     const fpcId = actorRole === "fpc" ? operatorId : null;
+    let fpcOrganizationId: string | null = null;
+    if (actorRole === "fpc") {
+      const { data: membership, error: membershipError } = await supabase
+        .from("fpc_memberships")
+        .select("fpc_id,role,status,fpcs!inner(status)")
+        .eq("user_id", operatorId)
+        .eq("status", "active")
+        .eq("role", "fpc_admin")
+        .eq("fpcs.status", "active")
+        .maybeSingle();
+      if (membershipError) throw membershipError;
+      if (!membership?.fpc_id) {
+        throw new HttpError("Active FPC Admin membership required", 403);
+      }
+      fpcOrganizationId = String(membership.fpc_id);
+    }
     const fpcCustomerId = body.fpc_customer_id ? String(body.fpc_customer_id) : null;
     const fpcCustomerName = body.fpc_customer_name ? String(body.fpc_customer_name) : null;
     const source = body.source ? String(body.source) : "app";
     const batchId = body.batch_id ? String(body.batch_id) : null;
     const farmerId = body.farmer_id ? String(body.farmer_id) : null;
+    const farmerPhone = body.farmer_phone ? String(body.farmer_phone) : "";
     const farmId = body.farm_id ? String(body.farm_id) : null;
+    let harvestZonePlanId = body.harvest_zone_plan_id
+      ? String(body.harvest_zone_plan_id)
+      : null;
+    let harvestZoneId = body.harvest_zone_id ? String(body.harvest_zone_id) : null;
+    let fieldGrade = body.field_grade ? String(body.field_grade).toUpperCase() : null;
+    let fieldScore = body.field_score != null ? Number(body.field_score) : null;
+    if (harvestZoneId) {
+      if (!farmId) throw new HttpError("Select a farm before grading", 422);
+      const linkedFarm = await assertLinkedFarm(
+        supabase,
+        userId,
+        farmerPhone,
+        farmerId ?? "",
+        farmId,
+      );
+      if (linkedFarm instanceof Response) return linkedFarm;
+      const { data: zone, error: zoneError } = await supabase
+        .from("farm_harvest_zones")
+        .select("id,plan_id,farm_id,user_id,field_grade,field_score")
+        .eq("id", harvestZoneId)
+        .maybeSingle();
+      if (zoneError || !zone) throw new HttpError("Harvest zone was not found", 422);
+      if (
+        String(zone.user_id) !== String(linkedFarm.user_id) ||
+        String(zone.farm_id) !== farmId
+      ) {
+        throw new HttpError("Harvest zone does not belong to this farmer and farm", 403);
+      }
+      if (harvestZonePlanId && String(zone.plan_id) !== harvestZonePlanId) {
+        throw new HttpError("Harvest zone does not belong to this plan", 422);
+      }
+      harvestZonePlanId = String(zone.plan_id);
+      fieldGrade = String(zone.field_grade);
+      fieldScore = Number(zone.field_score);
+    } else {
+      harvestZonePlanId = null;
+      fieldGrade = null;
+      fieldScore = null;
+    }
     const bagSizeKg = body.bag_size_kg != null ? Number(body.bag_size_kg) : null;
     const bagCount = body.bag_count != null ? Number(body.bag_count) : null;
     const totalKg = bagSizeKg != null && Number.isFinite(bagSizeKg) &&
@@ -289,10 +346,15 @@ Deno.serve(async (req) => {
         operator_id: operatorId,
         actor_role: actorRole,
         fpc_id: fpcId,
+        fpc_organization_id: fpcOrganizationId,
         fpc_customer_id: fpcCustomerId,
         fpc_customer_name: fpcCustomerName,
         source,
         batch_id: batchId,
+        harvest_zone_plan_id: harvestZonePlanId,
+        harvest_zone_id: harvestZoneId,
+        field_grade: fieldGrade,
+        field_score: fieldScore,
         farmer_id: farmerId,
         farm_id: farmId,
         crop_type: cropType,
@@ -363,6 +425,14 @@ Deno.serve(async (req) => {
       moisture: moisturePayload,
       confidence,
       selection: { selected_crop: cropType, selected_variety: variety },
+      harvest_zone: harvestZoneId
+        ? {
+          plan_id: harvestZonePlanId,
+          zone_id: harvestZoneId,
+          field_grade: fieldGrade,
+          field_score: fieldScore,
+        }
+        : null,
       applied_rules: rules.appliedRules,
       manual_review_required: manualReviewRequired,
       review_status: reviewStatus,

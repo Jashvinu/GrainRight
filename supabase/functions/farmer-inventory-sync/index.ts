@@ -149,6 +149,15 @@ Deno.serve(async (req) => {
         harvest_batch_id: optionalText(
           item.harvest_batch_id ?? item.harvestBatchId,
         ),
+        harvest_zone_plan_id: optionalText(
+          item.harvest_zone_plan_id ?? item.harvestZonePlanId,
+        ),
+        harvest_zone_id: optionalText(item.harvest_zone_id ?? item.harvestZoneId),
+        harvest_zone_label: text(
+          item.harvest_zone_label ?? item.harvestZoneLabel,
+        ),
+        field_grade: text(item.field_grade ?? item.fieldGrade).toUpperCase(),
+        field_score: nullableNumber(item.field_score ?? item.fieldScore),
         product_category: normalizeCategory(item.product_category),
         product_name: itemText(item, "product_name"),
         crop: itemText(item, "crop"),
