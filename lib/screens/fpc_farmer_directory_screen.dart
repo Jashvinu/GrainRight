@@ -209,9 +209,9 @@ class _DirectoryHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Farmer directory',
-                  style: TextStyle(
+                Text(
+                  UiStrings.fromEnglish('Farmer directory'),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.w900,
@@ -227,7 +227,9 @@ class _DirectoryHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Open one profile to review verified identity, farm, crop, production and selling history.',
+                  UiStrings.fromEnglish(
+                    'Open one profile to review verified identity, farm, crop, production and selling history.',
+                  ),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.72),
                     height: 1.35,
@@ -270,13 +272,15 @@ class _SearchAndFilter extends StatelessWidget {
             controller: controller,
             onChanged: onSearch,
             decoration: InputDecoration(
-              labelText: 'Search farmers',
-              hintText: 'Name, phone, village, crop or farmer ID',
+              labelText: UiStrings.fromEnglish('Search farmers'),
+              hintText: UiStrings.fromEnglish(
+                'Name, phone, village, crop or farmer ID',
+              ),
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: controller.text.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: 'Clear search',
+                      tooltip: UiStrings.fromEnglish('Clear search'),
                       onPressed: () {
                         controller.clear();
                         onSearch('');
@@ -531,7 +535,7 @@ class _FarmerProfileSheet extends StatelessWidget {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Close',
+                        tooltip: UiStrings.fromEnglish('Close'),
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.close_rounded),
                       ),
@@ -635,7 +639,9 @@ class _FarmerProfileSheet extends StatelessWidget {
                       );
                     },
                     icon: const Icon(Icons.grain_rounded),
-                    label: const Text('Grade this farmer’s lot'),
+                    label: Text(
+                      UiStrings.fromEnglish('Grade this farmer’s lot'),
+                    ),
                   ),
                 ],
               ),
@@ -687,9 +693,9 @@ class _ProfileSection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (visible.isEmpty)
-            const Text(
-              'No details recorded.',
-              style: TextStyle(color: AppTheme.textMuted),
+            Text(
+              UiStrings.fromEnglish('No details recorded.'),
+              style: const TextStyle(color: AppTheme.textMuted),
             )
           else
             for (final row in visible)

@@ -7141,6 +7141,162 @@ class UiStrings {
     },
     'management': {'en': 'Management', 'hi': 'प्रबंधन', 'mr': 'व्यवस्थापन'},
     'farmers': {'en': 'Farmers', 'hi': 'किसान', 'mr': 'शेतकरी'},
+    'fpc_farmer_directory': {
+      'en': 'Farmer directory',
+      'hi': 'किसान निर्देशिका',
+      'mr': 'शेतकरी निर्देशिका',
+    },
+    'fpc_farmer_directory_desc': {
+      'en':
+          'Open one profile to review verified identity, farm, crop, production and selling history.',
+      'hi':
+          'सत्यापित पहचान, खेत, फसल, उत्पादन और बिक्री इतिहास देखने के लिए एक प्रोफ़ाइल खोलें।',
+      'mr':
+          'पडताळलेली ओळख, शेत, पीक, उत्पादन आणि विक्री इतिहास पाहण्यासाठी एक प्रोफाइल उघडा.',
+    },
+    'fpc_grade_farmer_lot': {
+      'en': 'Grade this farmer’s lot',
+      'hi': 'इस किसान के लॉट की ग्रेडिंग करें',
+      'mr': 'या शेतकऱ्याच्या लॉटची ग्रेडिंग करा',
+    },
+    'fpc_no_details_recorded': {
+      'en': 'No details recorded.',
+      'hi': 'कोई विवरण दर्ज नहीं है।',
+      'mr': 'कोणताही तपशील नोंदवलेला नाही.',
+    },
+    'fpc_search_farmers': {
+      'en': 'Search farmers',
+      'hi': 'किसान खोजें',
+      'mr': 'शेतकरी शोधा',
+    },
+    'fpc_search_farmers_hint': {
+      'en': 'Name, phone, village, crop or farmer ID',
+      'hi': 'नाम, फोन, गांव, फसल या किसान आईडी',
+      'mr': 'नाव, फोन, गाव, पीक किंवा शेतकरी आयडी',
+    },
+    'fpc_clear_search': {
+      'en': 'Clear search',
+      'hi': 'खोज साफ करें',
+      'mr': 'शोध साफ करा',
+    },
+    'fpc_close': {'en': 'Close', 'hi': 'बंद करें', 'mr': 'बंद करा'},
+    'fpc_farmer_records_load_failed': {
+      'en': 'Could not load farmer records',
+      'hi': 'किसान रिकॉर्ड लोड नहीं हो सके',
+      'mr': 'शेतकरी नोंदी लोड करता आल्या नाहीत',
+    },
+    'fpc_verified_farmer_details': {
+      'en': 'Verified farmer details',
+      'hi': 'सत्यापित किसान विवरण',
+      'mr': 'पडताळलेली शेतकरी माहिती',
+    },
+    'fpc_farm_current_crop': {
+      'en': 'Farm and current crop',
+      'hi': 'खेत और वर्तमान फसल',
+      'mr': 'शेत आणि सध्याचे पीक',
+    },
+    'fpc_record': {'en': 'FPC record', 'hi': 'FPC रिकॉर्ड', 'mr': 'FPC नोंद'},
+    'fpc_scan_qr': {
+      'en': 'Scan QR',
+      'hi': 'QR स्कैन करें',
+      'mr': 'QR स्कॅन करा',
+    },
+    'fpc_farmer_profile_qr': {
+      'en': 'Farmer profile QR',
+      'hi': 'किसान प्रोफ़ाइल QR',
+      'mr': 'शेतकरी प्रोफाइल QR',
+    },
+    'fpc_verify_link_farmer': {
+      'en': 'Verify and link one farmer to this FPC.',
+      'hi': 'एक किसान को सत्यापित करके इस FPC से जोड़ें।',
+      'mr': 'एका शेतकऱ्याची पडताळणी करून या FPC शी जोडा.',
+    },
+    'fpc_harvest_lot_qr': {
+      'en': 'Harvest / lot QR',
+      'hi': 'कटाई / लॉट QR',
+      'mr': 'कापणी / लॉट QR',
+    },
+    'fpc_receive_approved_lot': {
+      'en': 'Receive an approved harvest lot into the FPC ledger.',
+      'hi': 'स्वीकृत कटाई लॉट को FPC लेजर में प्राप्त करें।',
+      'mr': 'मंजूर कापणी लॉट FPC लेजरमध्ये स्वीकारा.',
+    },
+    'fpc_accepted_qr': {
+      'en': 'Accepted QR',
+      'hi': 'स्वीकृत QR',
+      'mr': 'स्वीकारलेला QR',
+    },
+    'fpc_after_validation': {
+      'en': 'After validation',
+      'hi': 'सत्यापन के बाद',
+      'mr': 'पडताळणीनंतर',
+    },
+    'fpc_active_farmer_network': {
+      'en': 'Active farmer network',
+      'hi': 'सक्रिय किसान नेटवर्क',
+      'mr': 'सक्रिय शेतकरी नेटवर्क',
+    },
+    'fpc_farmer_network_desc': {
+      'en':
+          'Linked farmer details, crop coverage and village-wise operating regions.',
+      'hi': 'जुड़े किसान विवरण, फसल कवरेज और गांव-वार परिचालन क्षेत्र।',
+      'mr':
+          'जोडलेल्या शेतकऱ्यांची माहिती, पीक व्याप्ती आणि गावनिहाय कार्यक्षेत्रे.',
+    },
+    'fpc_directory_unavailable': {
+      'en': 'Farmer directory unavailable',
+      'hi': 'किसान निर्देशिका उपलब्ध नहीं है',
+      'mr': 'शेतकरी निर्देशिका उपलब्ध नाही',
+    },
+    'fpc_no_linked_farmers': {
+      'en': 'No linked farmers yet',
+      'hi': 'अभी कोई किसान जुड़ा नहीं है',
+      'mr': 'अद्याप कोणताही शेतकरी जोडलेला नाही',
+    },
+    'fpc_link_first_farmer_help': {
+      'en':
+          'Use the floating Scan QR button and choose Farmer profile QR to link the first farmer.',
+      'hi':
+          'पहले किसान को जोड़ने के लिए फ्लोटिंग QR स्कैन बटन दबाएं और किसान प्रोफ़ाइल QR चुनें।',
+      'mr':
+          'पहिला शेतकरी जोडण्यासाठी फ्लोटिंग QR स्कॅन बटण वापरा आणि शेतकरी प्रोफाइल QR निवडा.',
+    },
+    'fpc_no_active_farmers': {
+      'en': 'No active farmers',
+      'hi': 'कोई सक्रिय किसान नहीं है',
+      'mr': 'कोणताही सक्रिय शेतकरी नाही',
+    },
+    'fpc_active_farmers_help': {
+      'en':
+          'Linked farmers will appear here after their FPC status becomes active.',
+      'hi': 'FPC स्थिति सक्रिय होने के बाद जुड़े किसान यहां दिखाई देंगे।',
+      'mr': 'FPC स्थिती सक्रिय झाल्यानंतर जोडलेले शेतकरी येथे दिसतील.',
+    },
+    'fpc_action_question': {
+      'en': 'What do you want to do?',
+      'hi': 'आप क्या करना चाहते हैं?',
+      'mr': 'तुम्हाला काय करायचे आहे?',
+    },
+    'fpc_common_work_help': {
+      'en': 'Start the most common FPC work in one tap.',
+      'hi': 'एक टैप में सबसे सामान्य FPC कार्य शुरू करें।',
+      'mr': 'एका टॅपमध्ये सर्वात सामान्य FPC काम सुरू करा.',
+    },
+    'fpc_no_region_coverage': {
+      'en': 'No active region coverage',
+      'hi': 'कोई सक्रिय क्षेत्र कवरेज नहीं है',
+      'mr': 'कोणतेही सक्रिय क्षेत्र कव्हरेज नाही',
+    },
+    'fpc_region_coverage_help': {
+      'en': 'Village coverage appears after a linked farmer becomes active.',
+      'hi': 'जुड़ा किसान सक्रिय होने के बाद गांव का कवरेज दिखाई देता है।',
+      'mr': 'जोडलेला शेतकरी सक्रिय झाल्यानंतर गावाची व्याप्ती दिसते.',
+    },
+    'fpc_farmer_directory_subtitle': {
+      'en': 'Profiles, farms and crop history',
+      'hi': 'प्रोफ़ाइल, खेत और फसल इतिहास',
+      'mr': 'प्रोफाइल, शेते आणि पीक इतिहास',
+    },
     'fpo_farmers_subtitle': {
       'en': 'Scan QR and manage members',
       'hi': 'QR स्कैन करें और सदस्य प्रबंधित करें',
