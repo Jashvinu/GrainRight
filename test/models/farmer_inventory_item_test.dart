@@ -83,6 +83,41 @@ void main() {
       expect(cropLot.batchId, 'harvest-batch-2');
       expect(cropLot.harvestBatchId, 'harvest-batch-2');
     });
+
+    test('preserves field grade trace separately from verified lot grade', () {
+      final item =
+          _inventoryItem(
+            localId: 'inventory-harvest-3',
+            batchId: 'harvest-batch-3',
+            harvestBatchId: 'harvest-batch-3',
+            productCategory: FarmerInventoryProductCategory.cropLot,
+            sourceFlow: 'harvest',
+          ).copyWith(
+            harvestZonePlanId: 'plan-1',
+            harvestZoneId: 'zone-a1',
+            harvestZoneLabel: 'A1',
+            fieldGrade: 'A',
+            fieldScore: 91.4,
+            grade: 'B',
+            gradeScore: 78,
+          );
+
+      final json = item.toRemoteJson(userId: 'auth-user-1');
+      final restored = FarmerInventoryItem.fromRemoteJson({
+        ...json,
+        'id': 'remote-row-3',
+        'created_at': '2026-06-26T10:00:00Z',
+        'updated_at': '2026-06-26T10:00:00Z',
+      });
+
+      expect(restored.harvestZonePlanId, 'plan-1');
+      expect(restored.harvestZoneId, 'zone-a1');
+      expect(restored.harvestZoneLabel, 'A1');
+      expect(restored.fieldGrade, 'A');
+      expect(restored.fieldScore, 91.4);
+      expect(restored.grade, 'B');
+      expect(restored.gradeScore, 78);
+    });
   });
 }
 

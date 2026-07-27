@@ -289,6 +289,11 @@ class FarmerInventoryService {
       farmName: record.farmName,
       batchId: record.batchId,
       harvestBatchId: record.harvestBatchId,
+      harvestZonePlanId: record.harvestZonePlanId,
+      harvestZoneId: record.harvestZoneId,
+      harvestZoneLabel: record.harvestZoneLabel,
+      fieldGrade: record.fieldGrade,
+      fieldScore: record.fieldScore,
       productCategory: FarmerInventoryProductCategory.normalize(
         record.productCategory,
       ),
@@ -331,6 +336,11 @@ class FarmerInventoryService {
       farmName: item.farmName,
       batchId: item.batchId,
       harvestBatchId: item.harvestBatchId,
+      harvestZonePlanId: item.harvestZonePlanId,
+      harvestZoneId: item.harvestZoneId,
+      harvestZoneLabel: item.harvestZoneLabel,
+      fieldGrade: item.fieldGrade,
+      fieldScore: item.fieldScore,
       productCategory: FarmerInventoryProductCategory.normalize(
         item.productCategory,
       ),

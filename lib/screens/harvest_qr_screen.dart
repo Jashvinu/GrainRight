@@ -37,6 +37,11 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
         'farmName': value('farmName'),
         'farmId': value('farmId'),
         'analysisId': value('analysisId'),
+        'harvestZonePlanId': value('harvestZonePlanId'),
+        'harvestZoneId': value('harvestZoneId'),
+        'harvestZoneLabel': value('harvestZoneLabel'),
+        'fieldGrade': value('fieldGrade'),
+        'fieldScore': value('fieldScore'),
         'crop': value('crop'),
         'product': value('product'),
         'variety': value('variety'),
@@ -65,6 +70,11 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
       'farmName': '',
       'farmId': '',
       'analysisId': '',
+      'harvestZonePlanId': '',
+      'harvestZoneId': '',
+      'harvestZoneLabel': '',
+      'fieldGrade': '',
+      'fieldScore': '',
       'crop': '',
       'product': '',
       'variety': '',
@@ -124,6 +134,14 @@ class _HarvestQrScreenState extends State<HarvestQrScreen> {
       'traceVersion': 2,
       'generatedAt': _generatedAt.toIso8601String(),
       'analysisId': a['analysisId'],
+      if ((a['harvestZonePlanId'] ?? '').isNotEmpty)
+        'harvestZonePlanId': a['harvestZonePlanId'],
+      if ((a['harvestZoneId'] ?? '').isNotEmpty)
+        'harvestZoneId': a['harvestZoneId'],
+      if ((a['harvestZoneLabel'] ?? '').isNotEmpty)
+        'harvestZoneLabel': a['harvestZoneLabel'],
+      if ((a['fieldGrade'] ?? '').isNotEmpty) 'fieldGrade': a['fieldGrade'],
+      if ((a['fieldScore'] ?? '').isNotEmpty) 'fieldScore': a['fieldScore'],
       'batchId': a['batchId'],
       'farm': a['farmName'],
       'farmId': a['farmId'],
@@ -478,6 +496,12 @@ class _HarvestStickerCard extends StatelessWidget {
                 label: UiStrings.t('analysis_id'),
                 value: args['analysisId']!,
               ),
+              if ((args['harvestZoneLabel'] ?? '').isNotEmpty)
+                _StickerDetail(
+                  label: UiStrings.t('harvest_step_zone'),
+                  value:
+                      '${args['harvestZoneLabel']} • ${UiStrings.t('field_grade')} ${args['fieldGrade']} (${args['fieldScore']}/100)',
+                ),
               _StickerDetail(
                 label: UiStrings.t('crop'),
                 value: _localizedHarvestValue(args['crop']),

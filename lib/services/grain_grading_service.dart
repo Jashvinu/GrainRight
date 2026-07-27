@@ -209,8 +209,13 @@ class GrainGradingService {
     required String cropType,
     String cropVariety = '',
     String? farmerId,
+    String? farmerPhone,
     String? farmId,
     String? batchId,
+    String? harvestZonePlanId,
+    String? harvestZoneId,
+    String? fieldGrade,
+    double? fieldScore,
     double? bagSizeKg,
     int? bagCount,
     String actorRole = 'farmer',
@@ -261,6 +266,8 @@ class GrainGradingService {
       'source': source.trim().isEmpty ? 'app' : source.trim(),
       if (farmerId != null && farmerId.trim().isNotEmpty)
         'farmer_id': farmerId.trim(),
+      if (farmerPhone != null && farmerPhone.trim().isNotEmpty)
+        'farmer_phone': farmerPhone.trim(),
       if (farmId != null && farmId.trim().isNotEmpty) 'farm_id': farmId.trim(),
       if (fpcCustomerId != null && fpcCustomerId.trim().isNotEmpty)
         'fpc_customer_id': fpcCustomerId.trim(),
@@ -268,6 +275,14 @@ class GrainGradingService {
         'fpc_customer_name': fpcCustomerName.trim(),
       if (batchId != null && batchId.trim().isNotEmpty)
         'batch_id': batchId.trim(),
+      if (harvestZonePlanId != null && harvestZonePlanId.trim().isNotEmpty)
+        'harvest_zone_plan_id': harvestZonePlanId.trim(),
+      if (harvestZoneId != null && harvestZoneId.trim().isNotEmpty)
+        'harvest_zone_id': harvestZoneId.trim(),
+      if (fieldGrade != null && fieldGrade.trim().isNotEmpty)
+        'field_grade': fieldGrade.trim().toUpperCase(),
+      // ignore: use_null_aware_elements
+      if (fieldScore != null) 'field_score': fieldScore,
       // ignore: use_null_aware_elements
       if (bagSizeKg != null) 'bag_size_kg': bagSizeKg,
       // ignore: use_null_aware_elements

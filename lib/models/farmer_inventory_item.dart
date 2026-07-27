@@ -21,6 +21,11 @@ class FarmerInventoryItem {
   final String farmName;
   final String batchId;
   final String harvestBatchId;
+  final String harvestZonePlanId;
+  final String harvestZoneId;
+  final String harvestZoneLabel;
+  final String fieldGrade;
+  final double? fieldScore;
   final String productCategory;
   final String productName;
   final String crop;
@@ -56,6 +61,11 @@ class FarmerInventoryItem {
     required this.farmName,
     required this.batchId,
     required this.harvestBatchId,
+    this.harvestZonePlanId = '',
+    this.harvestZoneId = '',
+    this.harvestZoneLabel = '',
+    this.fieldGrade = '',
+    this.fieldScore,
     required this.productCategory,
     required this.productName,
     required this.crop,
@@ -103,6 +113,11 @@ class FarmerInventoryItem {
       farmName: _text(json['farm_name']),
       batchId: displayBatchId,
       harvestBatchId: harvestBatchId,
+      harvestZonePlanId: _text(json['harvest_zone_plan_id']),
+      harvestZoneId: _text(json['harvest_zone_id']),
+      harvestZoneLabel: _text(json['harvest_zone_label']),
+      fieldGrade: _text(json['field_grade']),
+      fieldScore: _double(json['field_score']),
       productCategory: FarmerInventoryProductCategory.normalize(
         _text(json['product_category']),
       ),
@@ -142,6 +157,15 @@ class FarmerInventoryItem {
       'harvest_batch_id': harvestBatchId.trim().isEmpty
           ? null
           : harvestBatchId.trim(),
+      'harvest_zone_plan_id': harvestZonePlanId.trim().isEmpty
+          ? null
+          : harvestZonePlanId.trim(),
+      'harvest_zone_id': harvestZoneId.trim().isEmpty
+          ? null
+          : harvestZoneId.trim(),
+      'harvest_zone_label': harvestZoneLabel,
+      'field_grade': fieldGrade,
+      'field_score': fieldScore,
       'product_category': FarmerInventoryProductCategory.normalize(
         productCategory,
       ),
@@ -176,6 +200,11 @@ class FarmerInventoryItem {
     String? farmName,
     String? batchId,
     String? harvestBatchId,
+    String? harvestZonePlanId,
+    String? harvestZoneId,
+    String? harvestZoneLabel,
+    String? fieldGrade,
+    double? fieldScore,
     String? productCategory,
     String? productName,
     String? crop,
@@ -211,6 +240,11 @@ class FarmerInventoryItem {
       farmName: farmName ?? this.farmName,
       batchId: batchId ?? this.batchId,
       harvestBatchId: harvestBatchId ?? this.harvestBatchId,
+      harvestZonePlanId: harvestZonePlanId ?? this.harvestZonePlanId,
+      harvestZoneId: harvestZoneId ?? this.harvestZoneId,
+      harvestZoneLabel: harvestZoneLabel ?? this.harvestZoneLabel,
+      fieldGrade: fieldGrade ?? this.fieldGrade,
+      fieldScore: fieldScore ?? this.fieldScore,
       productCategory: productCategory ?? this.productCategory,
       productName: productName ?? this.productName,
       crop: crop ?? this.crop,
