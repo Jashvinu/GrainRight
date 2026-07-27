@@ -12,9 +12,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../controllers/admin_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../services/admin_service.dart';
+import 'platform_fpc_admin_panel.dart';
 import '../widgets/farm_hills_background.dart';
 
-enum _AdminSection { overview, farmers, fpc, stakeholders }
+enum _AdminSection { overview, farmers, fpc, organizations, stakeholders }
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -175,6 +176,8 @@ Widget _sectionBody({
       return _FarmersTab(snapshot: snapshot);
     case _AdminSection.fpc:
       return _FpcTab(snapshot: snapshot);
+    case _AdminSection.organizations:
+      return const PlatformFpcAdminPanel();
     case _AdminSection.stakeholders:
       return _StakeholdersTab(snapshot: snapshot, admin: admin);
   }
@@ -188,6 +191,8 @@ String _titleForSection(_AdminSection section) {
       return UiStrings.t('farmer_records');
     case _AdminSection.fpc:
       return UiStrings.t('fpc_activity');
+    case _AdminSection.organizations:
+      return UiStrings.fromEnglish('FPC organizations');
     case _AdminSection.stakeholders:
       return UiStrings.t('review_queue');
   }
@@ -210,7 +215,7 @@ class _AdminBottomNavigation extends StatelessWidget {
         alignment: Alignment.bottomCenter,
         heightFactor: 1,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
+          constraints: const BoxConstraints(maxWidth: 540),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
             child: RepaintBoundary(
@@ -253,6 +258,14 @@ class _AdminBottomNavigation extends StatelessWidget {
                         selectedIcon: Icons.groups_2_rounded,
                         label: 'FPC',
                         selected: selected == _AdminSection.fpc,
+                        onSelected: onSelected,
+                      ),
+                      _AdminNavItemButton(
+                        section: _AdminSection.organizations,
+                        icon: Icons.business_outlined,
+                        selectedIcon: Icons.business_rounded,
+                        label: 'Orgs',
+                        selected: selected == _AdminSection.organizations,
                         onSelected: onSelected,
                       ),
                       _AdminNavItemButton(
@@ -1759,9 +1772,7 @@ class _AdminHeroPanel extends StatelessWidget {
                 if (generatedLabel.isNotEmpty) ...[
                   const SizedBox(height: 9),
                   Text(
-                    UiStrings.f('last_synced_value', {
-                      'value': generatedLabel,
-                    }),
+                    UiStrings.f('last_synced_value', {'value': generatedLabel}),
                     style: const TextStyle(
                       color: AppTheme.greenDark,
                       fontSize: 12,
@@ -2088,10 +2099,7 @@ class _AdminErrorBanner extends StatelessWidget {
               ),
             ),
           ),
-          TextButton(
-            onPressed: onRetry,
-            child: Text(UiStrings.t('retry')),
-          ),
+          TextButton(onPressed: onRetry, child: Text(UiStrings.t('retry'))),
         ],
       ),
     );

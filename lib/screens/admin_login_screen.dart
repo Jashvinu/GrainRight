@@ -124,12 +124,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
               loadingLabel: UiStrings.t('admin_login_verifying'),
             ),
             const SizedBox(height: 10),
-            TextButton.icon(
-              onPressed: auth.isLoading.value
-                  ? null
-                  : () => Get.offAllNamed('/admin/signup'),
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: Text(UiStrings.t('create_admin_account')),
+            Text(
+              UiStrings.fromEnglish(
+                'Platform Admin access is provisioned through the secured administration workflow.',
+              ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

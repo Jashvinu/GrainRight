@@ -170,6 +170,64 @@ class HarvestTraceParser {
   }
 }
 
+class MarketplaceOrderQrParser {
+  static const type = 'grainright_marketplace_order';
+
+  static bool isMarketplaceOrder(Map<String, dynamic> payload) {
+    return _text(payload, 'type') == type;
+  }
+
+  static Map<String, dynamic> parse(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty || !value.startsWith('{')) {
+      throw const FpcProcurementException(
+        'This is not a marketplace order QR.',
+      );
+    }
+    return ensureMarketplaceOrder(
+      _decodeJsonObject(value, 'Marketplace order QR payload is invalid.'),
+    );
+  }
+
+  static Map<String, dynamic> ensureMarketplaceOrder(
+    Map<String, dynamic> payload,
+  ) {
+    if (!isMarketplaceOrder(payload)) {
+      throw const FpcProcurementException(
+        'This is not a marketplace order QR.',
+      );
+    }
+    const requiredFields = ['orderId', 'orderNumber', 'listingId'];
+    final missing = requiredFields
+        .where((field) => _isBlankTraceValue(payload[field]))
+        .toList(growable: false);
+    final quantityKg = _toDouble(payload['quantityKg']);
+    final quantity = _toDouble(payload['quantity']);
+    final hasQuantity =
+        (quantityKg != null && quantityKg > 0) ||
+        (quantity != null && quantity > 0);
+    if (missing.isNotEmpty || !hasQuantity) {
+      throw const FpcProcurementException(
+        'Marketplace order QR is missing required order data.',
+      );
+    }
+    return Map<String, dynamic>.unmodifiable(payload);
+  }
+}
+
+class FpcReceiveQrParser {
+  static Map<String, dynamic> parse(String raw) {
+    final value = raw.trim();
+    if (value.startsWith('{')) {
+      final payload = _decodeJsonObject(value, 'QR payload is invalid.');
+      if (MarketplaceOrderQrParser.isMarketplaceOrder(payload)) {
+        return MarketplaceOrderQrParser.ensureMarketplaceOrder(payload);
+      }
+    }
+    return HarvestTraceParser.parse(raw);
+  }
+}
+
 class FarmerProfileQrParser {
   static Map<String, dynamic> parse(String raw) {
     final value = raw.trim();
@@ -217,6 +275,17 @@ class FarmerProfileQrParser {
   }
 }
 
+Map<String, dynamic> _decodeJsonObject(String source, String errorMessage) {
+  try {
+    final decoded = jsonDecode(source);
+    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map) return Map<String, dynamic>.from(decoded);
+  } catch (_) {
+    throw FpcProcurementException(errorMessage);
+  }
+  throw FpcProcurementException(errorMessage);
+}
+
 class FpcProcurementService {
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -231,12 +300,31 @@ class FpcProcurementService {
   }
 
   Future<List<FpcProcurementRecord>> fetchRecords() async {
-    final rows = await _client
-        .from('fpc_procurement_records')
-        .select()
-        .eq('fpc_id', _uid)
-        .order('received_at', ascending: false)
-        .limit(100);
+    dynamic rows;
+    final fpcOrganizationId = await _activeFpcId();
+    try {
+      rows = fpcOrganizationId == null
+          ? await _client
+                .from('fpc_procurement_records')
+                .select()
+                .eq('fpc_id', _uid)
+                .order('received_at', ascending: false)
+                .limit(100)
+          : await _client
+                .from('fpc_procurement_records')
+                .select()
+                .eq('fpc_organization_id', fpcOrganizationId)
+                .order('received_at', ascending: false)
+                .limit(100);
+    } catch (error) {
+      if (!_isOptionalFpcOsError(error)) rethrow;
+      rows = await _client
+          .from('fpc_procurement_records')
+          .select()
+          .eq('fpc_id', _uid)
+          .order('received_at', ascending: false)
+          .limit(100);
+    }
     return rows
         .whereType<Map>()
         .map(
@@ -265,6 +353,22 @@ class FpcProcurementService {
         ? quantity * pricePerKg
         : null;
     final analysisId = _uuidOrNull(_text(strictTrace, 'analysisId'));
+    try {
+      final saved = await _client.rpc(
+        'receive_fpc_harvest',
+        params: {
+          'trace_payload': strictTrace,
+          'price_per_kg': pricePerKg,
+          'fpc_rating': fpcRating,
+          'rating_notes': notes,
+        },
+      );
+      if (saved is Map) {
+        return FpcProcurementRecord.fromJson(Map<String, dynamic>.from(saved));
+      }
+    } catch (error) {
+      if (!_isOptionalFpcOsError(error)) rethrow;
+    }
     final payload = {
       'fpc_id': userId,
       'farmer_id': _text(strictTrace, 'farmerId'),
@@ -307,6 +411,22 @@ class FpcProcurementService {
     );
   }
 
+  Future<String?> _activeFpcId() async {
+    try {
+      final membership = await _client
+          .from('fpc_memberships')
+          .select('fpc_id')
+          .eq('user_id', _uid)
+          .eq('status', 'active')
+          .maybeSingle();
+      final id = membership?['fpc_id']?.toString().trim() ?? '';
+      return id.isEmpty ? null : id;
+    } catch (error) {
+      if (_isOptionalFpcOsError(error)) return null;
+      rethrow;
+    }
+  }
+
   Future<String?> _existingRecord(String userId, String batchId) async {
     if (batchId.isEmpty) return null;
     final rows = await _client
@@ -319,6 +439,16 @@ class FpcProcurementService {
     final row = Map<String, dynamic>.from(rows.first as Map);
     return '${row['id'] ?? ''}'.trim().isEmpty ? null : '${row['id']}';
   }
+}
+
+bool _isOptionalFpcOsError(Object error) {
+  final message = error.toString().toLowerCase();
+  return message.contains('does not exist') ||
+      message.contains('schema cache') ||
+      message.contains('pgrst202') ||
+      message.contains('pgrst204') ||
+      message.contains('pgrst205') ||
+      message.contains('function') && message.contains('not found');
 }
 
 String _text(Map<String, dynamic> source, String key, [String fallback = '']) {

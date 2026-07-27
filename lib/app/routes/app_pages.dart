@@ -11,11 +11,17 @@ import '../../screens/farmer_home_screen.dart';
 import '../../screens/farmer_login_screen.dart';
 import '../../screens/farmer_signup_screen.dart';
 import '../../screens/fpc_login_screen.dart';
+import '../../screens/fpc_qr_hub_screen.dart';
 import '../../screens/fpo_farmer_qr_scan_screen.dart';
+import '../../screens/fpc_farmer_directory_screen.dart';
 import '../../screens/fpo_grading_review_screen.dart';
 import '../../screens/fpo_home_screen.dart';
 import '../../screens/fpo_receiver_screen.dart';
 import '../../screens/fpc_workspace_screen.dart';
+import '../../screens/fpc_operating_system_screen.dart';
+import '../../screens/field_officer_home_screen.dart';
+import '../../screens/required_password_change_screen.dart';
+import '../../screens/fpc_team_screen.dart';
 import '../../screens/harvest_qr_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/landing_screen.dart';
@@ -32,6 +38,7 @@ import '../../screens/stakeholder_home_screen.dart';
 import '../../screens/stakeholder_login_screen.dart';
 import '../../screens/survey_form_screen.dart';
 import '../bindings/app_bindings.dart';
+import 'role_route_middleware.dart';
 
 class AppRoutes {
   const AppRoutes._();
@@ -48,11 +55,11 @@ class AppPages {
     GetPage(name: '/', page: () => const SplashScreen()),
     GetPage(name: '/login', page: () => const MainLoginScreen()),
     GetPage(name: '/admin/login', page: () => const AdminLoginScreen()),
-    GetPage(name: '/admin/signup', page: () => const AdminSignupScreen()),
     GetPage(
       name: '/admin',
       page: () => const AdminHomeScreen(),
       binding: BindingsBuilder(AppBindings.bindAdmin),
+      middlewares: [AdminRouteMiddleware()],
     ),
     GetPage(name: '/farmer/login', page: () => const FarmerLoginScreen()),
     GetPage(
@@ -127,33 +134,103 @@ class AppPages {
       page: () => const FarmerAiGradingScreen(),
     ),
     GetPage(name: '/farmer/harvest-qr', page: () => const HarvestQrScreen()),
-    GetPage(name: '/fpo', page: () => const FpoHomeScreen()),
+    GetPage(
+      name: '/fpo',
+      page: () => const FpoHomeScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/operations',
+      page: () => const FpcOperatingSystemScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/team',
+      page: () => const FpcTeamScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/field',
+      page: () => const FieldOfficerHomeScreen(),
+      middlewares: [FieldOfficerRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/account/change-password',
+      page: () => const RequiredPasswordChangeScreen(),
+      middlewares: [FpcLoginRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/farmers',
+      page: () => const FpcFarmerDirectoryScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/qr',
+      page: () => const FpcQrHubScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
     GetPage(
       name: '/fpo/scan-farmer',
       page: () => const FpoFarmerQrScanScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
     ),
     GetPage(
       name: '/fpo/grading-review',
       page: () => const FpoGradingReviewScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
     ),
     GetPage(
       name: '/fpo/grain-grading',
       page: () => const FarmerAiGradingScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
     ),
     GetPage(
       name: '/fpo/marketplace',
       page: () => const MarketplacePage(inventoryLots: [], buyerMode: true),
+      middlewares: [FpcAdminRouteMiddleware()],
     ),
-    GetPage(name: '/fpo/receiver', page: () => const FpoReceiverScreen()),
-    GetPage(name: '/fpo/profile', page: () => const FpcProfileScreen()),
-    GetPage(name: '/fpo/settings', page: () => const FpcSettingsScreen()),
-    GetPage(name: '/fpo/activity', page: () => const FpcActivityScreen()),
-    GetPage(name: '/fpo/help', page: () => const FpcHelpScreen()),
+    GetPage(
+      name: '/fpo/receiver',
+      page: () => const FpoReceiverScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/profile',
+      page: () => const FpcProfileScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/settings',
+      page: () => const FpcSettingsScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/activity',
+      page: () => const FpcActivityScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/help',
+      page: () => const FpcHelpScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
     GetPage(name: '/trace/:token', page: () => const PublicTraceScreen()),
     GetPage(name: '/home', page: () => const LandingScreen()),
-    GetPage(name: '/surveys', page: () => const HomeScreen()),
-    GetPage(name: '/form', page: () => const ChatbotSurveyScreen()),
-    GetPage(name: '/form/classic', page: () => const SurveyFormScreen()),
+    GetPage(
+      name: '/surveys',
+      page: () => const HomeScreen(),
+      binding: BindingsBuilder(AppBindings.bindSurveyFlow),
+    ),
+    GetPage(
+      name: '/form',
+      page: () => const ChatbotSurveyScreen(),
+      binding: BindingsBuilder(AppBindings.bindSurveyFlow),
+    ),
+    GetPage(
+      name: '/form/classic',
+      page: () => const SurveyFormScreen(),
+      binding: BindingsBuilder(AppBindings.bindSurveyFlow),
+    ),
     GetPage(name: '/diagnostics', page: () => const DiagnosticsHomeScreen()),
     GetPage(name: '/offline-maps', page: () => const OfflineMapsScreen()),
     GetPage(

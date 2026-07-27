@@ -10,6 +10,9 @@ import '../models/fpc_account_identity.dart';
 
 enum FpcNavTab {
   home,
+  operations,
+  team,
+  qrHub,
   farmerScan,
   marketplace,
   receiver,
@@ -73,12 +76,6 @@ class FpcBottomNavBar extends StatelessWidget {
                       onTap: () => _go(FpcNavTab.home),
                     ),
                     _NavItem(
-                      icon: Icons.qr_code_scanner_rounded,
-                      label: 'Farmers',
-                      selected: current == FpcNavTab.farmerScan,
-                      onTap: () => _go(FpcNavTab.farmerScan),
-                    ),
-                    _NavItem(
                       icon: Icons.storefront_rounded,
                       label: 'Market',
                       selected: current == FpcNavTab.marketplace,
@@ -112,8 +109,17 @@ class FpcBottomNavBar extends StatelessWidget {
       case FpcNavTab.home:
         Get.offNamed('/fpo');
         return;
+      case FpcNavTab.operations:
+        Get.offNamed('/fpo/operations');
+        return;
+      case FpcNavTab.team:
+        Get.offNamed('/fpo/team');
+        return;
+      case FpcNavTab.qrHub:
+        Get.offNamed('/fpo/qr');
+        return;
       case FpcNavTab.farmerScan:
-        Get.offNamed('/fpo/scan-farmer');
+        Get.offNamed('/fpo/farmers');
         return;
       case FpcNavTab.marketplace:
         Get.offNamed('/fpo/marketplace');
@@ -150,6 +156,7 @@ class FpcWorkspaceScaffold extends StatelessWidget {
   final List<Widget> actions;
   final bool extendBody;
   final bool showBottomNav;
+  final bool showQrAction;
 
   const FpcWorkspaceScaffold({
     super.key,
@@ -159,6 +166,7 @@ class FpcWorkspaceScaffold extends StatelessWidget {
     this.actions = const [],
     this.extendBody = true,
     this.showBottomNav = true,
+    this.showQrAction = true,
   });
 
   @override
@@ -188,6 +196,14 @@ class FpcWorkspaceScaffold extends StatelessWidget {
           ),
           bottomNavigationBar: showBottomNav && !wide
               ? FpcBottomNavBar(current: current)
+              : null,
+          floatingActionButton: showQrAction
+              ? FloatingActionButton.extended(
+                  key: const Key('fpc-qr-floating-action'),
+                  onPressed: () => Get.toNamed('/fpo/qr'),
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: Text(UiStrings.fromEnglish('Scan QR')),
+                )
               : null,
           body: wide
               ? Row(
@@ -252,11 +268,25 @@ class FpcSideNavigation extends StatelessWidget {
                     route: '/fpo',
                   ),
                   _FpcNavEntry(
+                    tab: FpcNavTab.operations,
+                    icon: Icons.account_tree_rounded,
+                    title: 'Operating system',
+                    subtitle: 'All FPC modules',
+                    route: '/fpo/operations',
+                  ),
+                  _FpcNavEntry(
+                    tab: FpcNavTab.team,
+                    icon: Icons.badge_outlined,
+                    title: 'Field team',
+                    subtitle: 'Officers and assignments',
+                    route: '/fpo/team',
+                  ),
+                  _FpcNavEntry(
                     tab: FpcNavTab.farmerScan,
-                    icon: Icons.qr_code_scanner_rounded,
-                    title: 'Farmer verification',
-                    subtitle: 'Scan farmer profile QR',
-                    route: '/fpo/scan-farmer',
+                    icon: Icons.groups_2_outlined,
+                    title: 'Farmer directory',
+                    subtitle: 'Profiles, farms and crop history',
+                    route: '/fpo/farmers',
                   ),
                   _FpcNavEntry(
                     tab: FpcNavTab.marketplace,

@@ -8,6 +8,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../services/fpc_procurement_service.dart';
 import '../services/fpc_preferences_service.dart';
+import '../services/marketplace_listing_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoReceiverScreen extends StatefulWidget {
@@ -19,6 +20,7 @@ class FpoReceiverScreen extends StatefulWidget {
 
 class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
   final _service = FpcProcurementService();
+  final _marketplaceService = MarketplaceListingService();
   final _scanner = MobileScannerController(
     formats: const [BarcodeFormat.qrCode],
     detectionSpeed: DetectionSpeed.noDuplicates,
@@ -87,11 +89,17 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
 
   void _readHarvestQr(String raw) {
     try {
-      final trace = HarvestTraceParser.parse(raw);
+      final trace = FpcReceiveQrParser.parse(raw);
+      final isMarketplace = MarketplaceOrderQrParser.isMarketplaceOrder(trace);
       setState(() {
         _trace = trace;
         _error = null;
         _scannerVisible = false;
+        if (isMarketplace) {
+          _priceCtrl.text = '${trace['quantityKg'] ?? ''}';
+          _ratingCtrl.text = '${trace['grade'] ?? ''}';
+          _notesCtrl.text = '${trace['moisturePercent'] ?? ''}';
+        }
       });
       unawaited(FpcPreferences.playScannerFeedbackIfEnabled());
     } on FpcProcurementException catch (e) {
@@ -126,6 +134,44 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
       _error = null;
     });
     try {
+      if (MarketplaceOrderQrParser.isMarketplaceOrder(trace)) {
+        final quantityKg = _toDouble(_priceCtrl.text);
+        final grade = _ratingCtrl.text.trim();
+        if (quantityKg == null || quantityKg <= 0 || grade.isEmpty) {
+          throw const FpcProcurementException(
+            'Enter the measured weight and arrival grade.',
+          );
+        }
+        await _marketplaceService.recordArrival(
+          orderId: '${trace['orderId']}',
+          quantityKg: quantityKg,
+          grade: grade,
+          moisturePercent: _toDouble(_notesCtrl.text),
+          tracePayload: trace,
+        );
+        if (!mounted) return;
+        setState(() {
+          _saving = false;
+          _trace = null;
+          _scannerVisible = true;
+          _scanLocked = false;
+          _priceCtrl.clear();
+          _ratingCtrl.clear();
+          _notesCtrl.clear();
+        });
+        await _scanner.start();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              UiStrings.fromEnglish(
+                'Arrival quarantined. Stock and farmer payment remain unposted.',
+              ),
+            ),
+          ),
+        );
+        return;
+      }
       final saved = await _service.saveHarvestTrace(
         trace: trace,
         pricePerKg: _toDouble(_priceCtrl.text),
@@ -153,6 +199,12 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
         _saving = false;
         _error = e.message;
       });
+    } on MarketplaceListingException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e.message;
+      });
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -167,6 +219,7 @@ class _FpoReceiverScreenState extends State<FpoReceiverScreen> {
     return FpcWorkspaceScaffold(
       current: FpcNavTab.receiver,
       title: UiStrings.t('fpc_receiver'),
+      showQrAction: false,
       body: RefreshIndicator(
         onRefresh: _loadRecords,
         child: ListView(
@@ -323,11 +376,22 @@ class _TraceReceiveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final batch = _text(trace, 'batchId', UiStrings.t('harvest_lot'));
+    final isMarketplace = MarketplaceOrderQrParser.isMarketplaceOrder(trace);
+    final batch = isMarketplace
+        ? _text(
+            trace,
+            'orderNumber',
+            UiStrings.fromEnglish('Marketplace order'),
+          )
+        : _text(trace, 'batchId', UiStrings.t('harvest_lot'));
     final grade = _text(trace, 'grade');
     final score = _scoreLabel(trace);
-    final quantity = _quantityLabel(trace);
-    final moisture = _percentLabel(trace, 'moisture');
+    final quantity = isMarketplace
+        ? _marketplaceQuantityLabel(trace)
+        : _quantityLabel(trace);
+    final moisture = isMarketplace
+        ? _percentLabel(trace, 'moisturePercent')
+        : _percentLabel(trace, 'moisture');
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -390,7 +454,8 @@ class _TraceReceiveCard extends StatelessWidget {
           Row(
             children: [
               _ReceiveMetric(label: UiStrings.t('grade'), value: grade),
-              _ReceiveMetric(label: UiStrings.t('score'), value: score),
+              if (!isMarketplace)
+                _ReceiveMetric(label: UiStrings.t('score'), value: score),
               _ReceiveMetric(label: UiStrings.t('quantity'), value: quantity),
             ],
           ),
@@ -404,14 +469,21 @@ class _TraceReceiveCard extends StatelessWidget {
             child: Column(
               children: [
                 _ReceiveRow(label: UiStrings.t('batch_id'), value: batch),
-                _ReceiveRow(
-                  label: UiStrings.t('analysis_id'),
-                  value: _text(trace, 'analysisId'),
-                ),
-                _ReceiveRow(
-                  label: UiStrings.t('role_farmer'),
-                  value: _text(trace, 'farmerName'),
-                ),
+                if (isMarketplace)
+                  _ReceiveRow(
+                    label: UiStrings.fromEnglish('Marketplace order'),
+                    value: _text(trace, 'orderNumber'),
+                  )
+                else ...[
+                  _ReceiveRow(
+                    label: UiStrings.t('analysis_id'),
+                    value: _text(trace, 'analysisId'),
+                  ),
+                  _ReceiveRow(
+                    label: UiStrings.t('role_farmer'),
+                    value: _text(trace, 'farmerName'),
+                  ),
+                ],
                 _ReceiveRow(
                   label: UiStrings.t('farmer_id_label'),
                   value: _text(trace, 'farmerId'),
@@ -440,35 +512,51 @@ class _TraceReceiveCard extends StatelessWidget {
                   label: UiStrings.t('variety'),
                   value: _text(trace, 'variety'),
                 ),
-                _ReceiveRow(
-                  label: UiStrings.t('bags'),
-                  value: _bagLabel(trace),
-                ),
+                if (!isMarketplace)
+                  _ReceiveRow(
+                    label: UiStrings.t('bags'),
+                    value: _bagLabel(trace),
+                  ),
                 _ReceiveRow(label: UiStrings.t('quantity'), value: quantity),
                 _ReceiveRow(label: UiStrings.t('moisture'), value: moisture),
-                _ReceiveRow(
-                  label: UiStrings.t('moisture_source'),
-                  value: _text(trace, 'moistureSource'),
-                ),
-                _ReceiveRow(
-                  label: UiStrings.t('standards'),
-                  value: _text(trace, 'standards'),
-                ),
-                _ReceiveRow(
-                  label: UiStrings.t('grader'),
-                  value: _text(trace, 'grader'),
-                ),
-                _ReceiveRow(
-                  label: UiStrings.t('review'),
-                  value: _text(trace, 'reviewStatus'),
-                ),
-                _ReceiveRow(
-                  label: UiStrings.t('trace_generated'),
-                  value: _dateTimeLabel(trace),
-                ),
+                if (!isMarketplace) ...[
+                  _ReceiveRow(
+                    label: UiStrings.t('moisture_source'),
+                    value: _text(trace, 'moistureSource'),
+                  ),
+                  _ReceiveRow(
+                    label: UiStrings.t('standards'),
+                    value: _text(trace, 'standards'),
+                  ),
+                  _ReceiveRow(
+                    label: UiStrings.t('grader'),
+                    value: _text(trace, 'grader'),
+                  ),
+                  _ReceiveRow(
+                    label: UiStrings.t('review'),
+                    value: _text(trace, 'reviewStatus'),
+                  ),
+                  _ReceiveRow(
+                    label: UiStrings.t('trace_generated'),
+                    value: _dateTimeLabel(trace),
+                  ),
+                ],
               ],
             ),
           ),
+          if (isMarketplace) ...[
+            const SizedBox(height: 12),
+            Text(
+              UiStrings.fromEnglish(
+                'This receipt remains quarantined. It does not increase stock or create a farmer payable.',
+              ),
+              style: const TextStyle(
+                color: Colors.orange,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -479,8 +567,14 @@ class _TraceReceiveCard extends StatelessWidget {
                     decimal: true,
                   ),
                   decoration: InputDecoration(
-                    labelText: UiStrings.t('price_per_kg'),
-                    prefixIcon: const Icon(Icons.currency_rupee),
+                    labelText: isMarketplace
+                        ? UiStrings.fromEnglish('Measured net weight (kg)')
+                        : UiStrings.t('price_per_kg'),
+                    prefixIcon: Icon(
+                      isMarketplace
+                          ? Icons.scale_outlined
+                          : Icons.currency_rupee,
+                    ),
                   ),
                 ),
               ),
@@ -488,10 +582,18 @@ class _TraceReceiveCard extends StatelessWidget {
               Expanded(
                 child: TextField(
                   controller: ratingController,
-                  keyboardType: TextInputType.number,
+                  keyboardType: isMarketplace
+                      ? TextInputType.text
+                      : TextInputType.number,
                   decoration: InputDecoration(
-                    labelText: UiStrings.t('rating_1_5'),
-                    prefixIcon: const Icon(Icons.star_border_rounded),
+                    labelText: isMarketplace
+                        ? UiStrings.fromEnglish('Arrival grade')
+                        : UiStrings.t('rating_1_5'),
+                    prefixIcon: Icon(
+                      isMarketplace
+                          ? Icons.grading_outlined
+                          : Icons.star_border_rounded,
+                    ),
                   ),
                 ),
               ),
@@ -500,11 +602,20 @@ class _TraceReceiveCard extends StatelessWidget {
           const SizedBox(height: 12),
           TextField(
             controller: notesController,
-            minLines: 2,
-            maxLines: 3,
+            keyboardType: isMarketplace
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.multiline,
+            minLines: isMarketplace ? 1 : 2,
+            maxLines: isMarketplace ? 1 : 3,
             decoration: InputDecoration(
-              labelText: UiStrings.t('receiver_notes'),
-              prefixIcon: const Icon(Icons.notes_outlined),
+              labelText: isMarketplace
+                  ? UiStrings.fromEnglish('Moisture percent')
+                  : UiStrings.t('receiver_notes'),
+              prefixIcon: Icon(
+                isMarketplace
+                    ? Icons.water_drop_outlined
+                    : Icons.notes_outlined,
+              ),
             ),
           ),
           const SizedBox(height: 14),
@@ -520,6 +631,8 @@ class _TraceReceiveCard extends StatelessWidget {
             label: Text(
               saving
                   ? UiStrings.t('saving')
+                  : isMarketplace
+                  ? UiStrings.fromEnglish('Quarantine arrival')
                   : UiStrings.t('save_received_product'),
             ),
           ),
@@ -805,6 +918,17 @@ String _quantityLabel(Map<String, dynamic> source) {
   return lower.contains('kg')
       ? LocaleText.digits(quantity)
       : UiStrings.f('kg_value_plain', {'value': quantity});
+}
+
+String _marketplaceQuantityLabel(Map<String, dynamic> source) {
+  final quantityKg = _text(source, 'quantityKg', '');
+  if (quantityKg.isNotEmpty) {
+    return UiStrings.f('kg_value_plain', {'value': quantityKg});
+  }
+  final quantity = _text(source, 'quantity', '');
+  final unit = _text(source, 'unit', '');
+  if (quantity.isEmpty) return '--';
+  return LocaleText.digits('$quantity $unit'.trim());
 }
 
 String _bagLabel(Map<String, dynamic> source) {

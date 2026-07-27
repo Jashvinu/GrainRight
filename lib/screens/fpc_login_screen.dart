@@ -49,8 +49,13 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
     final auth = Get.find<MainAuthController>();
     final language = Get.find<LanguageController>();
 
+    final arguments = Get.arguments;
+    final notice = arguments is Map
+        ? '${arguments['notice'] ?? ''}'.trim()
+        : '';
     return Obx(() {
       return RoleLoginShell(
+        dense: true,
         title: UiStrings.t('fpc_login'),
         subtitle: UiStrings.t('fpc_login_desc'),
         languageCode: language.language.value,
@@ -59,7 +64,7 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
         fallbackIcon: Icons.groups_2_outlined,
         info: RoleLoginInfoStrip(
           icon: Icons.verified_user_outlined,
-          text: UiStrings.t('fpc_login_info'),
+          text: notice.isEmpty ? UiStrings.t('fpc_login_info') : notice,
         ),
         form: Form(
           key: _formKey,

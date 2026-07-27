@@ -16,7 +16,7 @@ publish_to: "none" # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.7+33
+version: 1.0.8+34
 
 environment:
   sdk: ^3.10.7
@@ -42,11 +42,11 @@ dependencies:
   flutter_map: ^6.1.0
   latlong2: ^0.9.0
   fl_chart: ^0.69.0
-  shared_preferences: ^2.3.0
-  flutter_secure_storage: ^9.2.4
+  shared_preferences: ^2.5.5
+  flutter_secure_storage: ^10.3.1
   connectivity_plus: ^6.1.5
   http: ^1.2.0
-  image_picker: ^1.2.2
+  image_picker: ^1.2.3
   path_provider: ^2.1.5
   geolocator: ^13.0.0
   flutter_markdown: ^0.7.4
@@ -57,9 +57,14 @@ dependencies:
   uuid: ^4.5.3
   workmanager: ^0.7.0
   qr_flutter: 4.1.0
-  mobile_scanner: ^7.2.0
+  mobile_scanner: ^7.3.0
   razorpay_flutter: ^1.4.5
   url_launcher: ^6.3.2
+  pdf: ^3.12.0
+  excel: ^4.0.6
+  share_plus: ^13.2.1
+  cross_file: ^0.3.5+2
+  printing: ^5.14.2
 
 dev_dependencies:
   flutter_test:
@@ -108,6 +113,7 @@ flutter:
     - assets/verified_farmer_seed.json
     - assets/prompts/
     - assets/Crop type and variety based doc/
+    - assets/marketplace/
     - assets/farmer_login_avatar.png
     - assets/farmer_avatar.png
     - assets/farmer_avatar_2.png

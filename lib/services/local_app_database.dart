@@ -42,6 +42,44 @@ class LocalSurveyRecord {
   });
 }
 
+class LocalFieldQueueRecord {
+  final String localId;
+  final String officerUserId;
+  final String clientUuid;
+  final String status;
+  final int attemptCount;
+  final Map<String, dynamic> payload;
+  final String createdAt;
+  final String updatedAt;
+  final String? lastError;
+
+  const LocalFieldQueueRecord({
+    required this.localId,
+    required this.officerUserId,
+    required this.clientUuid,
+    required this.status,
+    required this.attemptCount,
+    required this.payload,
+    required this.createdAt,
+    required this.updatedAt,
+    this.lastError,
+  });
+}
+
+class LocalFieldContextRecord {
+  final String officerUserId;
+  final Map<String, dynamic> membership;
+  final List<Map<String, dynamic>> assignments;
+  final String updatedAt;
+
+  const LocalFieldContextRecord({
+    required this.officerUserId,
+    required this.membership,
+    required this.assignments,
+    required this.updatedAt,
+  });
+}
+
 class OfflineMapRegionRecord {
   final String regionId;
   final String label;
@@ -248,6 +286,11 @@ class LocalInventoryCacheRecord {
   final String farmName;
   final String batchId;
   final String harvestBatchId;
+  final String harvestZonePlanId;
+  final String harvestZoneId;
+  final String harvestZoneLabel;
+  final String fieldGrade;
+  final double? fieldScore;
   final String productCategory;
   final String productName;
   final String crop;
@@ -280,6 +323,11 @@ class LocalInventoryCacheRecord {
     required this.farmName,
     required this.batchId,
     this.harvestBatchId = '',
+    this.harvestZonePlanId = '',
+    this.harvestZoneId = '',
+    this.harvestZoneLabel = '',
+    this.fieldGrade = '',
+    this.fieldScore,
     required this.productCategory,
     required this.productName,
     required this.crop,
@@ -360,6 +408,30 @@ class LocalAppDatabase extends GeneratedDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_local_surveys_user_id ON local_surveys(user_id);',
     );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS local_field_queue (
+        local_id TEXT PRIMARY KEY,
+        officer_user_id TEXT NOT NULL,
+        client_uuid TEXT NOT NULL UNIQUE,
+        payload_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_error TEXT
+      );
+    ''');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_local_field_queue_user_status ON local_field_queue(officer_user_id, status, created_at);',
+    );
+    await customStatement('''
+      CREATE TABLE IF NOT EXISTS local_field_context (
+        officer_user_id TEXT PRIMARY KEY,
+        membership_json TEXT NOT NULL,
+        assignments_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    ''');
     await customStatement('''
       CREATE TABLE IF NOT EXISTS form_config_cache (
         cache_key TEXT PRIMARY KEY,
@@ -493,6 +565,11 @@ class LocalAppDatabase extends GeneratedDatabase {
         farm_name TEXT NOT NULL,
         batch_id TEXT NOT NULL,
         harvest_batch_id TEXT NOT NULL DEFAULT '',
+        harvest_zone_plan_id TEXT NOT NULL DEFAULT '',
+        harvest_zone_id TEXT NOT NULL DEFAULT '',
+        harvest_zone_label TEXT NOT NULL DEFAULT '',
+        field_grade TEXT NOT NULL DEFAULT '',
+        field_score REAL,
         product_category TEXT NOT NULL,
         product_name TEXT NOT NULL,
         crop TEXT NOT NULL,
@@ -534,6 +611,19 @@ class LocalAppDatabase extends GeneratedDatabase {
       );
     } catch (_) {
       // Existing caches already have this column.
+    }
+    for (final statement in const [
+      "ALTER TABLE local_inventory_items ADD COLUMN harvest_zone_plan_id TEXT NOT NULL DEFAULT '';",
+      "ALTER TABLE local_inventory_items ADD COLUMN harvest_zone_id TEXT NOT NULL DEFAULT '';",
+      "ALTER TABLE local_inventory_items ADD COLUMN harvest_zone_label TEXT NOT NULL DEFAULT '';",
+      "ALTER TABLE local_inventory_items ADD COLUMN field_grade TEXT NOT NULL DEFAULT '';",
+      'ALTER TABLE local_inventory_items ADD COLUMN field_score REAL;',
+    ]) {
+      try {
+        await customStatement(statement);
+      } catch (_) {
+        // Existing caches already have the harvest trace column.
+      }
     }
     await customStatement('''
       CREATE TABLE IF NOT EXISTS offline_map_regions (
@@ -728,6 +818,151 @@ class LocalAppDatabase extends GeneratedDatabase {
         Variable.withString(syncedAt),
         Variable.withString(localId),
       ],
+    );
+  }
+
+  Future<void> upsertLocalFieldQueue({
+    required String localId,
+    required String officerUserId,
+    required String clientUuid,
+    required Map<String, dynamic> payload,
+    required String status,
+    required int attemptCount,
+    required String createdAt,
+    required String updatedAt,
+    String? lastError,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      INSERT INTO local_field_queue (
+        local_id, officer_user_id, client_uuid, payload_json, status,
+        attempt_count, created_at, updated_at, last_error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(local_id) DO UPDATE SET
+        officer_user_id=excluded.officer_user_id,
+        client_uuid=excluded.client_uuid,
+        payload_json=excluded.payload_json,
+        status=excluded.status,
+        attempt_count=excluded.attempt_count,
+        updated_at=excluded.updated_at,
+        last_error=excluded.last_error
+      ''',
+      variables: [
+        Variable.withString(localId),
+        Variable.withString(officerUserId),
+        Variable.withString(clientUuid),
+        Variable.withString(jsonEncode(payload)),
+        Variable.withString(status),
+        Variable.withInt(attemptCount),
+        Variable.withString(createdAt),
+        Variable.withString(updatedAt),
+        Variable(lastError),
+      ],
+    );
+  }
+
+  Future<List<LocalFieldQueueRecord>> loadLocalFieldQueue(
+    String officerUserId,
+  ) async {
+    await ensureInitialized();
+    final rows = await customSelect(
+      "SELECT * FROM local_field_queue WHERE officer_user_id = ? AND status != 'synced' ORDER BY created_at",
+      variables: [Variable.withString(officerUserId)],
+    ).get();
+    return rows
+        .map(
+          (row) => LocalFieldQueueRecord(
+            localId: row.read<String>('local_id'),
+            officerUserId: row.read<String>('officer_user_id'),
+            clientUuid: row.read<String>('client_uuid'),
+            status: row.read<String>('status'),
+            attemptCount: row.read<int>('attempt_count'),
+            payload: Map<String, dynamic>.from(
+              jsonDecode(row.read<String>('payload_json')) as Map,
+            ),
+            createdAt: row.read<String>('created_at'),
+            updatedAt: row.read<String>('updated_at'),
+            lastError: row.readNullable<String>('last_error'),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  Future<void> markLocalFieldQueue({
+    required String localId,
+    required String status,
+    required String updatedAt,
+    String? lastError,
+    bool incrementAttempts = false,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      UPDATE local_field_queue SET status=?, updated_at=?, last_error=?,
+        attempt_count=attempt_count + ? WHERE local_id=?
+      ''',
+      variables: [
+        Variable.withString(status),
+        Variable.withString(updatedAt),
+        Variable(lastError),
+        Variable.withInt(incrementAttempts ? 1 : 0),
+        Variable.withString(localId),
+      ],
+    );
+  }
+
+  Future<void> deleteLocalFieldQueue(String localId) async {
+    await ensureInitialized();
+    await customUpdate(
+      'DELETE FROM local_field_queue WHERE local_id=?',
+      variables: [Variable.withString(localId)],
+    );
+  }
+
+  Future<void> saveLocalFieldContext({
+    required String officerUserId,
+    required Map<String, dynamic> membership,
+    required List<Map<String, dynamic>> assignments,
+    required String updatedAt,
+  }) async {
+    await ensureInitialized();
+    await customUpdate(
+      '''
+      INSERT INTO local_field_context(officer_user_id,membership_json,assignments_json,updated_at)
+      VALUES(?,?,?,?) ON CONFLICT(officer_user_id) DO UPDATE SET
+        membership_json=excluded.membership_json,
+        assignments_json=excluded.assignments_json,
+        updated_at=excluded.updated_at
+      ''',
+      variables: [
+        Variable.withString(officerUserId),
+        Variable.withString(jsonEncode(membership)),
+        Variable.withString(jsonEncode(assignments)),
+        Variable.withString(updatedAt),
+      ],
+    );
+  }
+
+  Future<LocalFieldContextRecord?> loadLocalFieldContext(
+    String officerUserId,
+  ) async {
+    await ensureInitialized();
+    final row = await customSelect(
+      'SELECT * FROM local_field_context WHERE officer_user_id=?',
+      variables: [Variable.withString(officerUserId)],
+    ).getSingleOrNull();
+    if (row == null) return null;
+    return LocalFieldContextRecord(
+      officerUserId: row.read<String>('officer_user_id'),
+      membership: Map<String, dynamic>.from(
+        jsonDecode(row.read<String>('membership_json')) as Map,
+      ),
+      assignments: (jsonDecode(row.read<String>('assignments_json')) as List)
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList(growable: false),
+      updatedAt: row.read<String>('updated_at'),
     );
   }
 
@@ -1177,13 +1412,15 @@ class LocalAppDatabase extends GeneratedDatabase {
       '''
       INSERT INTO local_inventory_items (
         local_id, remote_id, user_id, farmer_phone, farmer_id, farm_id,
-        farm_name, batch_id, harvest_batch_id, product_category, product_name,
+        farm_name, batch_id, harvest_batch_id, harvest_zone_plan_id,
+        harvest_zone_id, harvest_zone_label, field_grade, field_score,
+        product_category, product_name,
         crop, variety, quantity, unit, bag_count, bag_size_kg,
         moisture_percent, grade, grade_score, grade_basis,
         estimated_yield_kg, harvested_at, latitude, longitude, image_name,
         source_flow, notes, sync_status, created_at, updated_at, synced_at,
         last_error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(local_id) DO UPDATE SET
         remote_id = excluded.remote_id,
         user_id = excluded.user_id,
@@ -1193,6 +1430,11 @@ class LocalAppDatabase extends GeneratedDatabase {
         farm_name = excluded.farm_name,
         batch_id = excluded.batch_id,
         harvest_batch_id = excluded.harvest_batch_id,
+        harvest_zone_plan_id = excluded.harvest_zone_plan_id,
+        harvest_zone_id = excluded.harvest_zone_id,
+        harvest_zone_label = excluded.harvest_zone_label,
+        field_grade = excluded.field_grade,
+        field_score = excluded.field_score,
         product_category = excluded.product_category,
         product_name = excluded.product_name,
         crop = excluded.crop,
@@ -1228,6 +1470,11 @@ class LocalAppDatabase extends GeneratedDatabase {
         Variable.withString(item.farmName),
         Variable.withString(item.batchId),
         Variable.withString(item.harvestBatchId),
+        Variable.withString(item.harvestZonePlanId),
+        Variable.withString(item.harvestZoneId),
+        Variable.withString(item.harvestZoneLabel),
+        Variable.withString(item.fieldGrade),
+        Variable(item.fieldScore),
         Variable.withString(item.productCategory),
         Variable.withString(item.productName),
         Variable.withString(item.crop),
@@ -1565,6 +1812,11 @@ class LocalAppDatabase extends GeneratedDatabase {
       farmName: row.read<String>('farm_name'),
       batchId: row.read<String>('batch_id'),
       harvestBatchId: row.read<String>('harvest_batch_id'),
+      harvestZonePlanId: row.read<String>('harvest_zone_plan_id'),
+      harvestZoneId: row.read<String>('harvest_zone_id'),
+      harvestZoneLabel: row.read<String>('harvest_zone_label'),
+      fieldGrade: row.read<String>('field_grade'),
+      fieldScore: row.readNullable<double>('field_score'),
       productCategory: row.read<String>('product_category'),
       productName: row.read<String>('product_name'),
       crop: row.read<String>('crop'),

@@ -237,8 +237,12 @@ class _RoleAccountSignupScreenState extends State<RoleAccountSignupScreen> {
             RoleLoginButton(
               loading: auth.isLoading.value,
               onPressed: _submit,
-              label: UiStrings.t('create_account'),
-              loadingLabel: UiStrings.t('creating_account'),
+              label: _isAdmin
+                  ? UiStrings.t('create_account')
+                  : UiStrings.fromEnglish('Submit application'),
+              loadingLabel: _isAdmin
+                  ? UiStrings.t('creating_account')
+                  : UiStrings.fromEnglish('Submitting application'),
             ),
             const SizedBox(height: 10),
             TextButton.icon(

@@ -8,6 +8,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../services/fpc_procurement_service.dart';
 import '../services/fpc_preferences_service.dart';
+import '../services/fpc_operating_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
 
 class FpoFarmerQrScanScreen extends StatefulWidget {
@@ -78,8 +79,9 @@ class _FpoFarmerQrScanScreenState extends State<FpoFarmerQrScanScreen> {
   @override
   Widget build(BuildContext context) {
     return FpcWorkspaceScaffold(
-      current: FpcNavTab.farmerScan,
+      current: FpcNavTab.qrHub,
       title: UiStrings.t('scan_farmer_qr'),
+      showQrAction: false,
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 128),
         children: [
@@ -382,11 +384,22 @@ class _FarmerResultCard extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () => Get.snackbar(
-                    UiStrings.t('farmer_linked'),
-                    UiStrings.t('farmer_profile_verified_fpo'),
-                    snackPosition: SnackPosition.BOTTOM,
-                  ),
+                  onPressed: () async {
+                    try {
+                      await FpcOperatingService().linkFarmer(farmer);
+                      Get.snackbar(
+                        UiStrings.t('farmer_linked'),
+                        UiStrings.t('farmer_profile_verified_fpo'),
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    } catch (error) {
+                      Get.snackbar(
+                        UiStrings.t('farmer_qr_scan_failed'),
+                        '$error',
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    }
+                  },
                   icon: const Icon(Icons.group_add_outlined),
                   label: Text(UiStrings.t('add_to_fpc_records')),
                 ),

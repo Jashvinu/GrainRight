@@ -38,6 +38,34 @@ void main() {
         throwsA(isA<FpcProcurementException>()),
       );
     });
+
+    test('remains strict when given a marketplace order QR', () {
+      expect(
+        () => HarvestTraceParser.parse(jsonEncode(_marketplaceOrderPayload())),
+        throwsA(isA<FpcProcurementException>()),
+      );
+    });
+  });
+
+  group('FpcReceiveQrParser', () {
+    test('accepts a valid marketplace order QR', () {
+      final parsed = FpcReceiveQrParser.parse(
+        jsonEncode(_marketplaceOrderPayload()),
+      );
+
+      expect(parsed['type'], MarketplaceOrderQrParser.type);
+      expect(parsed['orderId'], 'order-001');
+      expect(parsed['quantityKg'], 600);
+    });
+
+    test('rejects marketplace QR missing its order id', () {
+      final payload = _marketplaceOrderPayload()..remove('orderId');
+
+      expect(
+        () => FpcReceiveQrParser.parse(jsonEncode(payload)),
+        throwsA(isA<FpcProcurementException>()),
+      );
+    });
   });
 
   group('FarmerProfileQrParser', () {
@@ -105,6 +133,25 @@ Map<String, dynamic> _farmerQrPayload() {
     'crop': 'Finger Millet',
     'source': 'remote_supabase',
     'verified': true,
+  };
+}
+
+Map<String, dynamic> _marketplaceOrderPayload() {
+  return {
+    'type': MarketplaceOrderQrParser.type,
+    'orderId': 'order-001',
+    'orderNumber': 'MKT-20260727-001',
+    'listingId': 'listing-001',
+    'batchId': 'KF-HV-20260703-001',
+    'quantityKg': 600,
+    'unit': 'kg',
+    'grade': 'A',
+    'moisturePercent': 11.2,
+    'crop': 'Finger Millet',
+    'variety': 'Local',
+    'farmerId': 'farmer-001',
+    'farmId': 'farm-001',
+    'farm': 'Akole Millet Plot',
   };
 }
 

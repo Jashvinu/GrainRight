@@ -19,6 +19,7 @@ class RoleLoginShell extends StatelessWidget {
   final Widget? error;
   final IconData fallbackIcon;
   final String avatarAsset;
+  final bool dense;
 
   const RoleLoginShell({
     super.key,
@@ -33,6 +34,7 @@ class RoleLoginShell extends StatelessWidget {
     this.error,
     this.fallbackIcon = Icons.verified_user_outlined,
     this.avatarAsset = BrandAssets.kalsubaiFarms,
+    this.dense = false,
   });
 
   @override
@@ -67,9 +69,9 @@ class RoleLoginShell extends StatelessWidget {
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  16,
+                  dense ? 10 : 16,
                   horizontalPadding,
-                  (compact ? 136 : 166) + bottomInset,
+                  (dense ? 116 : (compact ? 136 : 166)) + bottomInset,
                 ),
                 child: Center(
                   child: TweenAnimationBuilder<double>(
@@ -100,21 +102,22 @@ class RoleLoginShell extends StatelessWidget {
                               ),
                             ],
                           ),
-                          SizedBox(height: compact ? 16 : 20),
+                          SizedBox(height: dense ? 8 : (compact ? 16 : 20)),
                           _RoleLoginHeader(
                             title: title,
                             subtitle: subtitle,
                             compact: compact,
                             fallbackIcon: fallbackIcon,
                             avatarAsset: avatarAsset,
+                            dense: dense,
                           ),
-                          SizedBox(height: compact ? 18 : 22),
+                          SizedBox(height: dense ? 12 : (compact ? 18 : 22)),
                           if (info != null) ...[
                             info!,
-                            const SizedBox(height: 14),
+                            SizedBox(height: dense ? 10 : 14),
                           ],
-                          RoleLoginCard(child: form),
-                          const SizedBox(height: 18),
+                          RoleLoginCard(dense: dense, child: form),
+                          SizedBox(height: dense ? 12 : 18),
                           action,
                           if (error != null) ...[
                             const SizedBox(height: 12),
@@ -136,13 +139,14 @@ class RoleLoginShell extends StatelessWidget {
 
 class RoleLoginCard extends StatelessWidget {
   final Widget child;
+  final bool dense;
 
-  const RoleLoginCard({super.key, required this.child});
+  const RoleLoginCard({super.key, required this.child, this.dense = false});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(dense ? 15 : 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(26),
@@ -271,6 +275,7 @@ class _RoleLoginHeader extends StatelessWidget {
   final bool compact;
   final IconData fallbackIcon;
   final String avatarAsset;
+  final bool dense;
 
   const _RoleLoginHeader({
     required this.title,
@@ -278,11 +283,14 @@ class _RoleLoginHeader extends StatelessWidget {
     required this.compact,
     required this.fallbackIcon,
     required this.avatarAsset,
+    required this.dense,
   });
 
   @override
   Widget build(BuildContext context) {
-    final avatarSize = compact ? 124.0 : 156.0;
+    final avatarSize = dense
+        ? (compact ? 86.0 : 104.0)
+        : (compact ? 124.0 : 156.0);
     return Column(
       children: [
         Container(
@@ -332,13 +340,13 @@ class _RoleLoginHeader extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(height: compact ? 12 : 16),
+        SizedBox(height: dense ? 9 : (compact ? 12 : 16)),
         Text(
           title,
           textAlign: TextAlign.center,
           style: TextStyle(
             color: AppTheme.greenDark,
-            fontSize: compact ? 30 : 34,
+            fontSize: dense ? (compact ? 26 : 29) : (compact ? 30 : 34),
             fontWeight: FontWeight.w900,
             letterSpacing: 0,
             height: 1.05,

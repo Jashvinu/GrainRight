@@ -70,7 +70,14 @@ class MainAuthController extends GetxController {
     'ADMIN_LOGIN_EMAIL',
     defaultValue: 'kalsubaifarms@gmail.com',
   );
-  static const _fpcServerRoles = {'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'};
+  static const _fpcServerRoles = {
+    'fpc',
+    'fpo',
+    'fpo_fpc',
+    'fpo/fpc',
+    'fpc_admin',
+    'field_officer',
+  };
 
   final _auth = Supabase.instance.client.auth;
   final _client = Supabase.instance.client;
@@ -98,6 +105,7 @@ class MainAuthController extends GetxController {
   final Rxn<VerifiedFarmerRecord> verifiedFarmer = Rxn<VerifiedFarmerRecord>();
   bool _farmerSessionLinkInProgress = false;
   Future<void>? _farmerDataSyncInFlight;
+  Future<void>? _verifiedProfileRefreshInFlight;
 
   @override
   void onInit() {
@@ -244,8 +252,15 @@ class MainAuthController extends GetxController {
         errorMessage.value = 'This account is not enabled for FPC login.';
         return;
       }
+      final route = await resolveFpcLoginRoute(_auth.currentUser);
+      if (route == null) {
+        await _auth.signOut();
+        errorMessage.value =
+            'This FPC account is pending, disabled or the organization is suspended.';
+        return;
+      }
       isLoggedIn.value = true;
-      await _afterSignIn(nextRoute, syncFarmerBeforeRoute: false);
+      await _afterSignIn(route, syncFarmerBeforeRoute: false);
     } on AuthException catch (e) {
       errorMessage.value = e.message;
     } catch (_) {
@@ -262,17 +277,9 @@ class MainAuthController extends GetxController {
     required String organizationName,
     required String phone,
     String nextRoute = '/admin',
-  }) {
-    return _signupRoleAccount(
-      role: 'admin',
-      email: email,
-      password: password,
-      displayName: displayName,
-      organizationName: organizationName,
-      phone: phone,
-      allowedRoles: const {'admin'},
-      nextRoute: nextRoute,
-    );
+  }) async {
+    errorMessage.value =
+        'Platform Admin accounts are created through the secured administration workflow.';
   }
 
   Future<void> signupFpc({
@@ -344,7 +351,7 @@ class MainAuthController extends GetxController {
         await _auth.signOut();
       }
       final response = await _client.functions.invoke(
-        'role-account-signup',
+        role == 'fpc' ? 'fpc-registration-submit' : 'role-account-signup',
         body: {
           'role': role,
           'email': normalizedEmail,
@@ -360,6 +367,17 @@ class MainAuthController extends GetxController {
           '${data['error'] ?? 'Could not create $accountLabel account.'}',
           code: '${data['code'] ?? ''}'.trim(),
         );
+      }
+      if (role == 'fpc') {
+        errorMessage.value = '';
+        Get.offAllNamed(
+          '/fpc/login',
+          arguments: const {
+            'notice':
+                'Application submitted. You can login after Kalsubai Farms approves the FPC.',
+          },
+        );
+        return;
       }
       await _auth.signInWithPassword(
         email: normalizedEmail,
@@ -381,6 +399,40 @@ class MainAuthController extends GetxController {
       errorMessage.value = _roleAccountSignupErrorMessage(e, accountLabel);
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<String?> resolveFpcLoginRoute(User? user) async {
+    final role = '${user?.appMetadata['role'] ?? ''}'.trim().toLowerCase();
+    if (role == 'fpc_applicant') return null;
+    try {
+      final membership = await _client
+          .from('fpc_memberships')
+          .select('role,status,must_change_password,fpcs!inner(status)')
+          .eq('user_id', user?.id ?? '')
+          .eq('status', 'active')
+          .maybeSingle();
+      if (membership == null) {
+        return const {'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)
+            ? '/fpo'
+            : null;
+      }
+      final fpc = membership['fpcs'];
+      final fpcStatus = fpc is Map ? '${fpc['status'] ?? ''}' : '';
+      if (fpcStatus.toLowerCase() != 'active') return null;
+      final mustChange = membership['must_change_password'] == true;
+      if (mustChange) return '/account/change-password';
+      return '${membership['role'] ?? ''}'.toLowerCase() == 'field_officer'
+          ? '/field'
+          : '/fpo';
+    } on PostgrestException catch (error) {
+      final message = '${error.message} ${error.code}'.toLowerCase();
+      final schemaUnavailable =
+          message.contains('does not exist') ||
+          message.contains('schema cache') ||
+          message.contains('pgrst205');
+      if (schemaUnavailable) return null;
+      rethrow;
     }
   }
 
@@ -972,6 +1024,24 @@ class MainAuthController extends GetxController {
   }
 
   Future<void> _refreshVerifiedProfile() async {
+    final inFlight = _verifiedProfileRefreshInFlight;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final refresh = _refreshVerifiedProfileOnce();
+    _verifiedProfileRefreshInFlight = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (identical(_verifiedProfileRefreshInFlight, refresh)) {
+        _verifiedProfileRefreshInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _refreshVerifiedProfileOnce() async {
     if (_auth.currentUser == null) {
       verifiedFarmer.value = null;
       isLoggedIn.value =
@@ -2003,7 +2073,7 @@ class MainAuthController extends GetxController {
       return await _client
           .from('farmer_phone_profiles')
           .select(
-            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path',
+            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_number, aadhaar_masked, aadhaar_last4, identity_document_path, status',
           )
           .eq('user_id', userId)
           .limit(1);
@@ -2012,7 +2082,7 @@ class MainAuthController extends GetxController {
       return await _client
           .from('farmer_phone_profiles')
           .select(
-            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path',
+            'phone, farmer_id, farmer_name, default_location, agri_record_id, aadhaar_masked, aadhaar_last4, identity_document_path, status',
           )
           .eq('user_id', userId)
           .limit(1);
@@ -2028,7 +2098,7 @@ class MainAuthController extends GetxController {
 
     if (rows.isNotEmpty) {
       final row = Map<String, dynamic>.from(rows.first as Map);
-      return VerifiedFarmerRecord(
+      final record = VerifiedFarmerRecord(
         phone: '${row['phone'] ?? ''}',
         farmerId: '${row['farmer_id'] ?? 'FMR-${row['phone'] ?? user.id}'}',
         farmerName: '${row['farmer_name'] ?? 'Farmer'}',
@@ -2040,6 +2110,17 @@ class MainAuthController extends GetxController {
         identityDocumentPath: '${row['identity_document_path'] ?? ''}'.trim(),
         lots: const [],
       );
+      if ('${row['status'] ?? ''}'.trim().toLowerCase() != 'active') {
+        final phone = _normalizePhone(record.phone);
+        if (phone.length != 10) {
+          throw const FarmerVerificationException(
+            'The saved farmer profile has an invalid mobile number.',
+            code: 'invalid_phone',
+          );
+        }
+        await _linkRemoteFarmerPhone(phone: phone, record: record);
+      }
+      return record;
     }
 
     // 2. Secondary lookup by phone from metadata (for returning users in new sessions)
@@ -2049,10 +2130,11 @@ class MainAuthController extends GetxController {
       try {
         final record = await _verifyFarmerPhone(phone);
         // Automatically link this new session to the existing profile
-        unawaited(_linkRemoteFarmerPhone(phone: phone, record: record));
+        await _linkRemoteFarmerPhone(phone: phone, record: record);
         return record;
-      } catch (_) {
-        // Fallback to minimal record if verify fails
+      } catch (error) {
+        if (!_networkStatusService.looksOffline(error)) rethrow;
+        // Preserve the cached identity while the device is offline.
         return VerifiedFarmerRecord(
           phone: phone,
           farmerId: '${metadata['farmer_id'] ?? 'FMR-$phone'}',
