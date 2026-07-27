@@ -6,6 +6,7 @@ class _PageScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final Future<void> Function()? onRefresh;
   final bool safeArea;
+  final Key? storageKey;
 
   const _PageScaffold({
     required this.title,
@@ -13,12 +14,14 @@ class _PageScaffold extends StatelessWidget {
     this.onBack,
     this.onRefresh,
     this.safeArea = false,
+    this.storageKey,
   });
 
   @override
   Widget build(BuildContext context) {
     final hasHeader = title.trim().isNotEmpty || onBack != null;
     final content = ListView(
+      key: storageKey,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 160),
       children: [

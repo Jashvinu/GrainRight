@@ -6,6 +6,39 @@ import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 
 enum FarmerBottomNavItem { home, farm, aiChat, marketplace, inventory }
 
+class FarmerFloatingBottomNavDock extends StatelessWidget {
+  final FarmerBottomNavItem selectedItem;
+  final ValueChanged<FarmerBottomNavItem> onSelected;
+
+  const FarmerFloatingBottomNavDock({
+    super.key,
+    required this.selectedItem,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 10),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: FarmerFloatingBottomNav(
+              selectedItem: selectedItem,
+              onSelected: onSelected,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FarmerFloatingBottomNav extends StatelessWidget {
   final FarmerBottomNavItem selectedItem;
   final ValueChanged<FarmerBottomNavItem> onSelected;
@@ -20,11 +53,11 @@ class FarmerFloatingBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: SizedBox(
-        height: 78,
+        height: 76,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(26),
+            borderRadius: BorderRadius.circular(24),
             border: Border.all(color: const Color(0xFFDDE9D5)),
             boxShadow: [
               BoxShadow(
@@ -35,7 +68,7 @@ class FarmerFloatingBottomNav extends StatelessWidget {
             ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             child: Row(
               children: [
                 Expanded(
@@ -48,6 +81,7 @@ class FarmerFloatingBottomNav extends StatelessWidget {
                     onSelected: onSelected,
                   ),
                 ),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _FarmerNavButton(
                     item: FarmerBottomNavItem.farm,
@@ -58,6 +92,7 @@ class FarmerFloatingBottomNav extends StatelessWidget {
                     onSelected: onSelected,
                   ),
                 ),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _FarmerNavButton(
                     item: FarmerBottomNavItem.aiChat,
@@ -68,6 +103,7 @@ class FarmerFloatingBottomNav extends StatelessWidget {
                     onSelected: onSelected,
                   ),
                 ),
+                const SizedBox(width: 4),
                 Expanded(
                   child: _FarmerNavButton(
                     item: FarmerBottomNavItem.marketplace,
@@ -110,18 +146,18 @@ class _FarmerNavButton extends StatelessWidget {
     final color = selected ? Colors.white : AppTheme.textMuted;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         onTap: selected ? null : () => onSelected(item),
         child: AnimatedContainer(
           duration: AppMotion.fast,
           curve: AppMotion.standard,
-          height: 58,
+          height: 56,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
             color: selected ? AppTheme.greenDark : Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

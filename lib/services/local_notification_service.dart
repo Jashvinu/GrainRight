@@ -12,10 +12,14 @@ class LocalNotificationService {
 
   LocalNotificationService();
 
+  Future<void>? _initialization;
+
   bool get _isAndroid =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
-  Future<void> initialize() async {
+  Future<void> initialize() => _initialization ??= _initializeOnce();
+
+  Future<void> _initializeOnce() async {
     if (!_isAndroid) return;
     try {
       await _channel.invokeMethod<bool>('initialize');
@@ -41,6 +45,7 @@ class LocalNotificationService {
 
   Future<String?> consumeNotificationPayload() async {
     if (!_isAndroid) return null;
+    await initialize();
     try {
       final payload = await _channel.invokeMethod<String>(
         'consumeNotificationPayload',
@@ -94,6 +99,7 @@ class LocalNotificationService {
     String? type,
   }) async {
     if (!_isAndroid) return false;
+    await initialize();
     final safeTitle = title.trim();
     final safeMessage = message.trim();
     if (safeTitle.isEmpty || safeMessage.isEmpty) return false;

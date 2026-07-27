@@ -43,6 +43,7 @@ void main() {
 
     expect(shown, isTrue);
     expect(calls.map((call) => call.method), [
+      'initialize',
       'requestPermission',
       'showNotification',
     ]);

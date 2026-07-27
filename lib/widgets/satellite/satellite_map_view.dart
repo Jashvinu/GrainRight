@@ -12,8 +12,10 @@ class SatelliteMapView extends StatelessWidget {
   final LatLngBounds? rasterBounds;
   final bool isLoading;
   final List<LatLng>? farmPolygon;
+  final List<Polygon>? overlayPolygons;
   final List<CircleMarker>? heatCircles;
   final List<Marker>? markers;
+  final ValueChanged<LatLng>? onTap;
   final double height;
   final bool showZoomControls;
 
@@ -28,8 +30,10 @@ class SatelliteMapView extends StatelessWidget {
     this.rasterBounds,
     this.isLoading = false,
     this.farmPolygon,
+    this.overlayPolygons,
     this.heatCircles,
     this.markers,
+    this.onTap,
     this.height = 260,
     this.showZoomControls = false,
     this.center,
@@ -43,8 +47,10 @@ class SatelliteMapView extends StatelessWidget {
       rasterBounds: rasterBounds,
       isLoading: isLoading,
       farmPolygon: farmPolygon,
+      overlayPolygons: overlayPolygons,
       heatCircles: heatCircles,
       markers: markers,
+      onTap: onTap,
       height: height,
       showZoomControls: showZoomControls,
       center: center,
@@ -59,8 +65,10 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final LatLngBounds? rasterBounds;
   final bool isLoading;
   final List<LatLng>? farmPolygon;
+  final List<Polygon>? overlayPolygons;
   final List<CircleMarker>? heatCircles;
   final List<Marker>? markers;
+  final ValueChanged<LatLng>? onTap;
   final double height;
   final bool showZoomControls;
   final LatLng? center;
@@ -72,8 +80,10 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.rasterBounds,
     this.isLoading = false,
     this.farmPolygon,
+    this.overlayPolygons,
     this.heatCircles,
     this.markers,
+    this.onTap,
     this.height = 260,
     this.showZoomControls = false,
     this.center,
@@ -124,6 +134,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
   List<LatLng> _contentPoints() {
     return [
       ...?widget.farmPolygon,
+      ...?widget.overlayPolygons?.expand((polygon) => polygon.points),
       ...?widget.markers?.map((m) => m.point),
       ...?widget.heatCircles?.map((c) => c.point),
     ];
@@ -183,6 +194,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 initialZoom: _initialZoom(),
                 minZoom: mapTileMinZoom,
                 maxZoom: mapTileMaxZoom,
+                onTap: (_, point) => widget.onTap?.call(point),
                 onMapReady: () {
                   _mapReady = true;
                   _fitToContent();
@@ -225,6 +237,9 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
+                if (widget.overlayPolygons != null &&
+                    widget.overlayPolygons!.isNotEmpty)
+                  PolygonLayer(polygons: widget.overlayPolygons!),
                 if (widget.heatCircles != null &&
                     widget.heatCircles!.isNotEmpty)
                   CircleLayer(circles: widget.heatCircles!),

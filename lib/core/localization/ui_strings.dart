@@ -2319,11 +2319,11 @@ class UiStrings {
     },
     'ai_chat_welcome': {
       'en':
-          'Hi! I am the Crop Intelligence Assistant for {subject}. Ask me about crop health, irrigation timing, market trend, or what data to capture before inspection.',
+          'Hi! I am your Crop Intelligence Assistant. Ask me about crop health, irrigation timing, market trends, or what to do next.',
       'hi':
-          'नमस्ते! मैं {subject} के लिए फसल इंटेलिजेंस सहायक हूँ। फसल स्वास्थ्य, सिंचाई समय, बाजार रुझान या निरीक्षण से पहले कौन सा डेटा लेना है, पूछें।',
+          'नमस्ते! मैं आपका फसल इंटेलिजेंस सहायक हूँ। फसल स्वास्थ्य, सिंचाई समय, बाजार रुझान या अगला काम पूछें।',
       'mr':
-          'नमस्कार! मी {subject} साठी पीक माहिती सहाय्यक आहे. पीक आरोग्य, सिंचन वेळ, बाजार कल किंवा तपासणीपूर्वी कोणता डेटा घ्यायचा ते विचारा.',
+          'नमस्कार! मी तुमचा पीक माहिती सहाय्यक आहे. पीक आरोग्य, सिंचन वेळ, बाजार कल किंवा पुढील काम विचारा.',
     },
     'ask_about_farm': {
       'en': 'Ask AI Farm Assistant...',
@@ -2998,9 +2998,9 @@ class UiStrings {
       'mr': 'अंदाजे प्रमाण',
     },
     'list_for_sale': {
-      'en': 'List for sale',
-      'hi': 'बिक्री में डालें',
-      'mr': 'विक्रीसाठी नोंदवा',
+      'en': 'List in Market',
+      'hi': 'बाजार में लिस्ट करें',
+      'mr': 'बाजारात जाहिर करा',
     },
     'view_lot': {'en': 'View lot', 'hi': 'लॉट देखें', 'mr': 'लॉट पहा'},
     'avg_moisture': {
@@ -7109,19 +7109,19 @@ class UiStrings {
     },
     'fpc_login_desc': {
       'en':
-          'Login with your registered FPC account to access farmer verification, procurement and field tools.',
+          'One secure login for FPC Admins and Field Officers. We open the correct workspace automatically.',
       'hi':
-          'किसान सत्यापन, खरीद और field tools के लिए अपने पंजीकृत FPC account से login करें।',
+          'FPC Admin और Field Officer के लिए एक सुरक्षित login। सही workspace अपने आप खुलेगा।',
       'mr':
-          'शेतकरी पडताळणी, खरेदी आणि field tools साठी तुमच्या नोंदणीकृत FPC account ने login करा.',
+          'FPC Admin आणि Field Officer साठी एक सुरक्षित login. योग्य workspace आपोआप उघडेल.',
     },
     'fpc_login_info': {
       'en':
-          'Use the email and password configured in Supabase for your FPC account.',
+          'Use your approved FPC email and password. No role selection is needed.',
       'hi':
-          'अपने FPC account के लिए Supabase में configured ईमेल और पासवर्ड उपयोग करें।',
+          'अपना approved FPC ईमेल और पासवर्ड उपयोग करें। Role चुनने की जरूरत नहीं है।',
       'mr':
-          'तुमच्या FPC account साठी Supabase मध्ये configured ईमेल आणि पासवर्ड वापरा.',
+          'तुमचा approved FPC ईमेल आणि पासवर्ड वापरा. Role निवडण्याची गरज नाही.',
     },
     'create_fpc_account': {
       'en': 'Create FPC account',
@@ -7130,15 +7130,14 @@ class UiStrings {
     },
     'fpc_signup': {'en': 'FPC signup', 'hi': 'FPC signup', 'mr': 'FPC signup'},
     'fpc_signup_subtitle': {
-      'en':
-          'Create an FPC account for farmer verification and procurement tools.',
-      'hi': 'किसान सत्यापन और खरीद tools के लिए FPC account बनाएं।',
-      'mr': 'शेतकरी पडताळणी आणि खरेदी tools साठी FPC account तयार करा.',
+      'en': 'Submit your FPC details for Kalsubai Farms approval.',
+      'hi': 'Kalsubai Farms की मंजूरी के लिए अपने FPC का विवरण भेजें।',
+      'mr': 'Kalsubai Farms मंजुरीसाठी तुमच्या FPC ची माहिती पाठवा.',
     },
     'fpc_signup_note': {
-      'en': 'Signup creates FPC access for this workspace.',
-      'hi': 'Signup के बाद यह account FPC workspace खोल सकता है।',
-      'mr': 'Signup नंतर हे account FPC workspace उघडू शकते.',
+      'en': 'You can login after the Platform Admin approves this application.',
+      'hi': 'Platform Admin की मंजूरी के बाद आप लॉगिन कर सकते हैं।',
+      'mr': 'Platform Admin मंजुरीनंतर तुम्ही लॉगिन करू शकता.',
     },
     'management': {'en': 'Management', 'hi': 'प्रबंधन', 'mr': 'व्यवस्थापन'},
     'farmers': {'en': 'Farmers', 'hi': 'किसान', 'mr': 'शेतकरी'},
@@ -8069,6 +8068,103 @@ class UiStrings {
       'hi': 'कटाई योजना नक्शा',
       'mr': 'कापणी नियोजन नकाशा',
     },
+    'field_grade_map': {
+      'en': 'Full-field grade map',
+      'hi': 'पूरे खेत का ग्रेड नक्शा',
+      'mr': 'संपूर्ण शेताचा ग्रेड नकाशा',
+    },
+    'field_grade_map_help': {
+      'en':
+          'A is the best area, B is the middle, and C needs the most attention.',
+      'hi':
+          'A सबसे अच्छा क्षेत्र है, B मध्यम है और C पर सबसे अधिक ध्यान चाहिए।',
+      'mr':
+          'A सर्वोत्तम भाग, B मध्यम भाग आणि C ला सर्वाधिक लक्ष देणे गरजेचे आहे.',
+    },
+    'field_grade': {'en': 'Field Grade', 'hi': 'खेत ग्रेड', 'mr': 'शेत ग्रेड'},
+    'verified_lot_grade': {
+      'en': 'Verified Lot Grade',
+      'hi': 'सत्यापित लॉट ग्रेड',
+      'mr': 'सत्यापित लॉट ग्रेड',
+    },
+    'refresh_harvest_map': {
+      'en': 'Refresh harvest map',
+      'hi': 'कटाई नक्शा ताज़ा करें',
+      'mr': 'कापणी नकाशा ताजा करा',
+    },
+    'harvest_coverage_value': {
+      'en': '{value}% field covered',
+      'hi': '{value}% खेत शामिल',
+      'mr': '{value}% शेत समाविष्ट',
+    },
+    'harvest_grade_distribution': {
+      'en': 'A + B + C = {value}% of the farm',
+      'hi': 'A + B + C = खेत का {value}%',
+      'mr': 'A + B + C = शेताचे {value}%',
+    },
+    'harvest_no_spatial_data': {
+      'en':
+          'At least 3 spatial crop readings are needed. Refresh the farm scan first.',
+      'hi':
+          'कम से कम 3 स्थान-आधारित फसल रीडिंग चाहिए। पहले खेत की जांच ताज़ा करें।',
+      'mr':
+          'किमान 3 स्थानानुसार पीक नोंदी आवश्यक आहेत. आधी शेत तपासणी ताजी करा.',
+    },
+    'harvest_map_sync_farm': {
+      'en': 'Sync this farm before loading its grade map.',
+      'hi': 'ग्रेड नक्शा खोलने से पहले खेत सिंक करें।',
+      'mr': 'ग्रेड नकाशा उघडण्यापूर्वी शेत सिंक करा.',
+    },
+    'harvest_guided_grading': {
+      'en': 'Grade this harvest lot',
+      'hi': 'इस कटाई लॉट का ग्रेड करें',
+      'mr': 'या कापणी लॉटचा ग्रेड करा',
+    },
+    'harvest_step_zone': {'en': 'Zone', 'hi': 'भाग', 'mr': 'भाग'},
+    'harvest_step_moisture': {'en': 'Moisture', 'hi': 'नमी', 'mr': 'ओलावा'},
+    'harvest_step_grain': {'en': 'Grain', 'hi': 'अनाज', 'mr': 'धान्य'},
+    'harvest_step_review': {'en': 'Review', 'hi': 'जांच', 'mr': 'तपासणी'},
+    'harvest_not_ready_stage': {
+      'en':
+          'Day {day} • {stage}. You can inspect field grades now; final lot grading unlocks at maturity.',
+      'hi':
+          'दिन {day} • {stage}। खेत ग्रेड अभी देखें; अंतिम लॉट ग्रेड परिपक्वता पर खुलेगा।',
+      'mr':
+          'दिवस {day} • {stage}. शेत ग्रेड आता पाहा; अंतिम लॉट ग्रेड परिपक्वतेवर सुरू होईल.',
+    },
+    'harvest_select_zone_location': {
+      'en': 'Select zone and capture location',
+      'hi': 'भाग चुनें और स्थान दर्ज करें',
+      'mr': 'भाग निवडा आणि स्थान नोंदवा',
+    },
+    'harvest_tap_zone_first': {
+      'en': 'Tap one grade zone on the map before creating a harvest lot.',
+      'hi': 'कटाई लॉट बनाने से पहले नक्शे पर एक ग्रेड भाग चुनें।',
+      'mr': 'कापणी लॉट तयार करण्यापूर्वी नकाशावर एक ग्रेड भाग निवडा.',
+    },
+    'capture_harvest_location': {
+      'en': 'Capture harvest location',
+      'hi': 'कटाई का स्थान दर्ज करें',
+      'mr': 'कापणीचे स्थान नोंदवा',
+    },
+    'continue_action': {'en': 'Continue', 'hi': 'आगे बढ़ें', 'mr': 'पुढे जा'},
+    'harvest_review_grade': {
+      'en': 'Review quantity and grade',
+      'hi': 'मात्रा जांचें और ग्रेड करें',
+      'mr': 'प्रमाण तपासा आणि ग्रेड करा',
+    },
+    'harvest_complete_previous_steps': {
+      'en':
+          'Complete the zone, location, moisture and grain-photo steps first.',
+      'hi': 'पहले भाग, स्थान, नमी और अनाज फोटो के चरण पूरे करें।',
+      'mr': 'आधी भाग, स्थान, ओलावा आणि धान्य फोटो टप्पे पूर्ण करा.',
+    },
+    'harvest_wait_for_maturity': {
+      'en': 'Final lot grading stays locked until the crop reaches maturity.',
+      'hi': 'फसल परिपक्व होने तक अंतिम लॉट ग्रेडिंग बंद रहेगी।',
+      'mr': 'पीक परिपक्व होईपर्यंत अंतिम लॉट ग्रेडिंग बंद राहील.',
+    },
+    'acres_short': {'en': 'acres', 'hi': 'एकड़', 'mr': 'एकर'},
     'health_score': {
       'en': 'Health Score',
       'hi': 'खेत स्वास्थ्य अंक',
@@ -9819,5 +9915,1274 @@ class UiStrings {
       'hi': 'एक या अधिक चुनें',
       'mr': 'एक किंवा अधिक निवडा',
     },
+    'fpc_os_orgs_short': {'en': 'Orgs', 'hi': 'संस्थाएँ', 'mr': 'संस्था'},
+    'fpc_os_operations': {
+      'en': 'Operating system',
+      'hi': 'संचालन प्रणाली',
+      'mr': 'कार्यप्रणाली',
+    },
+    'fpc_os_all_modules': {
+      'en': 'All FPC modules',
+      'hi': 'सभी FPC मॉड्यूल',
+      'mr': 'सर्व FPC मॉड्यूल',
+    },
+    'fpc_field_team': {
+      'en': 'Field team',
+      'hi': 'फील्ड टीम',
+      'mr': 'क्षेत्रीय पथक',
+    },
+    'fpc_officers_assignments': {
+      'en': 'Officers and assignments',
+      'hi': 'अधिकारी और कार्य',
+      'mr': 'अधिकारी आणि नेमणुका',
+    },
+    'fpc_os_workspace_summary': {
+      'en':
+          'Procurement, warehouse, production, sales and finance in one organization-scoped workspace.',
+      'hi':
+          'खरीद, गोदाम, उत्पादन, बिक्री और वित्त एक संस्था-आधारित कार्यक्षेत्र में।',
+      'mr':
+          'खरेदी, गोदाम, उत्पादन, विक्री आणि वित्त एकाच संस्थानिहाय कार्यक्षेत्रात.',
+    },
+    'platform_fpc_organizations': {
+      'en': 'Organizations',
+      'hi': 'संस्थाएँ',
+      'mr': 'संस्था',
+    },
+    'platform_fpc_users': {
+      'en': 'FPC Users',
+      'hi': 'FPC उपयोगकर्ता',
+      'mr': 'FPC वापरकर्ते',
+    },
+    'platform_analytics': {
+      'en': 'Analytics',
+      'hi': 'विश्लेषण',
+      'mr': 'विश्लेषण',
+    },
+    'platform_notification_templates': {
+      'en': 'Notification templates',
+      'hi': 'सूचना टेम्पलेट',
+      'mr': 'सूचना साचे',
+    },
+    'platform_notification_templates_status': {
+      'en':
+          'In-app templates are live. SMS and WhatsApp channels remain disabled until a provider is configured.',
+      'hi':
+          'ऐप के अंदर के टेम्पलेट चालू हैं। प्रदाता कॉन्फ़िगर होने तक SMS और WhatsApp चैनल बंद रहेंगे।',
+      'mr':
+          'अॅपमधील सूचना साचे सुरू आहेत. सेवा प्रदाता कॉन्फिगर होईपर्यंत SMS आणि WhatsApp चॅनेल बंद राहतील.',
+    },
+    'platform_audit': {'en': 'Audit', 'hi': 'ऑडिट', 'mr': 'लेखापरीक्षण'},
+    'platform_fpc_applications': {
+      'en': 'FPC applications',
+      'hi': 'FPC आवेदन',
+      'mr': 'FPC अर्ज',
+    },
+    'platform_no_fpc_applications': {
+      'en': 'No FPC applications found.',
+      'hi': 'कोई FPC आवेदन नहीं मिला।',
+      'mr': 'कोणताही FPC अर्ज सापडला नाही.',
+    },
+    'platform_registered_organizations': {
+      'en': 'Registered organizations',
+      'hi': 'पंजीकृत संस्थाएँ',
+      'mr': 'नोंदणीकृत संस्था',
+    },
+    'platform_subscription_status_help': {
+      'en': 'Activate, suspend and review subscription status.',
+      'hi': 'सदस्यता की स्थिति सक्रिय, निलंबित और समीक्षा करें।',
+      'mr': 'सदस्यता स्थिती सक्रिय, निलंबित आणि तपासा.',
+    },
+    'platform_fpc_users_title': {
+      'en': 'FPC users',
+      'hi': 'FPC उपयोगकर्ता',
+      'mr': 'FPC वापरकर्ते',
+    },
+    'platform_fpc_user_roles_help': {
+      'en': 'FPC Admin and Field Officer memberships.',
+      'hi': 'FPC Admin और Field Officer सदस्यताएँ।',
+      'mr': 'FPC Admin आणि Field Officer सदस्यत्वे.',
+    },
+    'platform_no_fpc_memberships': {
+      'en': 'No FPC memberships found.',
+      'hi': 'कोई FPC सदस्यता नहीं मिली।',
+      'mr': 'कोणतेही FPC सदस्यत्व सापडले नाही.',
+    },
+    'platform_settings_title': {
+      'en': 'Platform settings',
+      'hi': 'प्लेटफ़ॉर्म सेटिंग्स',
+      'mr': 'प्लॅटफॉर्म सेटिंग्ज',
+    },
+    'platform_non_secret_settings_help': {
+      'en':
+          'Only non-secret enabled state is stored here. Provider secrets remain server-side.',
+      'hi':
+          'यहाँ केवल गैर-गोपनीय सक्रिय स्थिति रखी जाती है। प्रदाता की गोपनीय जानकारी सर्वर पर रहती है।',
+      'mr':
+          'येथे फक्त गुपित नसलेली सक्रिय स्थिती ठेवली जाते. प्रदात्याची गुपिते सर्व्हरवर राहतात.',
+    },
+    'platform_audit_log': {
+      'en': 'Audit log',
+      'hi': 'ऑडिट लॉग',
+      'mr': 'लेखापरीक्षण नोंद',
+    },
+    'platform_audit_help': {
+      'en': 'Organization, user, configuration, stock and finance events.',
+      'hi': 'संस्था, उपयोगकर्ता, कॉन्फ़िगरेशन, स्टॉक और वित्त घटनाएँ।',
+      'mr': 'संस्था, वापरकर्ता, संरचना, साठा आणि वित्त घटना.',
+    },
+    'platform_no_audit_events': {
+      'en': 'No audit events recorded yet.',
+      'hi': 'अभी कोई ऑडिट घटना दर्ज नहीं है।',
+      'mr': 'अजून लेखापरीक्षण घटना नोंदलेली नाही.',
+    },
+    'platform_admin_provisioned': {
+      'en':
+          'Platform Admin access is provisioned through the secured administration workflow.',
+      'hi': 'Platform Admin पहुँच सुरक्षित प्रशासन प्रक्रिया से दी जाती है।',
+      'mr': 'Platform Admin प्रवेश सुरक्षित प्रशासन प्रक्रियेतून दिला जातो.',
+    },
+    'field_officer_label': {
+      'en': 'Field Officer',
+      'hi': 'फील्ड अधिकारी',
+      'mr': 'क्षेत्रीय अधिकारी',
+    },
+    'field_record_visit': {
+      'en': 'Record visit',
+      'hi': 'भ्रमण दर्ज करें',
+      'mr': 'भेट नोंदवा',
+    },
+    'field_assigned_work': {
+      'en': 'Assigned work',
+      'hi': 'सौंपा गया कार्य',
+      'mr': 'नेमलेले काम',
+    },
+    'field_no_work': {
+      'en': 'No work is assigned yet.',
+      'hi': 'अभी कोई कार्य नहीं सौंपा गया है।',
+      'mr': 'अजून कोणतेही काम नेमलेले नाही.',
+    },
+    'field_offline_queue': {
+      'en': 'Offline sync queue',
+      'hi': 'ऑफ़लाइन सिंक कतार',
+      'mr': 'ऑफलाइन समक्रमण रांग',
+    },
+    'field_expected_quantity_kg': {
+      'en': 'Estimated quantity (kg)',
+      'hi': 'अनुमानित मात्रा (किलो)',
+      'mr': 'अंदाजित प्रमाण (किलो)',
+    },
+    'field_harvest_readiness': {
+      'en': 'Harvest readiness',
+      'hi': 'कटाई की तैयारी',
+      'mr': 'कापणी तयारी',
+    },
+    'field_procurement_recommendation': {
+      'en': 'Procurement recommendation',
+      'hi': 'खरीद अनुशंसा',
+      'mr': 'खरेदी शिफारस',
+    },
+    'field_visit_notes': {
+      'en': 'Visit notes',
+      'hi': 'भ्रमण टिप्पणी',
+      'mr': 'भेट नोंदी',
+    },
+    'field_access_restriction': {
+      'en':
+          'Only assigned farmers, farms, visits and procurement-support work are available. Warehouse, finance, production, sales and settings stay restricted.',
+      'hi':
+          'केवल सौंपे गए किसान, खेत, भ्रमण और खरीद-सहायता कार्य उपलब्ध हैं। गोदाम, वित्त, उत्पादन, बिक्री और सेटिंग्स प्रतिबंधित हैं।',
+      'mr':
+          'फक्त नेमलेले शेतकरी, शेती, भेटी आणि खरेदी-सहाय्य काम उपलब्ध आहे. गोदाम, वित्त, उत्पादन, विक्री आणि सेटिंग्ज प्रतिबंधित आहेत.',
+    },
+    'fpc_no_records': {
+      'en': 'No records yet',
+      'hi': 'अभी कोई रिकॉर्ड नहीं',
+      'mr': 'अजून नोंदी नाहीत',
+    },
+    'fpc_add_first_record': {
+      'en': 'Use Add to create the first persistent record.',
+      'hi': 'पहला स्थायी रिकॉर्ड बनाने के लिए जोड़ें का उपयोग करें।',
+      'mr': 'पहिली कायम नोंद तयार करण्यासाठी जोडा वापरा.',
+    },
+    'fpc_create_field_officer': {
+      'en': 'Create Field Officer',
+      'hi': 'फील्ड अधिकारी बनाएँ',
+      'mr': 'क्षेत्रीय अधिकारी तयार करा',
+    },
+    'fpc_assign_field_work': {
+      'en': 'Assign field work',
+      'hi': 'फील्ड कार्य सौंपें',
+      'mr': 'क्षेत्रीय काम नेमा',
+    },
+    'fpc_no_field_assignments': {
+      'en': 'No field assignments yet.',
+      'hi': 'अभी कोई फील्ड कार्य नहीं है।',
+      'mr': 'अजून क्षेत्रीय नेमणुका नाहीत.',
+    },
+    'temporary_password_eight': {
+      'en': 'Temporary password (8+ characters) *',
+      'hi': 'अस्थायी पासवर्ड (8+ अक्षर) *',
+      'mr': 'तात्पुरता पासवर्ड (8+ अक्षरे) *',
+    },
+    'create_permanent_password': {
+      'en': 'Create your permanent password',
+      'hi': 'अपना स्थायी पासवर्ड बनाएँ',
+      'mr': 'तुमचा कायम पासवर्ड तयार करा',
+    },
+    'temporary_password_first_login': {
+      'en': 'Your temporary password can be used only for the first login.',
+      'hi': 'आपका अस्थायी पासवर्ड केवल पहले लॉगिन के लिए है।',
+      'mr': 'तुमचा तात्पुरता पासवर्ड फक्त पहिल्या लॉगिनसाठी आहे.',
+    },
+    'fpc_complete_operational_alerts': {
+      'en': 'Operational alerts',
+      'hi': 'संचालन चेतावनियाँ',
+      'mr': 'कार्यवाही सूचना',
+    },
+    'fpc_complete_operational_alerts_help': {
+      'en': 'Unread assignments, stock, expiry and delivery notifications.',
+      'hi': 'न पढ़े गए कार्य, स्टॉक, समाप्ति और डिलीवरी सूचनाएँ।',
+      'mr': 'न वाचलेल्या नेमणुका, साठा, मुदत आणि वितरण सूचना.',
+    },
+    'fpc_complete_platform_analytics': {
+      'en': 'Platform analytics',
+      'hi': 'प्लेटफ़ॉर्म विश्लेषण',
+      'mr': 'प्लॅटफॉर्म विश्लेषण',
+    },
+    'fpc_complete_platform_analytics_help': {
+      'en': 'Global operating totals with FPC and date-filtered exports.',
+      'hi': 'FPC और तारीख फ़िल्टर वाले निर्यात सहित वैश्विक संचालन योग।',
+      'mr': 'FPC आणि दिनांक फिल्टर निर्यातींसह एकूण प्लॅटफॉर्म कामकाज.',
+    },
+    'fpc_complete_farmer_network': {
+      'en': 'Farmer Network',
+      'hi': 'किसान नेटवर्क',
+      'mr': 'शेतकरी जाळे',
+    },
+    'fpc_complete_farm_monitoring': {
+      'en': 'Farm Monitoring',
+      'hi': 'खेत निगरानी',
+      'mr': 'शेत निरीक्षण',
+    },
+    'fpc_complete_harvest_planning': {
+      'en': 'Harvest Planning',
+      'hi': 'कटाई योजना',
+      'mr': 'कापणी नियोजन',
+    },
+    'fpc_complete_procurement': {
+      'en': 'Procurement',
+      'hi': 'खरीद',
+      'mr': 'खरेदी',
+    },
+    'fpc_complete_collection_center': {
+      'en': 'Collection Center',
+      'hi': 'संग्रह केंद्र',
+      'mr': 'संकलन केंद्र',
+    },
+    'fpc_complete_quality_grading': {
+      'en': 'Quality & Grading',
+      'hi': 'गुणवत्ता और ग्रेडिंग',
+      'mr': 'गुणवत्ता आणि श्रेणीकरण',
+    },
+    'fpc_complete_warehouse': {'en': 'Warehouse', 'hi': 'गोदाम', 'mr': 'गोदाम'},
+    'fpc_complete_production': {
+      'en': 'Production',
+      'hi': 'उत्पादन',
+      'mr': 'उत्पादन',
+    },
+    'fpc_complete_packaging': {
+      'en': 'Packaging',
+      'hi': 'पैकेजिंग',
+      'mr': 'पॅकेजिंग',
+    },
+    'fpc_complete_inventory': {'en': 'Inventory', 'hi': 'भंडार', 'mr': 'साठा'},
+    'fpc_complete_buyers_sales': {
+      'en': 'Buyers & Sales',
+      'hi': 'खरीदार और बिक्री',
+      'mr': 'खरेदीदार आणि विक्री',
+    },
+    'fpc_complete_logistics': {
+      'en': 'Logistics',
+      'hi': 'लॉजिस्टिक्स',
+      'mr': 'वाहतूक व्यवस्था',
+    },
+    'fpc_complete_farmer_payments': {
+      'en': 'Farmer Payments',
+      'hi': 'किसान भुगतान',
+      'mr': 'शेतकरी देयके',
+    },
+    'fpc_complete_reports': {'en': 'Reports', 'hi': 'रिपोर्ट', 'mr': 'अहवाल'},
+    'fpc_complete_ai_insights': {
+      'en': 'AI Insights',
+      'hi': 'AI अंतर्दृष्टि',
+      'mr': 'AI अंतर्दृष्टी',
+    },
+    'fpc_complete_network_desc': {
+      'en': 'Linked farmers, KYC, farms, history and payments.',
+      'hi': 'जुड़े किसान, KYC, खेत, इतिहास और भुगतान।',
+      'mr': 'जोडलेले शेतकरी, KYC, शेती, इतिहास आणि देयके.',
+    },
+    'fpc_complete_monitoring_desc': {
+      'en': 'Satellite health, NDVI, weather, disease and crop timeline.',
+      'hi': 'उपग्रह स्वास्थ्य, NDVI, मौसम, रोग और फसल समयरेखा।',
+      'mr': 'उपग्रह आरोग्य, NDVI, हवामान, रोग आणि पीक कालरेषा.',
+    },
+    'fpc_complete_harvest_desc': {
+      'en': 'Ready farms, expected quantity, clusters and schedules.',
+      'hi': 'तैयार खेत, अपेक्षित मात्रा, समूह और कार्यक्रम।',
+      'mr': 'तयार शेती, अपेक्षित प्रमाण, गट आणि वेळापत्रक.',
+    },
+    'fpc_complete_procurement_desc': {
+      'en': 'Schedules, vehicles, approvals and lot workflow.',
+      'hi': 'कार्यक्रम, वाहन, स्वीकृति और लॉट कार्यप्रवाह।',
+      'mr': 'वेळापत्रक, वाहने, मंजुरी आणि लॉट कार्यप्रवाह.',
+    },
+    'fpc_complete_collection_desc': {
+      'en': 'Weighing, moisture, inspection, lots and receipts.',
+      'hi': 'वजन, नमी, निरीक्षण, लॉट और रसीदें।',
+      'mr': 'वजन, ओलावा, तपासणी, लॉट आणि पावत्या.',
+    },
+    'fpc_complete_quality_desc': {
+      'en': 'AI grading, immutable certificates and approvals.',
+      'hi': 'AI ग्रेडिंग, अपरिवर्तनीय प्रमाणपत्र और स्वीकृतियाँ।',
+      'mr': 'AI श्रेणीकरण, अपरिवर्तनीय प्रमाणपत्रे आणि मंजुरी.',
+    },
+    'fpc_complete_warehouse_desc': {
+      'en': 'Racks, bins, FIFO/FEFO, transfers and capacity.',
+      'hi': 'रैक, बिन, FIFO/FEFO, स्थानांतरण और क्षमता।',
+      'mr': 'रॅक, बिन, FIFO/FEFO, हस्तांतरण आणि क्षमता.',
+    },
+    'fpc_complete_production_desc': {
+      'en': 'Millet and rice process runs, recovery and waste.',
+      'hi': 'मिलेट और चावल प्रक्रिया रन, रिकवरी और अपशिष्ट।',
+      'mr': 'भरडधान्य व तांदूळ प्रक्रिया, उतारा आणि अपव्यय.',
+    },
+    'fpc_complete_packaging_desc': {
+      'en': 'Pack sizes, QR, barcode, batch and expiry.',
+      'hi': 'पैक आकार, QR, बारकोड, बैच और समाप्ति।',
+      'mr': 'पॅक आकार, QR, बारकोड, बॅच आणि मुदत.',
+    },
+    'fpc_complete_inventory_desc': {
+      'en': 'Append-only raw and finished goods ledger with alerts.',
+      'hi': 'चेतावनियों सहित केवल-जोड़ कच्चा और तैयार माल खाता।',
+      'mr': 'सूचनांसह फक्त वाढवता येणारी कच्चा व तयार माल नोंदवही.',
+    },
+    'fpc_complete_sales_desc': {
+      'en': 'Quotations, GST invoices, orders and payments.',
+      'hi': 'कोटेशन, GST चालान, ऑर्डर और भुगतान।',
+      'mr': 'कोटेशन, GST चलने, ऑर्डर आणि देयके.',
+    },
+    'fpc_complete_logistics_desc': {
+      'en': 'Vehicle assignment, dispatch, delivery and POD.',
+      'hi': 'वाहन आवंटन, डिस्पैच, डिलीवरी और POD।',
+      'mr': 'वाहन नेमणूक, पाठवणी, वितरण आणि POD.',
+    },
+    'fpc_complete_payment_desc': {
+      'en': 'Verified UPI/bank ledger with bonus and deductions.',
+      'hi': 'बोनस और कटौती सहित सत्यापित UPI/बैंक खाता।',
+      'mr': 'बोनस आणि कपातींसह पडताळलेली UPI/बँक नोंदवही.',
+    },
+    'fpc_complete_reports_desc': {
+      'en': 'Organization-scoped PDF and Excel operational reports.',
+      'hi': 'संस्था-आधारित PDF और Excel संचालन रिपोर्ट।',
+      'mr': 'संस्थानिहाय PDF आणि Excel कार्यवाही अहवाल.',
+    },
+    'fpc_complete_ai_desc': {
+      'en': 'Versioned forecasts, risks and deterministic recommendations.',
+      'hi': 'संस्करणयुक्त पूर्वानुमान, जोखिम और नियम-आधारित सुझाव।',
+      'mr': 'आवृत्तीयुक्त अंदाज, धोके आणि नियमाधारित शिफारसी.',
+    },
+    'fpc_complete_add_harvest': {
+      'en': 'Add harvest plan',
+      'hi': 'कटाई योजना जोड़ें',
+      'mr': 'कापणी योजना जोडा',
+    },
+    'fpc_complete_schedule_procurement': {
+      'en': 'Schedule procurement',
+      'hi': 'खरीद तय करें',
+      'mr': 'खरेदीचे वेळापत्रक करा',
+    },
+    'fpc_complete_assign_vehicle': {
+      'en': 'Assign vehicle',
+      'hi': 'वाहन सौंपें',
+      'mr': 'वाहन नेमा',
+    },
+    'fpc_complete_add_center': {
+      'en': 'Add collection center',
+      'hi': 'संग्रह केंद्र जोड़ें',
+      'mr': 'संकलन केंद्र जोडा',
+    },
+    'fpc_complete_approve_quality': {
+      'en': 'Approve quality certificate',
+      'hi': 'गुणवत्ता प्रमाणपत्र स्वीकृत करें',
+      'mr': 'गुणवत्ता प्रमाणपत्र मंजूर करा',
+    },
+    'fpc_complete_add_warehouse': {
+      'en': 'Add warehouse',
+      'hi': 'गोदाम जोड़ें',
+      'mr': 'गोदाम जोडा',
+    },
+    'fpc_complete_add_location': {
+      'en': 'Add rack or bin',
+      'hi': 'रैक या बिन जोड़ें',
+      'mr': 'रॅक किंवा बिन जोडा',
+    },
+    'fpc_complete_create_run': {
+      'en': 'Create production run',
+      'hi': 'उत्पादन रन बनाएँ',
+      'mr': 'उत्पादन फेरी तयार करा',
+    },
+    'fpc_complete_create_package': {
+      'en': 'Create packaging batch',
+      'hi': 'पैकेजिंग बैच बनाएँ',
+      'mr': 'पॅकेजिंग बॅच तयार करा',
+    },
+    'fpc_complete_post_stock': {
+      'en': 'Post stock movement',
+      'hi': 'स्टॉक गतिविधि दर्ज करें',
+      'mr': 'साठा हालचाल नोंदवा',
+    },
+    'fpc_complete_transfer_stock': {
+      'en': 'Transfer stock',
+      'hi': 'स्टॉक स्थानांतरित करें',
+      'mr': 'साठा हस्तांतरित करा',
+    },
+    'fpc_complete_add_buyer': {
+      'en': 'Add buyer',
+      'hi': 'खरीदार जोड़ें',
+      'mr': 'खरेदीदार जोडा',
+    },
+    'fpc_complete_create_quote': {
+      'en': 'Create quotation',
+      'hi': 'कोटेशन बनाएँ',
+      'mr': 'कोटेशन तयार करा',
+    },
+    'fpc_complete_dispatch_order': {
+      'en': 'Dispatch invoiced order',
+      'hi': 'चालान वाला ऑर्डर भेजें',
+      'mr': 'चलन केलेली ऑर्डर पाठवा',
+    },
+    'fpc_complete_start_collection': {
+      'en': 'Start collection',
+      'hi': 'संग्रह शुरू करें',
+      'mr': 'संकलन सुरू करा',
+    },
+    'fpc_complete_complete_procurement': {
+      'en': 'Complete procurement',
+      'hi': 'खरीद पूर्ण करें',
+      'mr': 'खरेदी पूर्ण करा',
+    },
+    'fpc_complete_cancel_schedule': {
+      'en': 'Cancel schedule',
+      'hi': 'कार्यक्रम रद्द करें',
+      'mr': 'वेळापत्रक रद्द करा',
+    },
+    'fpc_complete_start_production': {
+      'en': 'Start production',
+      'hi': 'उत्पादन शुरू करें',
+      'mr': 'उत्पादन सुरू करा',
+    },
+    'fpc_complete_complete_production': {
+      'en': 'Complete production',
+      'hi': 'उत्पादन पूर्ण करें',
+      'mr': 'उत्पादन पूर्ण करा',
+    },
+    'fpc_complete_issue_invoice': {
+      'en': 'Issue GST invoice',
+      'hi': 'GST चालान जारी करें',
+      'mr': 'GST चलन जारी करा',
+    },
+    'fpc_complete_cancel_quote': {
+      'en': 'Cancel quotation',
+      'hi': 'कोटेशन रद्द करें',
+      'mr': 'कोटेशन रद्द करा',
+    },
+    'fpc_complete_cancel_credit': {
+      'en': 'Cancel with credit note',
+      'hi': 'क्रेडिट नोट से रद्द करें',
+      'mr': 'क्रेडिट नोटसह रद्द करा',
+    },
+    'fpc_complete_record_buyer_payment': {
+      'en': 'Record buyer payment',
+      'hi': 'खरीदार भुगतान दर्ज करें',
+      'mr': 'खरेदीदार देयक नोंदवा',
+    },
+    'fpc_complete_reverse_buyer_payment': {
+      'en': 'Reverse buyer payment',
+      'hi': 'खरीदार भुगतान उलटें',
+      'mr': 'खरेदीदार देयक उलटवा',
+    },
+    'fpc_complete_confirm_delivery': {
+      'en': 'Confirm delivery',
+      'hi': 'डिलीवरी की पुष्टि करें',
+      'mr': 'वितरण निश्चित करा',
+    },
+    'fpc_complete_cancel_dispatch': {
+      'en': 'Cancel dispatch',
+      'hi': 'डिस्पैच रद्द करें',
+      'mr': 'पाठवणी रद्द करा',
+    },
+    'fpc_complete_verify_payment': {
+      'en': 'Verify payment',
+      'hi': 'भुगतान सत्यापित करें',
+      'mr': 'देयक पडताळा',
+    },
+    'fpc_complete_approve_payment': {
+      'en': 'Approve payment',
+      'hi': 'भुगतान स्वीकृत करें',
+      'mr': 'देयक मंजूर करा',
+    },
+    'fpc_complete_mark_paid': {
+      'en': 'Mark paid',
+      'hi': 'भुगतान किया चिह्नित करें',
+      'mr': 'भरले म्हणून नोंदवा',
+    },
+    'fpc_complete_correct_reversal': {
+      'en': 'Correct with reversal',
+      'hi': 'रिवर्सल से सुधारें',
+      'mr': 'उलट नोंदीने दुरुस्त करा',
+    },
+    'fpc_complete_deactivate_link': {
+      'en': 'Deactivate link',
+      'hi': 'संबंध निष्क्रिय करें',
+      'mr': 'संबंध निष्क्रिय करा',
+    },
+    'fpc_complete_activate_link': {
+      'en': 'Activate link',
+      'hi': 'संबंध सक्रिय करें',
+      'mr': 'संबंध सक्रिय करा',
+    },
+    'fpc_complete_scan_farmer': {
+      'en': 'Scan farmer',
+      'hi': 'किसान स्कैन करें',
+      'mr': 'शेतकरी स्कॅन करा',
+    },
+    'fpc_complete_open_receiver': {
+      'en': 'Open receiver',
+      'hi': 'प्राप्ति खोलें',
+      'mr': 'स्वीकृती उघडा',
+    },
+    'fpc_complete_review_grading': {
+      'en': 'Review grading',
+      'hi': 'ग्रेडिंग समीक्षा',
+      'mr': 'श्रेणीकरण तपासा',
+    },
+    'fpc_complete_refresh_insights': {
+      'en': 'Refresh deterministic insights',
+      'hi': 'नियम-आधारित अंतर्दृष्टि ताज़ा करें',
+      'mr': 'नियमाधारित अंतर्दृष्टी ताज्या करा',
+    },
+    'fpc_complete_export_pdf': {
+      'en': 'Export PDF',
+      'hi': 'PDF निर्यात करें',
+      'mr': 'PDF निर्यात करा',
+    },
+    'fpc_complete_export_excel': {
+      'en': 'Export Excel',
+      'hi': 'Excel निर्यात करें',
+      'mr': 'Excel निर्यात करा',
+    },
+    'fpc_complete_saved': {'en': 'Saved', 'hi': 'सहेजा गया', 'mr': 'जतन झाले'},
+    'fpc_complete_saved_help': {
+      'en': 'The FPC record was saved successfully.',
+      'hi': 'FPC रिकॉर्ड सफलतापूर्वक सहेजा गया।',
+      'mr': 'FPC नोंद यशस्वीपणे जतन झाली.',
+    },
+    'fpc_complete_could_not_save': {
+      'en': 'Could not save',
+      'hi': 'सहेजा नहीं जा सका',
+      'mr': 'जतन करता आले नाही',
+    },
+    'fpc_complete_report_ready': {
+      'en': 'Report ready',
+      'hi': 'रिपोर्ट तैयार',
+      'mr': 'अहवाल तयार',
+    },
+    'fpc_complete_report_failed': {
+      'en': 'Report failed',
+      'hi': 'रिपोर्ट विफल',
+      'mr': 'अहवाल अयशस्वी',
+    },
+    'fpc_complete_required': {'en': 'Required', 'hi': 'आवश्यक', 'mr': 'आवश्यक'},
+    'fpc_complete_valid_number': {
+      'en': 'Enter a valid number',
+      'hi': 'मान्य संख्या दर्ज करें',
+      'mr': 'वैध संख्या भरा',
+    },
+    'fpc_complete_no_records': {
+      'en': 'No records yet.',
+      'hi': 'अभी कोई रिकॉर्ड नहीं।',
+      'mr': 'अजून नोंदी नाहीत.',
+    },
+    'fpc_complete_first_record': {
+      'en': 'Use the available action to create the first live record.',
+      'hi': 'पहला वास्तविक रिकॉर्ड बनाने के लिए उपलब्ध कार्रवाई का उपयोग करें।',
+      'mr': 'पहिली थेट नोंद तयार करण्यासाठी उपलब्ध कृती वापरा.',
+    },
+    'marketplace_v2_buy': {'en': 'Buy', 'hi': 'खरीदें', 'mr': 'खरेदी'},
+    'marketplace_v2_sell': {'en': 'Sell', 'hi': 'बेचें', 'mr': 'विक्री'},
+    'marketplace_v2_apmc': {'en': 'APMC', 'hi': 'एपीएमसी', 'mr': 'एपीएमसी'},
+    'marketplace_v2_my_listings': {
+      'en': 'My Listings',
+      'hi': 'मेरी लिस्टिंग',
+      'mr': 'माझ्या जाहिराती',
+    },
+    'marketplace_v2_apmc_markets': {
+      'en': 'APMC Markets',
+      'hi': 'एपीएमसी मंडियां',
+      'mr': 'एपीएमसी बाजार',
+    },
+    'marketplace_v2_apmc_daily_subtitle': {
+      'en': 'Official daily mandi prices across India',
+      'hi': 'पूरे भारत की आधिकारिक दैनिक मंडी कीमतें',
+      'mr': 'भारतभरातील अधिकृत दैनिक बाजारभाव',
+    },
+    'marketplace_v2_manage_inventory_listings': {
+      'en': 'Manage products listed from your inventory',
+      'hi': 'इन्वेंटरी से लिस्ट किए उत्पाद संभालें',
+      'mr': 'साठ्यातून जाहिर केलेली उत्पादने सांभाळा',
+    },
+    'marketplace_v2_marketplace_subtitle': {
+      'en': 'Farmer produce and verified farm inputs',
+      'hi': 'किसान उपज और सत्यापित कृषि सामग्री',
+      'mr': 'शेतमाल आणि पडताळलेल्या शेती निविष्ठा',
+    },
+    'marketplace_v2_farmer_marketplace': {
+      'en': 'Farmer marketplace',
+      'hi': 'किसान मार्केटप्लेस',
+      'mr': 'शेतकरी मार्केटप्लेस',
+    },
+    'marketplace_v2_inventory_feed_help': {
+      'en':
+          'Inventory products listed by farmers appear here automatically with grade, quantity and pickup details.',
+      'hi':
+          'किसानों द्वारा इन्वेंटरी से लिस्ट किए उत्पाद ग्रेड, मात्रा और उठाव विवरण के साथ यहाँ अपने आप दिखते हैं।',
+      'mr':
+          'शेतकऱ्यांनी साठ्यातून जाहिर केलेली उत्पादने श्रेणी, प्रमाण आणि उचल तपशीलांसह येथे आपोआप दिसतात.',
+    },
+    'marketplace_v2_farmer_produce': {
+      'en': 'Farmer produce',
+      'hi': 'किसान उपज',
+      'mr': 'शेतमाल',
+    },
+    'marketplace_v2_inventory_appears_market': {
+      'en':
+          'Products listed from farmer inventory will appear here automatically.',
+      'hi': 'किसान इन्वेंटरी से लिस्ट किए उत्पाद यहाँ अपने आप दिखाई देंगे।',
+      'mr': 'शेतकरी साठ्यातून जाहिर केलेली उत्पादने येथे आपोआप दिसतील.',
+    },
+    'marketplace_v2_verified_inputs': {
+      'en': 'Verified farm inputs',
+      'hi': 'सत्यापित कृषि सामग्री',
+      'mr': 'पडताळलेली शेती निविष्ठा',
+    },
+    'marketplace_v2_products_for_farmers': {
+      'en': 'Products for farmers',
+      'hi': 'किसानों के लिए उत्पाद',
+      'mr': 'शेतकऱ्यांसाठी उत्पादने',
+    },
+    'marketplace_v2_request_input': {
+      'en': 'Request an input',
+      'hi': 'कृषि सामग्री का अनुरोध करें',
+      'mr': 'निविष्ठेची मागणी करा',
+    },
+    'marketplace_v2_create_request': {
+      'en': 'Create request',
+      'hi': 'अनुरोध बनाएं',
+      'mr': 'मागणी तयार करा',
+    },
+    'marketplace_v2_no_verified_inputs': {
+      'en': 'No verified input products yet',
+      'hi': 'अभी कोई सत्यापित कृषि सामग्री नहीं है',
+      'mr': 'अजून पडताळलेली शेती निविष्ठा नाही',
+    },
+    'marketplace_v2_farm_produce': {
+      'en': 'Produce directly from farms',
+      'hi': 'सीधे खेत से उपज',
+      'mr': 'थेट शेतातील उत्पादन',
+    },
+    'marketplace_v2_selling_now': {
+      'en': 'Selling now',
+      'hi': 'अभी बिक्री पर',
+      'mr': 'सध्या विक्रीसाठी',
+    },
+    'marketplace_v2_ready_inventory': {
+      'en': 'Ready from your inventory',
+      'hi': 'आपकी इन्वेंटरी से तैयार',
+      'mr': 'तुमच्या साठ्यातून तयार',
+    },
+    'marketplace_v2_no_active_listings': {
+      'en': 'No active farmer listings',
+      'hi': 'कोई सक्रिय किसान लिस्टिंग नहीं',
+      'mr': 'सक्रिय शेतकरी जाहिराती नाहीत',
+    },
+    'marketplace_v2_no_harvest_ready': {
+      'en': 'No harvested products ready',
+      'hi': 'कोई कटी हुई उपज तैयार नहीं',
+      'mr': 'काढणीनंतरचे उत्पादन तयार नाही',
+    },
+    'marketplace_v2_inventory_sync_required': {
+      'en': 'Inventory sync required',
+      'hi': 'इन्वेंटरी सिंक आवश्यक है',
+      'mr': 'साठा सिंक आवश्यक आहे',
+    },
+    'marketplace_v2_waiting_sync': {
+      'en': 'Waiting for inventory sync',
+      'hi': 'इन्वेंटरी सिंक की प्रतीक्षा है',
+      'mr': 'साठा सिंकची प्रतीक्षा आहे',
+    },
+    'marketplace_v2_grade_pending': {
+      'en': 'Grade pending',
+      'hi': 'ग्रेड बाकी है',
+      'mr': 'श्रेणी बाकी आहे',
+    },
+    'marketplace_v2_list': {
+      'en': 'List',
+      'hi': 'लिस्ट करें',
+      'mr': 'जाहिरात करा',
+    },
+    'marketplace_v2_listing_saved': {
+      'en': 'Listing saved',
+      'hi': 'लिस्टिंग सहेजी गई',
+      'mr': 'जाहिरात जतन झाली',
+    },
+    'marketplace_v2_listing_visible': {
+      'en': 'Your inventory product is now live in Marketplace.',
+      'hi': 'आपका इन्वेंटरी उत्पाद अब मार्केटप्लेस में लाइव है।',
+      'mr': 'तुमचे साठ्यातील उत्पादन आता मार्केटप्लेसवर थेट आहे.',
+    },
+    'marketplace_v2_listing_save_failed': {
+      'en': 'Could not save listing',
+      'hi': 'लिस्टिंग सहेजी नहीं जा सकी',
+      'mr': 'जाहिरात जतन करता आली नाही',
+    },
+    'marketplace_v2_listing_update_failed': {
+      'en': 'Could not update listing',
+      'hi': 'लिस्टिंग अपडेट नहीं हो सकी',
+      'mr': 'जाहिरात अद्ययावत करता आली नाही',
+    },
+    'marketplace_v2_product_details': {
+      'en': 'Product details',
+      'hi': 'उत्पाद विवरण',
+      'mr': 'उत्पादन तपशील',
+    },
+    'marketplace_v2_about_product': {
+      'en': 'About this product',
+      'hi': 'इस उत्पाद के बारे में',
+      'mr': 'या उत्पादनाबद्दल',
+    },
+    'marketplace_v2_no_description': {
+      'en': 'No additional product description was provided.',
+      'hi': 'उत्पाद का अतिरिक्त विवरण नहीं दिया गया।',
+      'mr': 'उत्पादनाचे अतिरिक्त वर्णन दिलेले नाही.',
+    },
+    'marketplace_v2_price_request': {
+      'en': 'Price on request',
+      'hi': 'मूल्य अनुरोध पर',
+      'mr': 'किंमत मागणीनुसार',
+    },
+    'marketplace_v2_request_buy': {
+      'en': 'Request to buy',
+      'hi': 'खरीद अनुरोध',
+      'mr': 'खरेदीची मागणी',
+    },
+    'marketplace_v2_request_submitted': {
+      'en': 'Request submitted',
+      'hi': 'अनुरोध जमा हुआ',
+      'mr': 'मागणी सादर झाली',
+    },
+    'marketplace_v2_request_saved': {
+      'en': 'Your farm-input request has been saved.',
+      'hi': 'आपका कृषि सामग्री अनुरोध सहेज लिया गया है।',
+      'mr': 'तुमची शेती निविष्ठा मागणी जतन झाली आहे.',
+    },
+    'marketplace_v2_seller_notified': {
+      'en': 'The request is saved and the seller will be notified.',
+      'hi': 'अनुरोध सहेजा गया है और विक्रेता को सूचना मिलेगी।',
+      'mr': 'मागणी जतन झाली आहे आणि विक्रेत्याला सूचना मिळेल.',
+    },
+    'marketplace_v2_request_failed': {
+      'en': 'Request failed',
+      'hi': 'अनुरोध विफल हुआ',
+      'mr': 'मागणी अयशस्वी झाली',
+    },
+    'marketplace_v2_request_submit_failed': {
+      'en': 'Could not submit request',
+      'hi': 'अनुरोध जमा नहीं हो सका',
+      'mr': 'मागणी सादर करता आली नाही',
+    },
+    'marketplace_v2_all_india_rates': {
+      'en': 'All-India APMC market rates',
+      'hi': 'अखिल भारतीय एपीएमसी बाजार दर',
+      'mr': 'अखिल भारतीय एपीएमसी बाजारभाव',
+    },
+    'marketplace_v2_official_rates': {
+      'en': 'Official APMC rates',
+      'hi': 'आधिकारिक एपीएमसी दर',
+      'mr': 'अधिकृत एपीएमसी बाजारभाव',
+    },
+    'marketplace_v2_market_products': {
+      'en': 'Market products',
+      'hi': 'बाजार उत्पाद',
+      'mr': 'बाजारातील उत्पादने',
+    },
+    'marketplace_v2_refresh_rates': {
+      'en': 'Refresh official rates',
+      'hi': 'आधिकारिक दर ताज़ा करें',
+      'mr': 'अधिकृत भाव ताजे करा',
+    },
+    'marketplace_v2_search_rates': {
+      'en': 'Search rates',
+      'hi': 'दर खोजें',
+      'mr': 'बाजारभाव शोधा',
+    },
+    'marketplace_v2_search_crop': {
+      'en': 'Search commodity or crop',
+      'hi': 'वस्तु या फसल खोजें',
+      'mr': 'शेतमाल किंवा पीक शोधा',
+    },
+    'marketplace_v2_no_rates': {
+      'en': 'No official rates found',
+      'hi': 'कोई आधिकारिक दर नहीं मिला',
+      'mr': 'अधिकृत बाजारभाव सापडले नाहीत',
+    },
+    'marketplace_v2_minimum': {'en': 'Minimum', 'hi': 'न्यूनतम', 'mr': 'किमान'},
+    'marketplace_v2_maximum': {'en': 'Maximum', 'hi': 'अधिकतम', 'mr': 'कमाल'},
+    'marketplace_v2_arrival_date': {
+      'en': 'Arrival date',
+      'hi': 'आवक तारीख',
+      'mr': 'आवक दिनांक',
+    },
+    'marketplace_v2_latest_rate_date': {
+      'en': 'Latest rate date',
+      'hi': 'नवीनतम दर तारीख',
+      'mr': 'ताज्या भावाचा दिनांक',
+    },
+    'marketplace_v2_last_official_sync': {
+      'en': 'Last official sync',
+      'hi': 'अंतिम आधिकारिक सिंक',
+      'mr': 'शेवटचा अधिकृत सिंक',
+    },
+    'marketplace_v2_views': {'en': 'Views', 'hi': 'दृश्य', 'mr': 'पाहण्या'},
+    'marketplace_v2_requests': {
+      'en': 'Requests',
+      'hi': 'अनुरोध',
+      'mr': 'मागण्या',
+    },
+    'marketplace_v2_edit': {
+      'en': 'Edit',
+      'hi': 'संपादित करें',
+      'mr': 'संपादित करा',
+    },
+    'marketplace_v2_sold': {'en': 'Sold', 'hi': 'बिक गया', 'mr': 'विकले'},
+    'marketplace_v2_no_status_listings': {
+      'en': 'No listings in this status',
+      'hi': 'इस स्थिति में कोई लिस्टिंग नहीं',
+      'mr': 'या स्थितीत जाहिराती नाहीत',
+    },
+    'marketplace_v2_product_needed': {
+      'en': 'Product needed',
+      'hi': 'आवश्यक उत्पाद',
+      'mr': 'आवश्यक उत्पादन',
+    },
+    'marketplace_v2_product_name_required': {
+      'en': 'Product name is required',
+      'hi': 'उत्पाद का नाम आवश्यक है',
+      'mr': 'उत्पादनाचे नाव आवश्यक आहे',
+    },
+    'marketplace_v2_asking_price': {
+      'en': 'Asking price per unit',
+      'hi': 'प्रति इकाई मांगी गई कीमत',
+      'mr': 'प्रति एकक अपेक्षित किंमत',
+    },
+    'marketplace_v2_valid_price': {
+      'en': 'Enter a valid price',
+      'hi': 'मान्य कीमत दर्ज करें',
+      'mr': 'वैध किंमत भरा',
+    },
+    'marketplace_v2_pickup_location': {
+      'en': 'Pickup location',
+      'hi': 'उठाव स्थान',
+      'mr': 'माल उचलण्याचे ठिकाण',
+    },
+    'marketplace_v2_product_description': {
+      'en': 'Product description',
+      'hi': 'उत्पाद विवरण',
+      'mr': 'उत्पादनाचे वर्णन',
+    },
+    'marketplace_v2_save_listing': {
+      'en': 'Save listing',
+      'hi': 'लिस्टिंग सहेजें',
+      'mr': 'जाहिरात जतन करा',
+    },
+    'marketplace_v2_list_product_market': {
+      'en': 'List product in Market',
+      'hi': 'उत्पाद बाजार में सूचीबद्ध करें',
+      'mr': 'उत्पादन बाजारात जाहिर करा',
+    },
+    'marketplace_v2_submit_request': {
+      'en': 'Submit request',
+      'hi': 'अनुरोध जमा करें',
+      'mr': 'मागणी सादर करा',
+    },
+    'marketplace_v2_message': {'en': 'Message', 'hi': 'संदेश', 'mr': 'संदेश'},
+    'marketplace_v2_brand': {'en': 'Brand', 'hi': 'ब्रांड', 'mr': 'ब्रँड'},
+    'marketplace_v2_pack_size': {
+      'en': 'Pack size',
+      'hi': 'पैक आकार',
+      'mr': 'पॅक आकार',
+    },
+    'marketplace_v2_supplier': {
+      'en': 'Supplier',
+      'hi': 'आपूर्तिकर्ता',
+      'mr': 'पुरवठादार',
+    },
+    'marketplace_v2_verified_supplier': {
+      'en': 'Verified supplier',
+      'hi': 'सत्यापित आपूर्तिकर्ता',
+      'mr': 'पडताळलेला पुरवठादार',
+    },
+    'marketplace_v2_search_products': {
+      'en': 'Search marketplace products',
+      'hi': 'मार्केटप्लेस उत्पाद खोजें',
+      'mr': 'मार्केटप्लेस उत्पादने शोधा',
+    },
+    'marketplace_v2_subtitle': {
+      'en': 'Farm inputs, farmer produce and official mandi prices',
+      'hi': 'कृषि सामग्री, किसान उपज और आधिकारिक मंडी भाव',
+      'mr': 'शेती निविष्ठा, शेतमाल आणि अधिकृत बाजारभाव',
+    },
+    'marketplace_v2_verified_inputs_help': {
+      'en':
+          'Only approved seeds, fertilizers, crop protection and equipment are published here.',
+      'hi':
+          'यहाँ केवल अनुमोदित बीज, उर्वरक, फसल सुरक्षा सामग्री और उपकरण दिखाए जाते हैं।',
+      'mr':
+          'येथे फक्त मंजूर बियाणे, खते, पीक संरक्षण सामग्री आणि उपकरणे दाखवली जातात.',
+    },
+    'marketplace_v2_request_inputs_help': {
+      'en':
+          'Place a request now. Products only appear after supplier verification.',
+      'hi':
+          'अभी अनुरोध करें। आपूर्तिकर्ता सत्यापन के बाद ही उत्पाद दिखाई देंगे।',
+      'mr': 'आता मागणी नोंदवा. पुरवठादार पडताळणीनंतरच उत्पादने दिसतील.',
+    },
+    'marketplace_v2_farm_produce_help': {
+      'en':
+          'Graded harvest lots from farmer inventory. Open a product to see its full quality and quantity details.',
+      'hi':
+          'किसान इन्वेंटरी से ग्रेड की गई फसल। गुणवत्ता और मात्रा का पूरा विवरण देखने के लिए उत्पाद खोलें।',
+      'mr':
+          'शेतकरी साठ्यातील श्रेणीबद्ध कापणी माल. गुणवत्ता आणि प्रमाणाचा पूर्ण तपशील पाहण्यासाठी उत्पादन उघडा.',
+    },
+    'marketplace_v2_listing_appears_help': {
+      'en': 'A listed inventory item will appear here automatically.',
+      'hi': 'इन्वेंटरी से सूचीबद्ध उत्पाद यहाँ अपने आप दिखाई देगा।',
+      'mr': 'साठ्यातून जाहिर केलेले उत्पादन येथे आपोआप दिसेल.',
+    },
+    'marketplace_v2_harvest_ready_help': {
+      'en':
+          'After harvest grading and inventory sync, products become ready to list here.',
+      'hi':
+          'कटाई ग्रेडिंग और इन्वेंटरी सिंक के बाद उत्पाद यहाँ सूचीबद्ध करने के लिए तैयार होते हैं।',
+      'mr':
+          'कापणी श्रेणीकरण आणि साठा सिंकनंतर उत्पादने येथे जाहिर करण्यासाठी तयार होतात.',
+    },
+    'marketplace_v2_apmc_help': {
+      'en':
+          'Search official AGMARKNET mandi prices by crop, market, district or state. Rates are in rupees per quintal.',
+      'hi':
+          'फसल, मंडी, जिला या राज्य के अनुसार आधिकारिक AGMARKNET भाव खोजें। दर रुपये प्रति क्विंटल हैं।',
+      'mr':
+          'पीक, बाजार, जिल्हा किंवा राज्यानुसार अधिकृत AGMARKNET भाव शोधा. दर रुपये प्रति क्विंटल आहेत.',
+    },
+    'marketplace_v2_no_rates_help': {
+      'en':
+          'Official rates are updating. Try another crop or check again shortly.',
+      'hi':
+          'आधिकारिक दर अपडेट हो रहे हैं। दूसरी फसल खोजें या थोड़ी देर बाद देखें।',
+      'mr':
+          'अधिकृत बाजारभाव अद्ययावत होत आहेत. दुसरे पीक शोधा किंवा थोड्या वेळाने पुन्हा पाहा.',
+    },
+    'marketplace_v2_list_from_sell_help': {
+      'en': 'List a synced product from Inventory to see it here.',
+      'hi': 'यहाँ देखने के लिए इन्वेंटरी से सिंक उत्पाद लिस्ट करें।',
+      'mr': 'येथे पाहण्यासाठी साठ्यातून सिंक केलेले उत्पादन जाहिर करा.',
+    },
+    'marketplace_v2_live_refresh_help': {
+      'en':
+          'Live refresh is not configured yet. Cached official rates are shown.',
+      'hi':
+          'लाइव ताज़ा सुविधा अभी सेट नहीं है। सहेजे हुए आधिकारिक दर दिख रहे हैं।',
+      'mr':
+          'थेट भाव ताजे करण्याची सुविधा अजून सेट नाही. जतन केलेले अधिकृत भाव दिसत आहेत.',
+    },
+    'marketplace_v2_inventory_sync_help': {
+      'en': 'Sync this harvest item before listing it in the marketplace.',
+      'hi': 'मार्केटप्लेस में सूचीबद्ध करने से पहले इस फसल को सिंक करें।',
+      'mr': 'मार्केटप्लेसवर जाहिर करण्यापूर्वी हा कापणी माल सिंक करा.',
+    },
+    'marketplace_v2_description_hint': {
+      'en': 'Describe quality, moisture, packaging and pickup details',
+      'hi': 'गुणवत्ता, नमी, पैकिंग और उठाव का विवरण लिखें',
+      'mr': 'गुणवत्ता, ओलावा, पॅकिंग आणि माल उचलण्याचा तपशील लिहा',
+    },
+    'marketplace_v2_request_hint': {
+      'en': 'Add delivery location or quality requirements',
+      'hi': 'डिलीवरी स्थान या गुणवत्ता आवश्यकता लिखें',
+      'mr': 'वितरण ठिकाण किंवा गुणवत्ता आवश्यकता लिहा',
+    },
+    'marketplace_v3_apmc_rates': {
+      'en': 'APMC market rates',
+      'hi': 'एपीएमसी मंडी भाव',
+      'mr': 'एपीएमसी बाजारभाव',
+    },
+    'marketplace_v3_shop_category': {
+      'en': 'Shop by category',
+      'hi': 'श्रेणी के अनुसार खरीदें',
+      'mr': 'वर्गानुसार खरेदी करा',
+    },
+    'marketplace_v3_search_listings': {
+      'en': 'Search your listings',
+      'hi': 'अपनी लिस्टिंग खोजें',
+      'mr': 'तुमच्या जाहिराती शोधा',
+    },
+    'marketplace_v3_featured_produce': {
+      'en': 'Featured farmer produce',
+      'hi': 'चुनिंदा किसान उपज',
+      'mr': 'निवडक शेतमाल',
+    },
+    'marketplace_v3_farmer_first': {
+      'en': 'Farmer-first marketplace',
+      'hi': 'किसान-केंद्रित मार्केटप्लेस',
+      'mr': 'शेतकरी-केंद्रित मार्केटप्लेस',
+    },
+    'marketplace_v3_compare_help': {
+      'en':
+          'Compare farm produce, trusted inputs and official market rates in one place.',
+      'hi':
+          'एक ही जगह किसान उपज, भरोसेमंद सामग्री और आधिकारिक मंडी भाव की तुलना करें।',
+      'mr':
+          'एकाच ठिकाणी शेतमाल, विश्वासार्ह निविष्ठा आणि अधिकृत बाजारभाव यांची तुलना करा.',
+    },
+    'marketplace_v3_farm_listings': {
+      'en': 'Farm listings',
+      'hi': 'किसान लिस्टिंग',
+      'mr': 'शेतमाल जाहिराती',
+    },
+    'marketplace_v3_verified_inputs_short': {
+      'en': 'Verified inputs',
+      'hi': 'सत्यापित सामग्री',
+      'mr': 'पडताळलेल्या निविष्ठा',
+    },
+    'marketplace_v3_request': {'en': 'Request', 'hi': 'अनुरोध', 'mr': 'मागणी'},
+    'marketplace_v3_rates_updating': {
+      'en': 'Official rates are updating',
+      'hi': 'आधिकारिक भाव अपडेट हो रहे हैं',
+      'mr': 'अधिकृत बाजारभाव अद्ययावत होत आहेत',
+    },
+    'marketplace_v3_open_apmc_help': {
+      'en': 'Open APMC to search all-India market rates.',
+      'hi': 'पूरे भारत के मंडी भाव खोजने के लिए एपीएमसी खोलें।',
+      'mr': 'भारतभरातील बाजारभाव शोधण्यासाठी एपीएमसी उघडा.',
+    },
+    'marketplace_v3_per_quintal': {
+      'en': 'per quintal',
+      'hi': 'प्रति क्विंटल',
+      'mr': 'प्रति क्विंटल',
+    },
+    'marketplace_v3_official_rate': {
+      'en': 'Official rate',
+      'hi': 'आधिकारिक भाव',
+      'mr': 'अधिकृत बाजारभाव',
+    },
+    'marketplace_v3_all_products': {
+      'en': 'All products',
+      'hi': 'सभी उत्पाद',
+      'mr': 'सर्व उत्पादने',
+    },
+    'marketplace_v3_grains_millets': {
+      'en': 'Grains & millets',
+      'hi': 'अनाज और मिलेट',
+      'mr': 'धान्य आणि भरडधान्ये',
+    },
+    'marketplace_v3_pulses_lentils': {
+      'en': 'Pulses & lentils',
+      'hi': 'दालें और फलियां',
+      'mr': 'डाळी आणि कडधान्ये',
+    },
+    'marketplace_v3_oilseeds': {
+      'en': 'Oilseeds',
+      'hi': 'तिलहन',
+      'mr': 'तेलबिया',
+    },
+    'marketplace_v3_seeds_inputs': {
+      'en': 'Seeds & inputs',
+      'hi': 'बीज और कृषि सामग्री',
+      'mr': 'बियाणे आणि निविष्ठा',
+    },
+    'marketplace_v3_farm_equipment': {
+      'en': 'Farm equipment',
+      'hi': 'कृषि उपकरण',
+      'mr': 'शेती उपकरणे',
+    },
+    'marketplace_v3_animal_feed': {
+      'en': 'Animal feed',
+      'hi': 'पशु आहार',
+      'mr': 'पशुखाद्य',
+    },
+    'marketplace_v3_farm_direct': {
+      'en': 'Farm direct',
+      'hi': 'सीधे किसान से',
+      'mr': 'थेट शेतातून',
+    },
+    'marketplace_v3_verified_input': {
+      'en': 'Verified input',
+      'hi': 'सत्यापित कृषि सामग्री',
+      'mr': 'पडताळलेली निविष्ठा',
+    },
+    'marketplace_v3_quality_checked': {
+      'en': 'Quality checked',
+      'hi': 'गुणवत्ता जांची गई',
+      'mr': 'गुणवत्ता तपासलेली',
+    },
+    'marketplace_v3_why_market': {
+      'en': 'Why use Kalsubai Market?',
+      'hi': 'कलसुबाई मार्केट क्यों इस्तेमाल करें?',
+      'mr': 'कळसुबाई मार्केट का वापरावे?',
+    },
+    'marketplace_v3_price_guidance': {
+      'en': 'APMC price guidance',
+      'hi': 'एपीएमसी भाव मार्गदर्शन',
+      'mr': 'एपीएमसी भाव मार्गदर्शन',
+    },
+    'marketplace_v3_verified_products': {
+      'en': 'Verified products',
+      'hi': 'सत्यापित उत्पाद',
+      'mr': 'पडताळलेली उत्पादने',
+    },
+    'marketplace_v3_fast_requests': {
+      'en': 'Fast buying requests',
+      'hi': 'त्वरित खरीद अनुरोध',
+      'mr': 'जलद खरेदी मागण्या',
+    },
+    'marketplace_v3_india_market_view': {
+      'en': 'All-India market view',
+      'hi': 'पूरे भारत के बाजार की जानकारी',
+      'mr': 'भारतभरातील बाजार माहिती',
+    },
+    'marketplace_counteroffer': {
+      'en': 'Counteroffer',
+      'hi': 'प्रतिप्रस्ताव',
+      'mr': 'प्रतिप्रस्ताव',
+    },
+    'marketplace_propose_final_rate_after_grading': {
+      'en': 'Propose final rate after grading',
+      'hi': 'ग्रेडिंग के बाद अंतिम भाव प्रस्तावित करें',
+      'mr': 'ग्रेडिंगनंतर अंतिम दर सुचवा',
+    },
+    'marketplace_verified': {
+      'en': 'Verified',
+      'hi': 'सत्यापित',
+      'mr': 'पडताळलेले',
+    },
+    'marketplace_order_qr': {
+      'en': 'Marketplace order QR',
+      'hi': 'मार्केटप्लेस ऑर्डर QR',
+      'mr': 'मार्केटप्लेस ऑर्डर QR',
+    },
+    'marketplace_order': {
+      'en': 'Marketplace order',
+      'hi': 'मार्केटप्लेस ऑर्डर',
+      'mr': 'मार्केटप्लेस ऑर्डर',
+    },
+    'marketplace_show_qr_at_arrival': {
+      'en': 'Show this QR to the FPC when the whole harvest lot arrives.',
+      'hi': 'जब पूरी फसल की खेप FPC पर पहुँचे, तब यह QR दिखाएँ।',
+      'mr': 'संपूर्ण कापणीची खेप FPC येथे आल्यावर हा QR दाखवा.',
+    },
+    'marketplace_qr_receive': {
+      'en': 'QR receive',
+      'hi': 'QR से प्राप्त करें',
+      'mr': 'QR ने प्राप्त करा',
+    },
+    'marketplace_measured_net_weight': {
+      'en': 'Measured net weight (kg)',
+      'hi': 'मापा गया शुद्ध वजन (किग्रा)',
+      'mr': 'मोजलेले निव्वळ वजन (किलो)',
+    },
+    'marketplace_arrival_grade': {
+      'en': 'Arrival grade',
+      'hi': 'आवक ग्रेड',
+      'mr': 'आवक ग्रेड',
+    },
+    'marketplace_moisture_percent': {
+      'en': 'Moisture percent',
+      'hi': 'नमी प्रतिशत',
+      'mr': 'ओलावा टक्केवारी',
+    },
+    'marketplace_quarantine_arrival': {
+      'en': 'Quarantine arrival',
+      'hi': 'आवक को क्वारंटीन करें',
+      'mr': 'आवक क्वारंटाईन करा',
+    },
+    'marketplace_quarantine_notice': {
+      'en':
+          'This receipt remains quarantined. It does not increase stock or create a farmer payable.',
+      'hi':
+          'यह आवक क्वारंटीन में रहेगी। इससे स्टॉक नहीं बढ़ेगा और किसान का देय भुगतान नहीं बनेगा।',
+      'mr':
+          'ही आवक क्वारंटाईनमध्ये राहील. यामुळे साठा वाढणार नाही किंवा शेतकरी देयक तयार होणार नाही.',
+    },
+    'marketplace_arrival_quarantined_notice': {
+      'en': 'Arrival quarantined. Stock and farmer payment remain unposted.',
+      'hi':
+          'आवक क्वारंटीन में है। स्टॉक और किसान भुगतान अभी दर्ज नहीं हुए हैं।',
+      'mr':
+          'आवक क्वारंटाईनमध्ये आहे. साठा आणि शेतकरी देयक अद्याप नोंदवलेले नाही.',
+    },
+    'marketplace_v2_source': {'en': 'Source', 'hi': 'स्रोत', 'mr': 'स्रोत'},
+    'inspect_before_spray': {
+      'en': 'Inspect before spray',
+      'hi': 'छिड़काव से पहले निरीक्षण',
+      'mr': 'फवारणीपूर्वी तपासणी',
+    },
+    'inspect_before_spray_desc': {
+      'en': 'Confirm the crop issue before choosing any spray.',
+      'hi': 'किसी भी छिड़काव को चुनने से पहले फसल की समस्या की पुष्टि करें।',
+      'mr': 'कोणतीही फवारणी निवडण्यापूर्वी पिकाच्या समस्येची खात्री करा.',
+    },
+    'review_crop_plan': {
+      'en': 'Review crop plan',
+      'hi': 'फसल योजना देखें',
+      'mr': 'पीक योजना तपासा',
+    },
+    'review_crop_plan_desc': {
+      'en': 'Check the selected farm stage and next recommended action.',
+      'hi': 'चुने हुए खेत का चरण और अगला सुझाया कार्य देखें।',
+      'mr': 'निवडलेल्या शेताची अवस्था आणि पुढील शिफारस केलेली कृती तपासा.',
+    },
+    'mark_pending': {
+      'en': 'Mark pending',
+      'hi': 'लंबित चिह्नित करें',
+      'mr': 'प्रलंबित म्हणून नोंदवा',
+    },
+    'mark_done': {
+      'en': 'Mark done',
+      'hi': 'पूरा चिह्नित करें',
+      'mr': 'पूर्ण म्हणून नोंदवा',
+    },
+    'snooze_two_hours': {
+      'en': 'Snooze for two hours',
+      'hi': 'दो घंटे के लिए टालें',
+      'mr': 'दोन तासांसाठी पुढे ढकला',
+    },
+    'mark_all_read': {
+      'en': 'Mark all read',
+      'hi': 'सभी पढ़े हुए करें',
+      'mr': 'सर्व वाचले म्हणून नोंदवा',
+    },
+    'snoozed': {'en': 'Snoozed', 'hi': 'स्थगित', 'mr': 'पुढे ढकलले'},
   };
 }

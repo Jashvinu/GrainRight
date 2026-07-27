@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -19,6 +20,8 @@ import '../controllers/farmer_inventory_controller.dart';
 import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/farmer_inventory_item.dart';
+import '../models/farmer_daily_task.dart';
+import '../models/harvest_zone_plan.dart';
 import '../models/satellite/farm_model.dart';
 import '../models/satellite/farm_alert_model.dart';
 import '../models/satellite/farm_assistant_model.dart';
@@ -37,7 +40,10 @@ import '../widgets/satellite/satellite_map_view.dart';
 import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 import '../services/location_service.dart';
 import '../services/grain_grading_service.dart';
+import '../services/harvest_zone_plan_service.dart';
 import '../services/farm_status_notification_service.dart';
+import '../services/farmer_daily_task_service.dart';
+import '../services/farmer_notification_realtime_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/secure_app_storage.dart';
 import '../services/satellite_service.dart';
@@ -66,6 +72,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     with WidgetsBindingObserver {
   int _index = 0;
   int _selectedFarm = 0;
+  String _inventorySearchText = '';
+  String _inventoryFarmFilter = 'All Farms';
+  String _inventorySortBy = 'Newest';
+  String _aiChatDraft = '';
   static const _dashboardTabIndex = 0;
   static const _farmTabIndex = 1;
   static const _inventoryTabIndex = 2;
@@ -224,6 +234,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   String? _lastSelectedFarmSnapshotEnsureKey;
   final Map<String, Future<void>> _selectedFarmSnapshotRefreshes = {};
   final Map<String, List<LatLng>> _farmBoundaryCache = {};
+  final FarmerNotificationRealtimeService _notificationRealtime =
+      FarmerNotificationRealtimeService();
 
   @override
   void initState() {
@@ -265,6 +277,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_openNotificationPanelFromSystemTray());
+      unawaited(
+        _notificationRealtime.start(
+          onNotification: (notification) => LocalNotificationService.instance
+              .showFarmerNotification(notification),
+        ),
+      );
     });
   }
 
@@ -275,6 +293,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     _remoteFarmsWorker?.dispose();
     _remoteFarmLoadingWorker?.dispose();
     _inventoryWorker?.dispose();
+    unawaited(_notificationRealtime.stop());
     super.dispose();
   }
 
@@ -282,6 +301,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_openNotificationPanelFromSystemTray());
+      final stageChanged = _refreshAllFarmStages();
+      if (stageChanged && mounted) setState(() {});
     }
   }
 
@@ -1033,6 +1054,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         variety: selectedFarm.variety,
         product: selectedFarm.product,
         farmerId: _profile.farmerId,
+        farmerPhone: _verifiedFarmerPhone() ?? _profile.phone,
         area: selectedFarm.area,
         harvestHealth: selectedFarm.health,
         farmerName: _profile.name,
@@ -1236,7 +1258,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   void _initializeAllFarmState() {
     for (var i = 0; i < _farms.length; i++) {
       _initializeFarmState(i);
+      _refreshFarmStage(i);
     }
+  }
+
+  bool _refreshAllFarmStages() {
+    var changed = false;
+    for (var i = 0; i < _farms.length; i++) {
+      changed = _refreshFarmStage(i) || changed;
+    }
+    return changed;
   }
 
   List<_FarmerFarm> _remoteFarmsFromController(VerifiedFarmerRecord record) {
@@ -1430,12 +1461,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   }
 
   Widget _buildMobileBottomNavigationBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: FarmerFloatingBottomNav(
-        selectedItem: _mobileNavIndexFromPage(),
-        onSelected: _handleMobileNavTap,
-      ),
+    return FarmerFloatingBottomNavDock(
+      selectedItem: _mobileNavIndexFromPage(),
+      onSelected: _handleMobileNavTap,
     );
   }
 
@@ -1572,6 +1600,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       farmName: lot.farmName,
       batchId: lot.batchId,
       harvestBatchId: harvestBatchId,
+      harvestZonePlanId: lot.harvestZonePlanId,
+      harvestZoneId: lot.harvestZoneId,
+      harvestZoneLabel: lot.harvestZoneLabel,
+      fieldGrade: lot.fieldGrade,
+      fieldScore: lot.fieldScore,
       productCategory: lot.productCategory,
       productName: productName,
       crop: lot.crop,
@@ -1609,6 +1642,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       crop: item.crop,
       variety: item.variety,
       harvestBatchId: item.harvestBatchId,
+      harvestZonePlanId: item.harvestZonePlanId,
+      harvestZoneId: item.harvestZoneId,
+      harvestZoneLabel: item.harvestZoneLabel,
+      fieldGrade: item.fieldGrade,
+      fieldScore: item.fieldScore,
       productCategory: item.productCategory,
       productName: item.productName,
       quantity: item.quantity,
@@ -1728,6 +1766,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           BrandAssets.farmerAvatars.length];
 
   String _satelliteRequestToken() {
+    final sessionToken =
+        Supabase.instance.client.auth.currentSession?.accessToken ?? '';
+    if (sessionToken.isNotEmpty) return sessionToken;
     if (!Get.isRegistered<AuthController>()) return '';
     final token = Get.find<AuthController>().accessToken.value;
     return token.isEmpty ? '' : token;
@@ -3263,13 +3304,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     return _farmLifecycleStages.last;
   }
 
-  void _refreshFarmStage(int index) {
+  bool _refreshFarmStage(int index) {
     final remoteStage = index >= 0 && index < _farms.length
         ? _farms[index].currentStatusStage?.trim()
         : null;
-    _farmGrowthStage[index] = remoteStage == null || remoteStage.isEmpty
+    final nextStage = remoteStage == null || remoteStage.isEmpty
         ? _growthStageForFarm(index)
         : remoteStage;
+    if (_farmGrowthStage[index] == nextStage) return false;
+    _farmGrowthStage[index] = nextStage;
+    return true;
   }
 
   CropLifecycleStage? _currentLifecycleStageForFarm(int index) {
@@ -5970,12 +6014,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         throw SatelliteApiException('Remote farm id not found');
       }
       try {
-        final refreshedIndex = await _refreshFarmsFromCloudAndSelect(
-          farmId: farmId,
-          fallbackIndex: index,
-          refreshSnapshot: false,
-        );
-        activeIndex = refreshedIndex;
+        final auth = Get.find<MainAuthController>();
+        if (auth.verifiedFarmer.value != null) {
+          await auth.syncFarmerData(forceRefresh: true, showLoading: false);
+          if (!mounted) return;
+          _initializeFarmerStateFromSession();
+          activeIndex = _indexForRemoteFarmId(farmId) ?? _safeSelectedFarmIndex;
+        } else {
+          activeIndex = await _refreshFarmsFromCloudAndSelect(
+            farmId: farmId,
+            fallbackIndex: index,
+            refreshSnapshot: false,
+          );
+        }
       } catch (error) {
         Get.log('Farm list refresh skipped before alert refresh: $error');
         activeIndex = _indexForRemoteFarmId(farmId) ?? index;
@@ -6027,32 +6078,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    for (var i = 0; i < _farms.length; i++) {
-      _initializeFarmState(i);
-      _refreshFarmStage(i);
-    }
     final selectedFarmIndex = _safeSelectedFarmIndex;
     if (_farms.isNotEmpty) {
       _scheduleSelectedFarmSnapshotEnsure(selectedFarmIndex);
     }
     _scheduleFirstFarmTutorialCheck();
 
-    final farmPolygons = {
-      for (var i = 0; i < _farms.length; i++) i: _farmBoundary(_farms[i]),
-    };
-    final displayScoutZonesByFarm = {
-      for (var i = 0; i < _farms.length; i++) i: _displayScoutZonesForFarm(i),
-    };
-    final displayRiskCellsByFarm = {
-      for (var i = 0; i < _farms.length; i++) i: _displayRiskCellsForFarm(i),
-    };
-    final displayDiseaseScreenByFarm = <int, DiseaseScreenResult>{};
-    for (var i = 0; i < _farms.length; i++) {
-      final screen = _displayDiseaseScreenForFarm(i);
-      if (screen != null) {
-        displayDiseaseScreenByFarm[i] = screen;
-      }
-    }
     final farmCtrl = Get.isRegistered<FarmController>()
         ? Get.find<FarmController>()
         : null;
@@ -6077,6 +6108,22 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     Widget buildCurrentPage() {
       switch (pageIndex) {
         case _farmTabIndex:
+          final farmPolygons = {
+            for (var i = 0; i < _farms.length; i++) i: _farmBoundary(_farms[i]),
+          };
+          final displayScoutZonesByFarm = {
+            for (var i = 0; i < _farms.length; i++)
+              i: _displayScoutZonesForFarm(i),
+          };
+          final displayRiskCellsByFarm = {
+            for (var i = 0; i < _farms.length; i++)
+              i: _displayRiskCellsForFarm(i),
+          };
+          final displayDiseaseScreenByFarm = <int, DiseaseScreenResult>{};
+          for (var i = 0; i < _farms.length; i++) {
+            final screen = _displayDiseaseScreenForFarm(i);
+            if (screen != null) displayDiseaseScreenByFarm[i] = screen;
+          }
           return _FarmPage(
             farms: _farms,
             selectedIndex: selectedFarmIndex,
@@ -6112,9 +6159,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
           );
         case _inventoryTabIndex:
           return _InventoryPage(
+            key: const PageStorageKey<String>('farmer-inventory-page'),
             lots: _harvestInventory,
             isSyncing: _inventoryController.isLoading.value,
             isSaving: _inventorySaving,
+            initialSearchText: _inventorySearchText,
+            initialFarmFilter: _inventoryFarmFilter,
+            initialSortBy: _inventorySortBy,
+            onSearchTextChanged: (value) => _inventorySearchText = value,
+            onFarmFilterChanged: (value) => _inventoryFarmFilter = value,
+            onSortChanged: (value) => _inventorySortBy = value,
             onAddProduct: _openAddInventoryProductSheet,
             onTapListForSell: (lot) => Get.to(
               () => MarketplacePage(
@@ -6134,6 +6188,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
               ? Map<String, dynamic>.from(aiChatContext['weather'] as Map)
               : const <String, dynamic>{};
           return FarmerAiChatScreen(
+            key: const PageStorageKey<String>('farmer-ai-chat-page'),
             farmId: _farm.remoteFarmId,
             farmName: _farm.name,
             crop: _farm.crop,
@@ -6147,6 +6202,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
             daysAfterSowing: _daysAfterSowing(selectedFarmIndex),
             weatherSnapshot: aiChatWeather,
             farmContext: aiChatContext,
+            initialDraft: _aiChatDraft,
+            onDraftChanged: (value) => _aiChatDraft = value,
             onUpdateFarmStatus: () => _openFarmStatusUpdate(selectedFarmIndex),
             bottomContentInset: 106,
           );
@@ -6239,31 +6296,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                               constraints.maxWidth >= 1060,
                             ),
                             Expanded(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 280),
-                                transitionBuilder: (child, animation) {
-                                  final offsetTween =
-                                      Tween<Offset>(
-                                        begin: const Offset(0.05, 0),
-                                        end: Offset.zero,
-                                      ).animate(
-                                        CurvedAnimation(
-                                          parent: animation,
-                                          curve: Curves.easeOutCubic,
-                                        ),
-                                      );
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(
-                                      position: offsetTween,
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: SizedBox(
-                                  key: ValueKey(pageIndex),
-                                  child: RepaintBoundary(child: currentPage),
-                                ),
+                              child: RepaintBoundary(
+                                key: ValueKey(pageIndex),
+                                child: currentPage,
                               ),
                             ),
                           ],
@@ -6271,31 +6306,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                       : Stack(
                           children: [
                             Positioned.fill(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 280),
-                                transitionBuilder: (child, animation) {
-                                  final offsetTween =
-                                      Tween<Offset>(
-                                        begin: const Offset(0.05, 0),
-                                        end: Offset.zero,
-                                      ).animate(
-                                        CurvedAnimation(
-                                          parent: animation,
-                                          curve: Curves.easeOutCubic,
-                                        ),
-                                      );
-                                  return FadeTransition(
-                                    opacity: animation,
-                                    child: SlideTransition(
-                                      position: offsetTween,
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: SizedBox(
-                                  key: ValueKey('mobile-$pageIndex'),
-                                  child: RepaintBoundary(child: currentPage),
-                                ),
+                              child: RepaintBoundary(
+                                key: ValueKey('mobile-$pageIndex'),
+                                child: currentPage,
                               ),
                             ),
                             Positioned(
@@ -6944,6 +6957,11 @@ class _HarvestInventoryLot {
   final String farmId;
   final String batchId;
   final String harvestBatchId;
+  final String harvestZonePlanId;
+  final String harvestZoneId;
+  final String harvestZoneLabel;
+  final String fieldGrade;
+  final double? fieldScore;
   final String farmName;
   final String crop;
   final String variety;
@@ -6971,6 +6989,11 @@ class _HarvestInventoryLot {
     this.remoteId = '',
     this.farmId = '',
     this.harvestBatchId = '',
+    this.harvestZonePlanId = '',
+    this.harvestZoneId = '',
+    this.harvestZoneLabel = '',
+    this.fieldGrade = '',
+    this.fieldScore,
     required this.batchId,
     required this.farmName,
     required this.crop,
@@ -7004,6 +7027,11 @@ class _HarvestInventoryLot {
       'remoteId': remoteId,
       'farmId': farmId,
       'harvestBatchId': harvestBatchId,
+      'harvestZonePlanId': harvestZonePlanId,
+      'harvestZoneId': harvestZoneId,
+      'harvestZoneLabel': harvestZoneLabel,
+      'fieldGrade': fieldGrade,
+      'fieldScore': fieldScore?.toStringAsFixed(1) ?? '',
       'farmName': farmName,
       'productCategory': productCategory,
       'productName': productName,
@@ -7054,13 +7082,26 @@ class _InventoryPage extends StatefulWidget {
   final List<_HarvestInventoryLot> lots;
   final bool isSyncing;
   final bool isSaving;
+  final String initialSearchText;
+  final String initialFarmFilter;
+  final String initialSortBy;
+  final ValueChanged<String> onSearchTextChanged;
+  final ValueChanged<String> onFarmFilterChanged;
+  final ValueChanged<String> onSortChanged;
   final VoidCallback onAddProduct;
   final ValueChanged<_HarvestInventoryLot> onTapListForSell;
 
   const _InventoryPage({
+    super.key,
     required this.lots,
     required this.isSyncing,
     required this.isSaving,
+    required this.initialSearchText,
+    required this.initialFarmFilter,
+    required this.initialSortBy,
+    required this.onSearchTextChanged,
+    required this.onFarmFilterChanged,
+    required this.onSortChanged,
     required this.onAddProduct,
     required this.onTapListForSell,
   });
@@ -7078,10 +7119,31 @@ class _InventoryPageState extends State<_InventoryPage> {
   ];
   static const String _allFarmsLabel = 'All Farms';
 
-  final _searchController = TextEditingController();
-  String _searchText = '';
-  String _selectedFarm = _allFarmsLabel;
-  String _sortBy = 'Newest';
+  late final TextEditingController _searchController;
+  late String _searchText;
+  late String _selectedFarm;
+  late String _sortBy;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchText = widget.initialSearchText;
+    _selectedFarm = widget.initialFarmFilter;
+    _sortBy = _sortOptions.contains(widget.initialSortBy)
+        ? widget.initialSortBy
+        : _sortOptions.first;
+    _searchController = TextEditingController(text: _searchText);
+  }
+
+  @override
+  void didUpdateWidget(covariant _InventoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selectedFarm != _allFarmsLabel &&
+        !_farmOptions.contains(_selectedFarm)) {
+      _selectedFarm = _allFarmsLabel;
+      widget.onFarmFilterChanged(_selectedFarm);
+    }
+  }
 
   @override
   void dispose() {
@@ -7389,6 +7451,7 @@ class _InventoryPageState extends State<_InventoryPage> {
 
     return _PageScaffold(
       title: UiStrings.t('inventory'),
+      storageKey: const PageStorageKey<String>('farmer-inventory-scroll'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -7457,9 +7520,10 @@ class _InventoryPageState extends State<_InventoryPage> {
                 children: [
                   TextField(
                     controller: _searchController,
-                    onChanged: (value) => setState(() {
-                      _searchText = value;
-                    }),
+                    onChanged: (value) {
+                      widget.onSearchTextChanged(value);
+                      setState(() => _searchText = value);
+                    },
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search_rounded),
                       hintText: UiStrings.t('search_inventory_hint'),
@@ -7470,6 +7534,7 @@ class _InventoryPageState extends State<_InventoryPage> {
                               onPressed: () => setState(() {
                                 _searchText = '';
                                 _searchController.clear();
+                                widget.onSearchTextChanged('');
                               }),
                               tooltip: UiStrings.t('clear_search'),
                             ),
@@ -7484,6 +7549,7 @@ class _InventoryPageState extends State<_InventoryPage> {
                           value: _sortBy,
                           onChanged: (value) {
                             if (value == null) return;
+                            widget.onSortChanged(value);
                             setState(() => _sortBy = value);
                           },
                           items: _sortOptions
@@ -7513,6 +7579,7 @@ class _InventoryPageState extends State<_InventoryPage> {
                             selected: farm == _selectedFarm,
                             onSelected: (value) {
                               if (value) {
+                                widget.onFarmFilterChanged(farm);
                                 setState(() => _selectedFarm = farm);
                               }
                             },
@@ -7750,6 +7817,7 @@ class _FarmerDashboard extends StatelessWidget {
       color: AppTheme.green,
       backgroundColor: Colors.white,
       child: CustomScrollView(
+        key: const PageStorageKey<String>('farmer-dashboard-wide-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
@@ -7874,6 +7942,7 @@ class _FarmerDashboard extends StatelessWidget {
       color: AppTheme.green,
       backgroundColor: Colors.white,
       child: CustomScrollView(
+        key: const PageStorageKey<String>('farmer-dashboard-mobile-scroll'),
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           SliverToBoxAdapter(
@@ -7902,6 +7971,8 @@ class _FarmerDashboard extends StatelessWidget {
                   _HomeRevealSection(
                     delayMs: 45,
                     child: _TodayTodoSection(
+                      farmId: farm.remoteFarmId,
+                      currentStage: currentStage,
                       metrics: metrics,
                       weatherContext: weatherContext,
                       satelliteOverview: satelliteOverview,
@@ -7909,7 +7980,17 @@ class _FarmerDashboard extends StatelessWidget {
                       issueCells: issueCells,
                       farmAlertAdvice: farmAlertAdvice,
                       lifecycleAdvice: lifecycleAdvice,
-                      onViewAll: onOpenFarm,
+                      onOpenTask: (taskType) {
+                        switch (taskType) {
+                          case 'irrigation':
+                            onOpenWeather();
+                          case 'crop_health':
+                          case 'crop_inspection':
+                            onOpenDiagnose();
+                          default:
+                            onOpenFarm();
+                        }
+                      },
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -8684,47 +8765,71 @@ class _HomeSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
-        if (onAction != null)
-          InkWell(
-            borderRadius: BorderRadius.circular(999),
-            onTap: onAction,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    actionLabel,
-                    style: const TextStyle(
-                      color: AppTheme.green,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
+    final textScale = MediaQuery.textScalerOf(context).scale(13) / 13;
+    const titleStyle = TextStyle(
+      color: Colors.black,
+      fontSize: 20,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stacked = textScale > 1.3 || constraints.maxWidth < 300;
+        final action = onAction == null
+            ? null
+            : SizedBox(
+                width: stacked
+                    ? constraints.maxWidth
+                    : math.min(180, constraints.maxWidth * 0.45),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: onAction,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            actionLabel,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.green,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppTheme.green,
+                          size: 20,
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppTheme.green,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
+                ),
+              );
+        if (stacked) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: titleStyle),
+              if (action != null) ...[const SizedBox(height: 2), action],
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: Text(title, style: titleStyle)),
+            ?action,
+          ],
+        );
+      },
     );
   }
 }
@@ -9047,25 +9152,9 @@ class _RedesignedHomeHero extends StatelessWidget {
   }
 }
 
-class _HomeTodoItem {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String status;
-  final Color color;
-  final Color tint;
-
-  const _HomeTodoItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.status,
-    required this.color,
-    required this.tint,
-  });
-}
-
-class _TodayTodoSection extends StatelessWidget {
+class _TodayTodoSection extends StatefulWidget {
+  final String farmId;
+  final String currentStage;
   final List<FarmMetricData> metrics;
   final Map<String, dynamic>? weatherContext;
   final _FarmSatelliteOverview? satelliteOverview;
@@ -9073,9 +9162,11 @@ class _TodayTodoSection extends StatelessWidget {
   final List<FarmIssueCell> issueCells;
   final FarmAlertAdvice? farmAlertAdvice;
   final CropLifecycleAdvice? lifecycleAdvice;
-  final VoidCallback onViewAll;
+  final ValueChanged<String> onOpenTask;
 
   const _TodayTodoSection({
+    required this.farmId,
+    required this.currentStage,
     required this.metrics,
     required this.weatherContext,
     required this.satelliteOverview,
@@ -9083,30 +9174,173 @@ class _TodayTodoSection extends StatelessWidget {
     required this.issueCells,
     required this.farmAlertAdvice,
     required this.lifecycleAdvice,
-    required this.onViewAll,
+    required this.onOpenTask,
   });
 
   @override
+  State<_TodayTodoSection> createState() => _TodayTodoSectionState();
+}
+
+class _TodayTodoSectionState extends State<_TodayTodoSection> {
+  final _service = FarmerDailyTaskService();
+  List<FarmerDailyTask> _tasks = const [];
+  String _fingerprint = '';
+  bool _syncing = false;
+  int _syncGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshDerivedTasks();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TodayTodoSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _refreshDerivedTasks();
+  }
+
+  void _refreshDerivedTasks() {
+    final derived = _deriveTasks();
+    final farmId = widget.farmId.trim();
+    final fingerprint = <String>[
+      farmId,
+      ...derived.map(
+        (task) => '${task.taskKey}:${task.priority}:${task.metadata}',
+      ),
+    ].join('|');
+    if (fingerprint == _fingerprint) return;
+    _fingerprint = fingerprint;
+    _tasks = derived;
+    final generation = ++_syncGeneration;
+    if (farmId.isEmpty) {
+      _syncing = false;
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(_sync(derived, farmId: farmId, generation: generation));
+      }
+    });
+  }
+
+  Future<void> _sync(
+    List<FarmerDailyTask> derived, {
+    required String farmId,
+    required int generation,
+  }) async {
+    if (!mounted || generation != _syncGeneration) return;
+    setState(() => _syncing = true);
+    try {
+      final saved = await _service.syncDecisionTasks(
+        farmId: farmId,
+        growthStage: widget.currentStage,
+        waterStress: _homeWaterStressScore(widget.weatherContext),
+        soilMoisture: widget.satelliteOverview?.moisture,
+        rainMm: _homeTotalRain(widget.weatherContext) ?? 0,
+        diseaseRisk: math.max(
+          widget.diseaseMaxRisk,
+          _homeIssueMaxRisk(widget.issueCells),
+        ),
+        fallback: derived,
+      );
+      if (mounted &&
+          generation == _syncGeneration &&
+          widget.farmId.trim() == farmId) {
+        setState(() => _tasks = saved);
+      }
+    } catch (_) {
+      // Keep deterministic local tasks when persistence is temporarily offline.
+    } finally {
+      if (mounted && generation == _syncGeneration) {
+        setState(() => _syncing = false);
+      }
+    }
+  }
+
+  Future<void> _setStatus(
+    FarmerDailyTask task,
+    String status, {
+    DateTime? snoozedUntil,
+  }) async {
+    final index = _tasks.indexWhere((item) => item.taskKey == task.taskKey);
+    if (index < 0) return;
+    setState(() {
+      final next = _tasks.toList(growable: true);
+      next[index] = task.copyWith(
+        status: status,
+        completedAt: status == 'done' ? DateTime.now() : null,
+        snoozedUntil: snoozedUntil,
+        clearCompletedAt: status != 'done',
+        clearSnoozedUntil: status != 'snoozed',
+      );
+      _tasks = next;
+    });
+    try {
+      await _service.setStatus(
+        task,
+        status: status,
+        snoozedUntil: snoozedUntil,
+      );
+    } catch (_) {
+      // The optimistic state keeps the dashboard responsive; next sync retries.
+    }
+  }
+
+  Future<void> _openAllTasks() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) =>
+          _TodayTasksSheet(tasks: _tasks, onOpenTask: widget.onOpenTask),
+    );
+    final farmId = widget.farmId.trim();
+    if (mounted && farmId.isNotEmpty) {
+      final generation = ++_syncGeneration;
+      await _sync(_deriveTasks(), farmId: farmId, generation: generation);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final items = _items();
+    final cardHeight = _homeTodoCardHeight(MediaQuery.textScalerOf(context));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _HomeSectionHeader(
           title: UiStrings.t('todays_todo'),
-          actionLabel: UiStrings.t('view_all'),
-          onAction: onViewAll,
+          actionLabel: _syncing
+              ? UiStrings.t('syncing')
+              : UiStrings.t('view_all'),
+          onAction: _openAllTasks,
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 132,
+          height: cardHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
-            itemCount: items.length,
+            itemCount: _tasks.length,
             separatorBuilder: (context, index) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
-              return SizedBox(width: 142, child: _TodoTile(item: items[index]));
+              final task = _tasks[index];
+              return SizedBox(
+                width: 208,
+                child: _TodoTile(
+                  task: task,
+                  onDone: () => _setStatus(
+                    task,
+                    task.status == 'done' ? 'pending' : 'done',
+                  ),
+                  onSnooze: () => _setStatus(
+                    task,
+                    'snoozed',
+                    snoozedUntil: DateTime.now().add(const Duration(hours: 2)),
+                  ),
+                  onOpen: () => widget.onOpenTask(task.taskType),
+                ),
+              );
             },
           ),
         ),
@@ -9114,112 +9348,255 @@ class _TodayTodoSection extends StatelessWidget {
     );
   }
 
-  List<_HomeTodoItem> _items() {
-    final waterStress = _homeWaterStressScore(weatherContext);
-    final moisture = satelliteOverview?.moisture;
-    final rain = _homeTotalRain(weatherContext) ?? 0;
-    final waterMetric = metrics.length > 1 ? metrics[1] : null;
-    final diseaseMetric = metrics.length > 3 ? metrics[3] : null;
-    final lifecycleText = [
-      lifecycleAdvice?.nextAction ?? '',
-      lifecycleAdvice?.scoutTask ?? '',
-      lifecycleAdvice?.waterNeed ?? '',
-      lifecycleAdvice?.diseaseWatch ?? '',
-      ...?farmAlertAdvice?.nextActions,
-      ...?farmAlertAdvice?.importantAlerts.map(
-        (alert) => '${alert.title} ${alert.detail} ${alert.action}',
-      ),
-      ...?farmAlertAdvice?.weatherAlerts.map(
-        (alert) => '${alert.title} ${alert.detail} ${alert.action}',
-      ),
-    ].join(' ').toLowerCase();
-    final adviceNeedsWater =
-        lifecycleText.contains('water') || lifecycleText.contains('irrig');
+  List<FarmerDailyTask> _deriveTasks() {
+    final waterStress = _homeWaterStressScore(widget.weatherContext);
+    final moisture = widget.satelliteOverview?.moisture;
+    final rain = _homeTotalRain(widget.weatherContext) ?? 0;
     final needsWater =
-        (waterStress != null && waterStress >= 0.45) ||
-        (moisture != null && moisture < 0.34) ||
-        waterMetric?.status == UiStrings.t('low') ||
-        adviceNeedsWater;
-    final fertilizerDue =
-        lifecycleText.contains('fertil') ||
-        lifecycleText.contains('nutrient') ||
-        lifecycleText.contains('nitrogen') ||
-        lifecycleText.contains('phosph');
+        rain < 8 &&
+        ((waterStress != null && waterStress >= 0.45) ||
+            (moisture != null && moisture < 0.34));
     final effectiveRisk = math.max(
-      diseaseMaxRisk,
-      _homeIssueMaxRisk(issueCells),
+      widget.diseaseMaxRisk,
+      _homeIssueMaxRisk(widget.issueCells),
     );
-    final diseaseNeedsAction =
-        effectiveRisk >= 0.55 ||
-        diseaseMetric?.status == UiStrings.t('watch') ||
-        lifecycleText.contains('disease') ||
-        lifecycleText.contains('leaf');
-    final sprayNeeded =
-        effectiveRisk >= 0.72 || lifecycleText.contains('spray');
-    return [
-      _HomeTodoItem(
-        icon: Icons.water_drop_rounded,
-        title: UiStrings.t('irrigation'),
-        subtitle: needsWater
-            ? UiStrings.t('weather_rec_monitor_moisture')
-            : rain >= 8
-            ? UiStrings.t('tomorrow')
-            : UiStrings.t('not_required'),
-        status: needsWater ? UiStrings.t('do_today') : UiStrings.t('pending'),
-        color: const Color(0xFF1E88E5),
-        tint: const Color(0xFFEAF5FF),
+    final today = DateTime.now();
+    final tasks = <FarmerDailyTask>[];
+    if (needsWater) {
+      tasks.add(
+        FarmerDailyTask(
+          farmId: widget.farmId,
+          taskDate: today,
+          taskKey: 'irrigation-check',
+          taskType: 'irrigation',
+          titleKey: 'irrigation',
+          descriptionKey: 'weather_rec_monitor_moisture',
+          priority: waterStress != null && waterStress >= 0.7
+              ? 'urgent'
+              : 'high',
+          sourceType: 'weather_satellite',
+          actionRoute: 'weather',
+          metadata: {
+            'water_stress': waterStress,
+            'soil_moisture': moisture,
+            'rain_mm': rain,
+          },
+        ),
+      );
+    }
+    if (effectiveRisk >= 0.55) {
+      tasks.add(
+        FarmerDailyTask(
+          farmId: widget.farmId,
+          taskDate: today,
+          taskKey: 'crop-health-check',
+          taskType: 'crop_health',
+          titleKey: 'disease_risk',
+          descriptionKey: 'open_diagnose_flow',
+          priority: effectiveRisk >= 0.72 ? 'urgent' : 'high',
+          sourceType: 'disease_risk',
+          actionRoute: 'diagnose',
+          metadata: {'risk_score': effectiveRisk},
+        ),
+      );
+    }
+    if (effectiveRisk >= 0.72) {
+      tasks.add(
+        FarmerDailyTask(
+          farmId: widget.farmId,
+          taskDate: today,
+          taskKey: 'pre-spray-inspection',
+          taskType: 'crop_inspection',
+          titleKey: 'inspect_before_spray',
+          descriptionKey: 'inspect_before_spray_desc',
+          priority: 'high',
+          sourceType: 'disease_risk',
+          actionRoute: 'diagnose',
+          metadata: {'risk_score': effectiveRisk},
+        ),
+      );
+    }
+    tasks.add(
+      FarmerDailyTask(
+        farmId: widget.farmId,
+        taskDate: today,
+        taskKey: 'stage-plan-review',
+        taskType: 'stage_review',
+        titleKey: 'review_crop_plan',
+        descriptionKey: 'review_crop_plan_desc',
+        priority: 'normal',
+        sourceType: 'crop_stage',
+        actionRoute: 'farm',
+        metadata: {'growth_stage': widget.currentStage},
       ),
-      _HomeTodoItem(
-        icon: Icons.eco_rounded,
-        title: UiStrings.t('disease_risk'),
-        subtitle: diseaseNeedsAction
-            ? UiStrings.t('open_diagnose_flow')
-            : UiStrings.t('sort_recommended'),
-        status: diseaseNeedsAction
-            ? UiStrings.t('do_today')
-            : UiStrings.t('not_required'),
-        color: diseaseNeedsAction ? const Color(0xFFF57C00) : AppTheme.green,
-        tint: diseaseNeedsAction
-            ? const Color(0xFFFFF3E0)
-            : const Color(0xFFEAF7EA),
-      ),
-      _HomeTodoItem(
-        icon: Icons.sanitizer_rounded,
-        title: UiStrings.t('spray'),
-        subtitle: sprayNeeded
-            ? UiStrings.t('sort_recommended')
-            : UiStrings.t('not_required'),
-        status: sprayNeeded
-            ? UiStrings.t('do_today')
-            : UiStrings.t('not_required'),
-        color: sprayNeeded ? const Color(0xFFE53935) : AppTheme.green,
-        tint: sprayNeeded ? const Color(0xFFFFEBEE) : const Color(0xFFEAF7EA),
-      ),
-      _HomeTodoItem(
-        icon: Icons.inventory_2_rounded,
-        title: UiStrings.t('fertilizer'),
-        subtitle: fertilizerDue
-            ? UiStrings.t('sort_recommended')
-            : UiStrings.t('crop_stage'),
-        status: fertilizerDue
-            ? UiStrings.t('do_today')
-            : UiStrings.t('upcoming'),
-        color: fertilizerDue
-            ? const Color(0xFFF57C00)
-            : const Color(0xFF7E57C2),
-        tint: fertilizerDue ? const Color(0xFFFFF3E0) : const Color(0xFFF4ECFF),
-      ),
-    ];
+    );
+    return tasks;
   }
 }
 
-class _TodoTile extends StatelessWidget {
-  final _HomeTodoItem item;
+class _TodayTasksSheet extends StatefulWidget {
+  final List<FarmerDailyTask> tasks;
+  final ValueChanged<String> onOpenTask;
 
-  const _TodoTile({required this.item});
+  const _TodayTasksSheet({required this.tasks, required this.onOpenTask});
+
+  @override
+  State<_TodayTasksSheet> createState() => _TodayTasksSheetState();
+}
+
+class _TodayTasksSheetState extends State<_TodayTasksSheet> {
+  final _service = FarmerDailyTaskService();
+  late List<FarmerDailyTask> _tasks;
+
+  @override
+  void initState() {
+    super.initState();
+    _tasks = widget.tasks.toList(growable: true);
+  }
+
+  Future<void> _setStatus(
+    FarmerDailyTask task,
+    String status, {
+    DateTime? snoozedUntil,
+  }) async {
+    final index = _tasks.indexWhere((item) => item.taskKey == task.taskKey);
+    if (index < 0) return;
+    final updated = task.copyWith(
+      status: status,
+      completedAt: status == 'done' ? DateTime.now() : null,
+      snoozedUntil: snoozedUntil,
+      clearCompletedAt: status != 'done',
+      clearSnoozedUntil: status != 'snoozed',
+    );
+    setState(() => _tasks[index] = updated);
+    try {
+      await _service.setStatus(
+        task,
+        status: status,
+        snoozedUntil: snoozedUntil,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _tasks[index] = task);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final cardHeight = _homeTodoCardHeight(MediaQuery.textScalerOf(context));
+    return DraggableScrollableSheet(
+      initialChildSize: 0.78,
+      minChildSize: 0.52,
+      maxChildSize: 0.94,
+      builder: (context, controller) {
+        return Material(
+          color: AppTheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC8D1C5),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        UiStrings.t('todays_todo'),
+                        style: const TextStyle(
+                          color: AppTheme.greenDark,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  controller: controller,
+                  padding: const EdgeInsets.fromLTRB(18, 4, 18, 28),
+                  itemCount: _tasks.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final task = _tasks[index];
+                    return SizedBox(
+                      height: cardHeight,
+                      child: _TodoTile(
+                        task: task,
+                        onDone: () => _setStatus(
+                          task,
+                          task.status == 'done' ? 'pending' : 'done',
+                        ),
+                        onSnooze: () => _setStatus(
+                          task,
+                          'snoozed',
+                          snoozedUntil: DateTime.now().add(
+                            const Duration(hours: 2),
+                          ),
+                        ),
+                        onOpen: () {
+                          Navigator.of(context).pop();
+                          widget.onOpenTask(task.taskType);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+double _homeTodoCardHeight(TextScaler textScaler) {
+  final textScale = (textScaler.scale(13) / 13).clamp(1.0, 3.0);
+  return 184 + ((textScale - 1) * 44);
+}
+
+class _TodoTile extends StatelessWidget {
+  final FarmerDailyTask task;
+  final VoidCallback onDone;
+  final VoidCallback onSnooze;
+  final VoidCallback onOpen;
+
+  const _TodoTile({
+    required this.task,
+    required this.onDone,
+    required this.onSnooze,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (task.priority) {
+      'urgent' => const Color(0xFFE53935),
+      'high' => const Color(0xFFF57C00),
+      _ => AppTheme.green,
+    };
+    final tint = color.withValues(alpha: 0.10);
+    final icon = switch (task.taskType) {
+      'irrigation' => Icons.water_drop_rounded,
+      'crop_health' => Icons.health_and_safety_rounded,
+      'crop_inspection' => Icons.search_rounded,
+      _ => Icons.event_note_rounded,
+    };
+    final isDone = task.status == 'done';
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
@@ -9242,16 +9619,13 @@ class _TodoTile extends StatelessWidget {
               Container(
                 width: 42,
                 height: 42,
-                decoration: BoxDecoration(
-                  color: item.tint,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(item.icon, color: item.color, size: 25),
+                decoration: BoxDecoration(color: tint, shape: BoxShape.circle),
+                child: Icon(icon, color: color, size: 25),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  item.title,
+                  UiStrings.t(task.titleKey),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -9265,8 +9639,8 @@ class _TodoTile extends StatelessWidget {
           ),
           const SizedBox(height: 9),
           Text(
-            item.subtitle,
-            maxLines: 1,
+            UiStrings.t(task.descriptionKey),
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppTheme.textMuted,
@@ -9274,26 +9648,64 @@ class _TodoTile extends StatelessWidget {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const Spacer(),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-              decoration: BoxDecoration(
-                color: item.tint,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                item.status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: item.color,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: tint,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    UiStrings.t(isDone ? 'done' : task.status),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              IconButton(
+                tooltip: UiStrings.t(isDone ? 'mark_pending' : 'mark_done'),
+                onPressed: onDone,
+                visualDensity: VisualDensity.compact,
+                icon: Icon(
+                  isDone
+                      ? Icons.check_circle_rounded
+                      : Icons.check_circle_outline_rounded,
+                  color: AppTheme.green,
+                  size: 21,
+                ),
+              ),
+              IconButton(
+                tooltip: UiStrings.t('snooze_two_hours'),
+                onPressed: onSnooze,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.snooze_rounded,
+                  color: AppTheme.textMuted,
+                  size: 21,
+                ),
+              ),
+              IconButton(
+                tooltip: UiStrings.t('open'),
+                onPressed: onOpen,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.arrow_forward_rounded,
+                  color: AppTheme.green,
+                  size: 21,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -9585,6 +9997,9 @@ class _RedesignedFarmsOverview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (farms.isEmpty) return const SizedBox.shrink();
+    final cardHeight = _farmOverviewCardHeight(
+      MediaQuery.textScalerOf(context),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -9595,7 +10010,7 @@ class _RedesignedFarmsOverview extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 174,
+          height: cardHeight,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -9642,6 +10057,11 @@ class _RedesignedFarmsOverview extends StatelessWidget {
     if (health.contains('setup')) return 0;
     return 75;
   }
+}
+
+double _farmOverviewCardHeight(TextScaler textScaler) {
+  final textScale = (textScaler.scale(14) / 14).clamp(1.0, 3.0);
+  return 180 + ((textScale - 1) * 104);
 }
 
 class _RedesignedFarmCard extends StatelessWidget {
@@ -9836,6 +10256,7 @@ class _QuickAccessSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tileHeight = _quickAccessTileHeight(MediaQuery.textScalerOf(context));
     final items = [
       _QuickAccessItem(
         icon: Icons.camera_alt_rounded,
@@ -9886,11 +10307,11 @@ class _QuickAccessSection extends StatelessWidget {
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 1.55,
+            mainAxisExtent: tileHeight,
           ),
           itemCount: items.length,
           itemBuilder: (context, index) => _QuickAccessTile(item: items[index]),
@@ -9898,6 +10319,11 @@ class _QuickAccessSection extends StatelessWidget {
       ],
     );
   }
+}
+
+double _quickAccessTileHeight(TextScaler textScaler) {
+  final textScale = (textScaler.scale(13) / 13).clamp(1.0, 3.0);
+  return 104 + ((textScale - 1) * 36);
 }
 
 class _QuickAccessItem {
@@ -11876,6 +12302,7 @@ class _HarvestHomePage extends StatefulWidget {
   final String cropName;
   final String product;
   final String farmerId;
+  final String farmerPhone;
   final String area;
   final String variety;
   final String farmerName;
@@ -11904,6 +12331,7 @@ class _HarvestHomePage extends StatefulWidget {
     required this.cropName,
     required this.product,
     required this.farmerId,
+    required this.farmerPhone,
     required this.variety,
     required this.farmerName,
     required this.farmLocation,
@@ -11936,6 +12364,12 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
   final _bagSizeCtrl = TextEditingController(text: '50');
   final _bagCountCtrl = TextEditingController(text: '12');
   final GrainGradingService _service = GrainGradingService();
+  final HarvestZonePlanService _zonePlanService = HarvestZonePlanService();
+  HarvestZonePlan? _zonePlan;
+  HarvestGradeZone? _selectedZone;
+  bool _isZonePlanLoading = true;
+  String _zonePlanError = '';
+  int _activeHarvestStep = 0;
   bool _readingMoisture = false;
   bool _hasMoistureImage = false;
   bool _isLocationFetching = false;
@@ -11992,6 +12426,72 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
       'D': 0.64,
     },
   };
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadZonePlan());
+  }
+
+  Future<void> _loadZonePlan({bool forceRefresh = false}) async {
+    if (widget.farmId.trim().isEmpty) {
+      setState(() {
+        _isZonePlanLoading = false;
+        _zonePlanError = UiStrings.t('harvest_map_sync_farm');
+      });
+      return;
+    }
+    setState(() {
+      _isZonePlanLoading = true;
+      _zonePlanError = '';
+    });
+    try {
+      final plan = await _zonePlanService.load(
+        farmId: widget.farmId,
+        farmerPhone: widget.farmerPhone,
+        farmerId: widget.farmerId,
+        forceRefresh: forceRefresh,
+      );
+      if (!mounted) return;
+      final previousZoneId = _selectedZone?.id;
+      final previousGrade = _selectedZone?.fieldGrade;
+      HarvestGradeZone? selected;
+      for (final zone in plan.zones) {
+        if (zone.id == previousZoneId) selected = zone;
+      }
+      if (selected == null && previousGrade != null) {
+        for (final zone in plan.zones) {
+          if (zone.fieldGrade == previousGrade) selected = zone;
+        }
+      }
+      selected ??= plan.zones.isEmpty ? null : plan.zones.first;
+      setState(() {
+        _zonePlan = plan;
+        _selectedZone = selected;
+        _isZonePlanLoading = false;
+      });
+    } on HarvestZonePlanException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isZonePlanLoading = false;
+        _zonePlanError = error.message;
+      });
+    }
+  }
+
+  void _selectHarvestZone(HarvestGradeZone zone) {
+    if (_selectedZone?.id == zone.id) return;
+    setState(() {
+      _selectedZone = zone;
+      _hasGrade = false;
+      _grade = '--';
+      _gradeScore = 0;
+      _analysisId = '';
+      _pendingInventoryLot = null;
+      _inventoryAdded = false;
+      _activeHarvestStep = 0;
+    });
+  }
 
   double _estimatedYield({
     required double bagSize,
@@ -12054,7 +12554,9 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     final moisture = double.tryParse(_moistureCtrl.text.trim());
     final bagSize = double.tryParse(_bagSizeCtrl.text.trim());
     final bagCount = int.tryParse(_bagCountCtrl.text.trim());
-    return moisture != null &&
+    return _selectedZone != null &&
+        (_zonePlan?.isHarvestReady ?? false) &&
+        moisture != null &&
         moisture > 0 &&
         bagSize != null &&
         bagSize > 0 &&
@@ -12166,6 +12668,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         _gradingMessage = UiStrings.t('run_grading_message');
         _pendingInventoryLot = null;
         _inventoryAdded = false;
+        _activeHarvestStep = 1;
       });
       Get.snackbar(
         UiStrings.t('moisture_photo_added'),
@@ -12205,6 +12708,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         _gradingMessage = UiStrings.t('run_grading_message');
         _pendingInventoryLot = null;
         _inventoryAdded = false;
+        _activeHarvestStep = 2;
       });
       Get.snackbar(
         UiStrings.t('grain_image_added'),
@@ -12245,6 +12749,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         if (reading.percent != null) {
           _moistureCtrl.text = reading.percent!.toStringAsFixed(1);
         }
+        _activeHarvestStep = 2;
       });
     } on GradingException catch (e) {
       if (!mounted) return;
@@ -12283,6 +12788,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
       setState(() {
         _farmLatitude = location.latitude;
         _farmLongitude = location.longitude;
+        _activeHarvestStep = 1;
       });
     } catch (_) {
       Get.snackbar(
@@ -12327,8 +12833,13 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         cropType: widget.cropName,
         cropVariety: widget.variety,
         farmerId: widget.farmerId,
+        farmerPhone: widget.farmerPhone,
         farmId: widget.farmId,
         batchId: batchId,
+        harvestZonePlanId: _zonePlan?.id,
+        harvestZoneId: _selectedZone?.id,
+        fieldGrade: _selectedZone?.fieldGrade,
+        fieldScore: _selectedZone?.fieldScore,
         bagSizeKg: bagSize,
         bagCount: bagCount,
         source: 'farmer_harvest_page',
@@ -12364,6 +12875,11 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
           itemId: batchId,
           farmId: widget.farmId,
           harvestBatchId: batchId,
+          harvestZonePlanId: _zonePlan?.id ?? '',
+          harvestZoneId: _selectedZone?.id ?? '',
+          harvestZoneLabel: _selectedZone?.label ?? '',
+          fieldGrade: _selectedZone?.fieldGrade ?? '',
+          fieldScore: _selectedZone?.fieldScore,
           batchId: batchId,
           farmName: widget.farmName,
           crop: widget.cropName,
@@ -12386,6 +12902,7 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
               _grainImageName ?? _moistureImageName ?? 'grain-grading',
         );
         _inventoryAdded = false;
+        _activeHarvestStep = 4;
       });
 
       Get.snackbar(
@@ -12467,6 +12984,11 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
         'farmName': widget.farmName,
         'farmId': widget.farmId,
         'analysisId': analysisId,
+        'harvestZonePlanId': _zonePlan?.id ?? '',
+        'harvestZoneId': _selectedZone?.id ?? '',
+        'harvestZoneLabel': _selectedZone?.label ?? '',
+        'fieldGrade': _selectedZone?.fieldGrade ?? '',
+        'fieldScore': _selectedZone?.fieldScore.toStringAsFixed(1) ?? '',
         'crop': widget.cropName,
         'product': widget.product,
         'farmerId': widget.farmerId,
@@ -12491,8 +13013,8 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  // ignore: unused_element
+  Widget _buildLegacyHarvestPage(BuildContext context) {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -12519,6 +13041,12 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
                   currentStatus: widget.currentStatus,
                   daysAfterSowing: widget.daysAfterSowing,
                   lifecycleAdvice: widget.lifecycleAdvice,
+                  plan: _zonePlan,
+                  selectedZone: _selectedZone,
+                  isLoading: _isZonePlanLoading,
+                  error: _zonePlanError,
+                  onRefresh: () => _loadZonePlan(forceRefresh: true),
+                  onSelectZone: _selectHarvestZone,
                 ),
                 const SizedBox(height: 16),
                 Wrap(
@@ -12910,6 +13438,793 @@ class _HarvestHomePageState extends State<_HarvestHomePage> {
     );
     return _PageScaffold(title: UiStrings.t('harvest_hub'), child: content);
   }
+
+  Widget _buildHarvestWorkflow() {
+    final zone = _selectedZone;
+    final ready = _zonePlan?.isHarvestReady ?? false;
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.fact_check_rounded, color: AppTheme.greenDark),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    UiStrings.t('harvest_guided_grading'),
+                    style: const TextStyle(
+                      color: AppTheme.textDark,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final columns = constraints.maxWidth < 560 ? 2 : 4;
+                final tabWidth =
+                    (constraints.maxWidth - (columns - 1) * 8) / columns;
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    SizedBox(
+                      width: tabWidth,
+                      child: _HarvestStepTab(
+                        number: 1,
+                        label: UiStrings.t('harvest_step_zone'),
+                        selected: _activeHarvestStep == 0,
+                        completed: zone != null && _farmLatitude != null,
+                        onTap: () => setState(() => _activeHarvestStep = 0),
+                      ),
+                    ),
+                    SizedBox(
+                      width: tabWidth,
+                      child: _HarvestStepTab(
+                        number: 2,
+                        label: UiStrings.t('harvest_step_moisture'),
+                        selected: _activeHarvestStep == 1,
+                        completed:
+                            _hasMoistureImage &&
+                            double.tryParse(_moistureCtrl.text.trim()) != null,
+                        onTap: () => setState(() => _activeHarvestStep = 1),
+                      ),
+                    ),
+                    SizedBox(
+                      width: tabWidth,
+                      child: _HarvestStepTab(
+                        number: 3,
+                        label: UiStrings.t('harvest_step_grain'),
+                        selected: _activeHarvestStep == 2,
+                        completed: _grainImageBytes != null,
+                        onTap: () => setState(() => _activeHarvestStep = 2),
+                      ),
+                    ),
+                    SizedBox(
+                      width: tabWidth,
+                      child: _HarvestStepTab(
+                        number: 4,
+                        label: UiStrings.t('harvest_step_review'),
+                        selected: _activeHarvestStep >= 3,
+                        completed: _hasGrade,
+                        onTap: () => setState(() => _activeHarvestStep = 3),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            if (!ready)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _InlineNotice(
+                  icon: Icons.schedule_rounded,
+                  text: UiStrings.f('harvest_not_ready_stage', {
+                    'stage': UiStrings.option(widget.currentStage),
+                    'day': widget.daysAfterSowing,
+                  }),
+                ),
+              ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: switch (_activeHarvestStep) {
+                0 => _HarvestWorkflowStep(
+                  key: const ValueKey('harvest-zone-step'),
+                  title: UiStrings.t('harvest_select_zone_location'),
+                  icon: Icons.location_on_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (zone == null)
+                        _InlineNotice(
+                          icon: Icons.touch_app_rounded,
+                          text: UiStrings.t('harvest_tap_zone_first'),
+                        )
+                      else
+                        _HarvestSelectedZoneSummary(zone: zone),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _isLocationFetching ? null : _fetchLocation,
+                        icon: _isLocationFetching
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                _farmLatitude == null
+                                    ? Icons.my_location_rounded
+                                    : Icons.check_circle_rounded,
+                              ),
+                        label: Text(
+                          _farmLatitude == null
+                              ? UiStrings.t('capture_harvest_location')
+                              : UiStrings.t('harvest_location_captured'),
+                        ),
+                      ),
+                      if (_farmLatitude != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          _locationSummary,
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              setState(() => _activeHarvestStep = 1),
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                          label: Text(UiStrings.t('continue_action')),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                1 => _HarvestWorkflowStep(
+                  key: const ValueKey('harvest-moisture-step'),
+                  title: UiStrings.t('moisture_capture_section'),
+                  icon: Icons.water_drop_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed:
+                            _isCapturingImage || !_canCaptureMoistureImage
+                            ? null
+                            : _captureMoistureImage,
+                        icon: Icon(
+                          _hasMoistureImage
+                              ? Icons.check_circle_rounded
+                              : Icons.photo_camera_front_rounded,
+                        ),
+                        label: Text(
+                          _hasMoistureImage
+                              ? UiStrings.t('retake_moisture_photo')
+                              : UiStrings.t('capture_moisture_photo'),
+                        ),
+                      ),
+                      if (_moistureImageBytes != null) ...[
+                        const SizedBox(height: 10),
+                        _HarvestImagePreview(bytes: _moistureImageBytes!),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _readingMoisture ? null : _readMoisture,
+                          icon: const Icon(Icons.speed_rounded),
+                          label: Text(UiStrings.t('read_meter_moisture')),
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _moistureCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: UiStrings.t('moisture_input_label'),
+                          suffixText: '%',
+                          prefixIcon: const Icon(Icons.percent_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed:
+                            _hasMoistureImage &&
+                                double.tryParse(_moistureCtrl.text.trim()) !=
+                                    null
+                            ? () => setState(() => _activeHarvestStep = 2)
+                            : null,
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: Text(UiStrings.t('continue_action')),
+                      ),
+                    ],
+                  ),
+                ),
+                2 => _HarvestWorkflowStep(
+                  key: const ValueKey('harvest-grain-step'),
+                  title: UiStrings.t('grain_image_section'),
+                  icon: Icons.grain_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _isCapturingGrainImage || !_hasMoistureImage
+                            ? null
+                            : _captureGrainImage,
+                        icon: Icon(
+                          _grainImageBytes == null
+                              ? Icons.camera_alt_rounded
+                              : Icons.check_circle_rounded,
+                        ),
+                        label: Text(
+                          _grainImageBytes == null
+                              ? UiStrings.t('capture_grain_image')
+                              : UiStrings.t('retake_grain_image'),
+                        ),
+                      ),
+                      if (_grainImageBytes != null) ...[
+                        const SizedBox(height: 10),
+                        _HarvestImagePreview(bytes: _grainImageBytes!),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              setState(() => _activeHarvestStep = 3),
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                          label: Text(UiStrings.t('continue_action')),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                _ => _HarvestWorkflowStep(
+                  key: const ValueKey('harvest-review-step'),
+                  title: UiStrings.t('harvest_review_grade'),
+                  icon: Icons.fact_check_rounded,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final stacked = constraints.maxWidth < 360;
+                          final sizeField = TextField(
+                            controller: _bagSizeCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: UiStrings.t('bag_size_label'),
+                            ),
+                          );
+                          final countField = TextField(
+                            controller: _bagCountCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: UiStrings.t('bag_count_label'),
+                            ),
+                          );
+                          return stacked
+                              ? Column(
+                                  children: [
+                                    sizeField,
+                                    const SizedBox(height: 10),
+                                    countField,
+                                  ],
+                                )
+                              : Row(
+                                  children: [
+                                    Expanded(child: sizeField),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: countField),
+                                  ],
+                                );
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: _canRunGrading ? _runHarvestGrade : null,
+                        icon: _isGrading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.auto_awesome_rounded),
+                        label: Text(
+                          _isGrading
+                              ? UiStrings.t('running_grading')
+                              : UiStrings.t('grade_grain_action'),
+                        ),
+                      ),
+                      if (!_canRunGrading && !_hasGrade) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          ready
+                              ? UiStrings.t('harvest_complete_previous_steps')
+                              : UiStrings.t('harvest_wait_for_maturity'),
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      if (_hasGrade) ...[
+                        const SizedBox(height: 14),
+                        _HarvestVerifiedResult(
+                          grade: _grade,
+                          score: _gradeScore,
+                          message: _gradingMessage,
+                          zone: zone,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: _inventoryAdded
+                                  ? widget.onOpenInventory
+                                  : _addGradedProductToInventory,
+                              icon: const Icon(Icons.inventory_2_rounded),
+                              label: Text(
+                                _inventoryAdded
+                                    ? UiStrings.t('view_inventory')
+                                    : UiStrings.t('add_product_inventory'),
+                              ),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _openHarvestQr,
+                              icon: const Icon(Icons.qr_code_2_rounded),
+                              label: Text(UiStrings.t('generate_harvest_qr')),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLanguageSelector() {
+    if (!Get.isRegistered<LanguageController>()) {
+      return const SizedBox.shrink();
+    }
+    final languageController = Get.find<LanguageController>();
+    return Obx(
+      () => LanguageSelectorButton(
+        code: languageController.language.value,
+        compact: true,
+        onChanged: (value) async {
+          await languageController.setLanguage(value);
+          if (mounted) setState(() {});
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      appBar: AppBar(
+        backgroundColor: AppTheme.surface,
+        elevation: 0,
+        toolbarHeight: appHeaderToolbarHeight,
+        centerTitle: true,
+        iconTheme: const IconThemeData(color: AppTheme.greenDark),
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+        title: const BrandText(fontSize: 21),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(child: _buildLanguageSelector()),
+          ),
+        ],
+      ),
+      body: _PageScaffold(
+        title: '',
+        safeArea: true,
+        storageKey: const PageStorageKey<String>('farmer-harvest-scroll'),
+        onRefresh: () => _loadZonePlan(forceRefresh: true),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _HarvestCompactHeader(
+              farmName: widget.farmName,
+              area: widget.area,
+              cropName: widget.cropName,
+              onOpenAiChat: widget.onOpenAiChat,
+            ),
+            const SizedBox(height: 12),
+            _Panel(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: _HarvestChecklistHero(
+                  farmName: widget.farmName,
+                  area: widget.area,
+                  cropName: widget.cropName,
+                  farmPolygon: widget.farmPolygon,
+                  farmCenter: widget.farmCenter,
+                  weather: widget.weather,
+                  issueCells: widget.issueCells,
+                  scoutZones: widget.scoutZones,
+                  riskCells: widget.riskCells,
+                  diseaseScreen: widget.diseaseScreen,
+                  maxRisk: widget.maxRisk,
+                  healthScore: widget.healthScore,
+                  currentStage: widget.currentStage,
+                  currentStatus: widget.currentStatus,
+                  daysAfterSowing: widget.daysAfterSowing,
+                  lifecycleAdvice: widget.lifecycleAdvice,
+                  plan: _zonePlan,
+                  selectedZone: _selectedZone,
+                  isLoading: _isZonePlanLoading,
+                  error: _zonePlanError,
+                  onRefresh: () => _loadZonePlan(forceRefresh: true),
+                  onSelectZone: _selectHarvestZone,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildHarvestWorkflow(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _harvestGradeColor(String grade) {
+  return switch (grade.trim().toUpperCase()) {
+    'A' => AppTheme.green,
+    'B' => const Color(0xFFE57800),
+    _ => const Color(0xFFC62828),
+  };
+}
+
+class _HarvestCompactHeader extends StatelessWidget {
+  final String farmName;
+  final String area;
+  final String cropName;
+  final VoidCallback onOpenAiChat;
+
+  const _HarvestCompactHeader({
+    required this.farmName,
+    required this.area,
+    required this.cropName,
+    required this.onOpenAiChat,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: AppTheme.greenPale,
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: const Icon(
+            Icons.agriculture_rounded,
+            color: AppTheme.greenDark,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                UiStrings.t('harvest_hub'),
+                style: const TextStyle(
+                  color: AppTheme.greenDark,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${UiStrings.label(farmName)} • ${UiStrings.label(area)} • ${UiStrings.option(cropName)}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 12,
+                  height: 1.3,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          onPressed: onOpenAiChat,
+          tooltip: UiStrings.t('ask_ai_harvest_action'),
+          icon: const Icon(Icons.auto_awesome_rounded),
+        ),
+      ],
+    );
+  }
+}
+
+class _HarvestStepTab extends StatelessWidget {
+  final int number;
+  final String label;
+  final bool selected;
+  final bool completed;
+  final VoidCallback onTap;
+
+  const _HarvestStepTab({
+    required this.number,
+    required this.label,
+    required this.selected,
+    required this.completed,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected || completed ? AppTheme.green : AppTheme.textMuted;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppTheme.greenPale : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected
+                ? AppTheme.green.withValues(alpha: 0.45)
+                : const Color(0xFFE1E7DE),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 25,
+              height: 25,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: completed
+                    ? AppTheme.green
+                    : color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: completed
+                  ? const Icon(
+                      Icons.check_rounded,
+                      size: 16,
+                      color: Colors.white,
+                    )
+                  : Text(
+                      '$number',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HarvestWorkflowStep extends StatelessWidget {
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  const _HarvestWorkflowStep({
+    super.key,
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 20, color: AppTheme.greenDark),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: AppTheme.textDark,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        child,
+      ],
+    );
+  }
+}
+
+class _HarvestImagePreview extends StatelessWidget {
+  final Uint8List bytes;
+
+  const _HarvestImagePreview({required this.bytes});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: SizedBox(
+        height: 132,
+        child: Image.memory(bytes, width: double.infinity, fit: BoxFit.cover),
+      ),
+    );
+  }
+}
+
+class _HarvestSelectedZoneSummary extends StatelessWidget {
+  final HarvestGradeZone zone;
+
+  const _HarvestSelectedZoneSummary({required this.zone});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _harvestGradeColor(zone.fieldGrade);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              zone.fieldGrade,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 19,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${UiStrings.t('field_grade')} ${zone.fieldGrade} • ${zone.label}',
+                  style: TextStyle(color: color, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${LocaleText.number(zone.fieldScore, fractionDigits: 0)}/100 • ${LocaleText.number(zone.areaAcres, fractionDigits: 2)} ${UiStrings.t('acres_short')} • ${LocaleText.number(zone.areaPercent, fractionDigits: 0)}%',
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HarvestVerifiedResult extends StatelessWidget {
+  final String grade;
+  final int score;
+  final String message;
+  final HarvestGradeZone? zone;
+
+  const _HarvestVerifiedResult({
+    required this.grade,
+    required this.score,
+    required this.message,
+    required this.zone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.greenPale,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.green.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.verified_rounded, color: AppTheme.green, size: 32),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${UiStrings.t('verified_lot_grade')} $grade • $score/100',
+                  style: const TextStyle(
+                    color: AppTheme.greenDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (zone != null)
+                  Text(
+                    '${UiStrings.t('field_grade')} ${zone!.fieldGrade} • ${zone!.label}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _HarvestChecklistHero extends StatelessWidget {
@@ -12929,6 +14244,12 @@ class _HarvestChecklistHero extends StatelessWidget {
   final String currentStatus;
   final int daysAfterSowing;
   final CropLifecycleAdvice? lifecycleAdvice;
+  final HarvestZonePlan? plan;
+  final HarvestGradeZone? selectedZone;
+  final bool isLoading;
+  final String error;
+  final Future<void> Function() onRefresh;
+  final ValueChanged<HarvestGradeZone> onSelectZone;
 
   const _HarvestChecklistHero({
     required this.farmName,
@@ -12947,6 +14268,12 @@ class _HarvestChecklistHero extends StatelessWidget {
     required this.currentStatus,
     required this.daysAfterSowing,
     required this.lifecycleAdvice,
+    this.plan,
+    this.selectedZone,
+    required this.isLoading,
+    required this.error,
+    required this.onRefresh,
+    required this.onSelectZone,
   });
 
   LatLng? get _center {
@@ -12970,221 +14297,26 @@ class _HarvestChecklistHero extends StatelessWidget {
     return null;
   }
 
-  double get _weatherRisk => _homeWeatherRisk(weather);
-
-  bool get _isHarvestStage {
-    final text = '$currentStage $currentStatus'.toLowerCase();
-    return text.contains('harvest') ||
-        text.contains('matur') ||
-        text.contains('ripen') ||
-        text.contains('ready');
-  }
-
-  String get _weatherLabel {
-    final risk = _weatherRisk;
-    if (risk >= 0.66) return UiStrings.t('high');
-    if (risk >= 0.40) return UiStrings.t('watch');
-    if (weather == null || weather!.isEmpty) return UiStrings.t('no_data');
-    final rain24h = _homeRain24h(weather);
-    if (rain24h != null && rain24h >= 5) return _formatRainMm(rain24h);
-    final probability = _homeRainProbability(weather);
-    if (probability != null && probability >= 40) {
-      return '${LocaleText.number(probability, fractionDigits: 0)}% rain';
-    }
-    return UiStrings.t('good');
-  }
-
-  String get _actionText {
-    final combinedRisk = math.max(maxRisk, _weatherRisk);
-    final action = lifecycleAdvice?.nextAction.trim() ?? '';
-    if (_isHarvestStage) {
-      if (combinedRisk >= 0.66) {
-        return 'Harvest only A zone first. Inspect B and C before cutting.';
-      }
-      if (combinedRisk >= 0.40) {
-        return 'Start with A zone, check B zone moisture, keep C for inspection.';
-      }
-      return 'Start harvesting A zone first, then B, then C after moisture check.';
-    }
-    if (action.isNotEmpty) return action;
-    return 'Prepare A/B/C sections now. Start harvest when crop reaches harvest stage.';
-  }
-
-  List<FarmIssueCell> get _candidateIssues {
-    final seen = <String>{};
-    final cells = <FarmIssueCell>[];
-
-    void addCell(FarmIssueCell cell) {
-      if (!cell.hasLocation) return;
-      final key = _FarmPage._issueCoordinateKey(LatLng(cell.lat, cell.lng));
-      if (!seen.add(key)) return;
-      cells.add(cell);
-    }
-
-    for (final issue in issueCells) {
-      addCell(issue);
-    }
-    for (final row in riskCells) {
-      addCell(FarmIssueCell.fromJson(row));
-    }
-
-    cells.sort((a, b) => b.compositeRisk.compareTo(a.compositeRisk));
-    return cells;
-  }
-
-  List<LatLng> _fallbackZonePoints() {
-    final center = _center;
-    if (center == null) return const [];
-    if (farmPolygon.length >= 3) {
-      final first = farmPolygon.first;
-      final middle = farmPolygon[farmPolygon.length ~/ 2];
-      return [
-        center,
-        _toward(center, first, 0.48),
-        _toward(center, middle, 0.48),
-      ];
-    }
-    const offset = 0.00035;
-    return [
-      LatLng(center.latitude + offset, center.longitude - offset),
-      center,
-      LatLng(center.latitude - offset, center.longitude + offset),
-    ];
-  }
-
-  static LatLng _toward(LatLng from, LatLng to, double amount) {
-    return LatLng(
-      from.latitude + (to.latitude - from.latitude) * amount,
-      from.longitude + (to.longitude - from.longitude) * amount,
+  LatLng _labelPoint(List<LatLng> polygon) {
+    final average = LatLng(
+      polygon.map((point) => point.latitude).reduce((a, b) => a + b) /
+          polygon.length,
+      polygon.map((point) => point.longitude).reduce((a, b) => a + b) /
+          polygon.length,
     );
-  }
-
-  List<_HarvestZone> get _zones {
-    final fallback = _fallbackZonePoints();
-    if (fallback.isEmpty && _candidateIssues.isEmpty) return const [];
-
-    final used = <String>{};
-
-    FarmIssueCell? pick(bool Function(FarmIssueCell cell) test) {
-      for (final cell in _candidateIssues) {
-        if (!test(cell)) continue;
-        final key = _FarmPage._issueCoordinateKey(LatLng(cell.lat, cell.lng));
-        if (!used.add(key)) continue;
-        return cell;
-      }
-      return null;
-    }
-
-    LatLng fallbackAt(int index) {
-      if (fallback.isNotEmpty) {
-        final safeIndex = index.clamp(0, fallback.length - 1).toInt();
-        return fallback[safeIndex];
-      }
-      final safeIndex = index.clamp(0, _candidateIssues.length - 1).toInt();
-      final issue = _candidateIssues[safeIndex];
-      return LatLng(issue.lat, issue.lng);
-    }
-
-    final high = pick((cell) => cell.compositeRisk >= 0.55);
-    final medium = pick(
-      (cell) => cell.compositeRisk >= 0.35 && cell.compositeRisk < 0.55,
+    if (PolygonGeometry.containsPoint(polygon, average)) return average;
+    final bounds = PolygonGeometry.bounds(polygon);
+    final boundsCenter = LatLng(
+      ((bounds['south'] ?? average.latitude) +
+              (bounds['north'] ?? average.latitude)) /
+          2,
+      ((bounds['west'] ?? average.longitude) +
+              (bounds['east'] ?? average.longitude)) /
+          2,
     );
-    final low = pick((cell) => cell.compositeRisk < 0.35);
-    final weatherRisk = _weatherRisk;
-
-    final aRisk = (low?.compositeRisk ?? math.min(maxRisk, 0.24)).toDouble();
-    final bRisk =
-        (medium?.compositeRisk ?? math.max(math.min(maxRisk, 0.52), 0.36))
-            .toDouble();
-    final cRisk =
-        (high?.compositeRisk ??
-                math.max(
-                  math.max(maxRisk, weatherRisk),
-                  maxRisk >= 0.55 ? maxRisk : 0.62,
-                ))
-            .toDouble();
-
-    return [
-      _HarvestZone(
-        grade: 'A',
-        title: _isHarvestStage
-            ? UiStrings.t('harvest_first')
-            : UiStrings.t('best_section'),
-        detail: UiStrings.f('health_score_value', {
-          'value': LocaleText.number(healthScore),
-        }),
-        point: low == null ? fallbackAt(0) : LatLng(low.lat, low.lng),
-        risk: aRisk,
-        color: AppTheme.green,
-      ),
-      _HarvestZone(
-        grade: 'B',
-        title: UiStrings.t('harvest_after_check'),
-        detail: UiStrings.t('watch_weather_moisture'),
-        point: medium == null ? fallbackAt(1) : LatLng(medium.lat, medium.lng),
-        risk: bRisk,
-        color: const Color(0xFFF57C00),
-      ),
-      _HarvestZone(
-        grade: 'C',
-        title: UiStrings.t('inspect_before_harvest'),
-        detail: UiStrings.t('disease_rain_risk_area'),
-        point: high == null ? fallbackAt(2) : LatLng(high.lat, high.lng),
-        risk: cRisk,
-        color: const Color(0xFFD32F2F),
-      ),
-    ];
-  }
-
-  List<CircleMarker> get _heatCircles {
-    final circles = <CircleMarker>[];
-    final seen = <String>{};
-
-    void addCircle(LatLng point, Color color, double radius) {
-      final key = _FarmPage._issueCoordinateKey(point);
-      if (!seen.add(key)) return;
-      circles.add(
-        CircleMarker(
-          point: point,
-          radius: radius,
-          useRadiusInMeter: false,
-          borderColor: Colors.white,
-          borderStrokeWidth: 1.2,
-          color: color.withValues(alpha: 0.34),
-        ),
-      );
-    }
-
-    for (final issue in _candidateIssues.take(80)) {
-      final risk = math
-          .max(issue.compositeRisk, issue.weatherRisk ?? 0)
-          .toDouble();
-      addCircle(
-        LatLng(issue.lat, issue.lng),
-        issue.isScoutZone
-            ? const Color(0xFF7B1FA2)
-            : _FarmPage._riskColor(risk),
-        math.max(5.0, 14.0 * risk.clamp(0.15, 1.0).toDouble()),
-      );
-    }
-    for (final row in scoutZones) {
-      final point = _FarmPage._readIssuePoint(row);
-      if (point == null) continue;
-      addCircle(point, const Color(0xFF7B1FA2), 16);
-    }
-    return circles;
-  }
-
-  List<Marker> get _zoneMarkers {
-    return [
-      for (final zone in _zones)
-        Marker(
-          point: zone.point,
-          width: 56,
-          height: 56,
-          child: _HarvestZoneMapMarker(zone: zone),
-        ),
-    ];
+    return PolygonGeometry.containsPoint(polygon, boundsCenter)
+        ? boundsCenter
+        : polygon.first;
   }
 
   @override
@@ -13193,211 +14325,183 @@ class _HarvestChecklistHero extends StatelessWidget {
       'day': daysAfterSowing,
       'stage': UiStrings.option(currentStage),
     });
-    final diseaseCount =
-        diseaseScreen?.riskCellsCount ?? _candidateIssues.length;
-    final stageStatus = currentStatus.trim().isEmpty || currentStatus == '--'
-        ? UiStrings.option(currentStage)
-        : UiStrings.option(currentStatus);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppTheme.greenPale,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(Icons.map_rounded, color: AppTheme.greenDark),
+    final boundary = plan?.farmBoundary.isNotEmpty == true
+        ? plan!.farmBoundary
+        : farmPolygon;
+    final gradeZones = List<HarvestGradeZone>.of(
+      plan?.zones ?? const <HarvestGradeZone>[],
+    )..sort((left, right) => left.fieldGrade.compareTo(right.fieldGrade));
+    final overlayPolygons = <Polygon>[];
+    final labelMarkers = <Marker>[];
+    for (final zone in gradeZones) {
+      final color = _harvestGradeColor(zone.fieldGrade);
+      final selected = selectedZone?.id == zone.id;
+      final polygons = zone.polygons
+          .where((polygon) => polygon.length >= 3)
+          .toList(growable: false);
+      for (final polygon in polygons) {
+        if (polygon.length < 3) continue;
+        if (selected) {
+          overlayPolygons.add(
+            Polygon(
+              points: polygon,
+              color: Colors.transparent,
+              borderColor: Colors.white,
+              borderStrokeWidth: 5.2,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    UiStrings.t('harvest_plan_map'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    '${UiStrings.label(farmName)} • ${UiStrings.label(area)} • ${UiStrings.option(cropName)}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppTheme.textMuted,
-                      fontSize: 12,
-                      height: 1.25,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: SatelliteMapView(
-            farmPolygon: farmPolygon,
-            center: _center,
-            heatCircles: _heatCircles,
-            markers: _zoneMarkers,
-            height: 300,
-            showZoomControls: true,
+          );
+        }
+        overlayPolygons.add(
+          Polygon(
+            points: polygon,
+            color: color.withValues(alpha: selected ? 0.50 : 0.36),
+            borderColor: color,
+            borderStrokeWidth: selected ? 2.8 : 1.8,
           ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: const [
-            _FarmLegendDot(color: AppTheme.green, label: 'A grade harvest'),
-            _FarmLegendDot(color: Color(0xFFF57C00), label: 'B check first'),
-            _FarmLegendDot(color: Color(0xFFD32F2F), label: 'C inspect/delay'),
-            _FarmLegendDot(color: Color(0xFF7B1FA2), label: 'Scout zone'),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _StatusPill(icon: Icons.timeline_rounded, label: stageLabel),
-            _StatusPill(
-              icon: Icons.eco_rounded,
-              label: UiStrings.f('crop_score_value', {
-                'value': LocaleText.number(healthScore),
-              }),
-            ),
-            _StatusPill(
-              icon: Icons.cloud_rounded,
-              label: UiStrings.f('weather_value', {'value': _weatherLabel}),
-            ),
-            _StatusPill(
-              icon: Icons.shield_rounded,
-              label: UiStrings.f('disease_value', {
-                'value': _FarmPage._riskLabel(maxRisk),
-              }),
-            ),
-            if (diseaseCount > 0)
-              _StatusPill(
-                icon: Icons.location_searching_rounded,
-                label: UiStrings.f('spots_count', {
-                  'count': LocaleText.number(diseaseCount),
-                }),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _InlineNotice(icon: Icons.task_alt_rounded, text: _actionText),
-        const SizedBox(height: 12),
-        _HarvestZonePlanList(zones: _zones, stageStatus: stageStatus),
-        if (_zones.isEmpty) ...[
-          const SizedBox(height: 10),
-          _InlineNotice(
-            icon: Icons.add_location_alt_rounded,
-            text: UiStrings.t('save_boundary_for_harvest_zones'),
+        );
+      }
+      if (polygons.isNotEmpty) {
+        final labelPolygon = polygons.reduce(
+          (left, right) =>
+              PolygonGeometry.areaHectares(left) >=
+                  PolygonGeometry.areaHectares(right)
+              ? left
+              : right,
+        );
+        labelMarkers.add(
+          Marker(
+            point: _labelPoint(labelPolygon),
+            width: 44,
+            height: 44,
+            child: _HarvestZoneLabelMarker(zone: zone, selected: selected),
           ),
-        ],
-      ],
-    );
-  }
-}
+        );
+      }
+    }
 
-class _HarvestZone {
-  final String grade;
-  final String title;
-  final String detail;
-  final LatLng point;
-  final double risk;
-  final Color color;
+    void selectAt(LatLng point) {
+      for (final zone in gradeZones) {
+        if (zone.polygons.any(
+          (polygon) => PolygonGeometry.containsPoint(polygon, point),
+        )) {
+          onSelectZone(zone);
+          return;
+        }
+      }
+    }
 
-  const _HarvestZone({
-    required this.grade,
-    required this.title,
-    required this.detail,
-    required this.point,
-    required this.risk,
-    required this.color,
-  });
-}
-
-class _HarvestZoneMapMarker extends StatelessWidget {
-  final _HarvestZone zone;
-
-  const _HarvestZoneMapMarker({required this.zone});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: '${zone.grade}: ${zone.title}',
-      child: Container(
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: zone.color,
-          border: Border.all(color: Colors.white, width: 3),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black26,
-              blurRadius: 8,
-              offset: Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Text(
-          zone.grade,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HarvestZonePlanList extends StatelessWidget {
-  final List<_HarvestZone> zones;
-  final String stageStatus;
-
-  const _HarvestZonePlanList({required this.zones, required this.stageStatus});
-
-  @override
-  Widget build(BuildContext context) {
-    if (zones.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 520;
-        final width = compact
-            ? constraints.maxWidth
-            : (constraints.maxWidth - 16) / 3;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        final mapHeight = constraints.maxWidth < 340
+            ? 250.0
+            : constraints.maxWidth < 700
+            ? 292.0
+            : 360.0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final zone in zones)
-              SizedBox(
-                width: width,
-                child: _HarvestZonePlanCard(
-                  zone: zone,
-                  stageStatus: stageStatus,
+            Row(
+              children: [
+                const Icon(Icons.map_rounded, color: AppTheme.greenDark),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        UiStrings.t('field_grade_map'),
+                        style: const TextStyle(
+                          color: AppTheme.textDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        UiStrings.t('field_grade_map_help'),
+                        style: const TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: isLoading ? null : onRefresh,
+                  tooltip: UiStrings.t('refresh_harvest_map'),
+                  icon: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh_rounded),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: SatelliteMapView(
+                farmPolygon: boundary,
+                center: _center,
+                overlayPolygons: overlayPolygons,
+                markers: labelMarkers,
+                onTap: selectAt,
+                height: mapHeight,
+                showZoomControls: true,
+              ),
+            ),
+            if (gradeZones.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _HarvestGradeCoverageBanner(
+                coveragePercent: gradeZones.fold<double>(
+                  0,
+                  (total, zone) => total + zone.areaPercent,
                 ),
               ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (var index = 0; index < gradeZones.length; index++) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    Expanded(
+                      child: _HarvestGradeCard(
+                        zone: gradeZones[index],
+                        selected: selectedZone?.id == gradeZones[index].id,
+                        onTap: () => onSelectZone(gradeZones[index]),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _StatusPill(icon: Icons.timeline_rounded, label: stageLabel),
+                _StatusPill(
+                  icon: Icons.eco_rounded,
+                  label: UiStrings.f('crop_score_value', {
+                    'value': LocaleText.number(healthScore),
+                  }),
+                ),
+              ],
+            ),
+            if (error.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _InlineNotice(icon: Icons.cloud_off_rounded, text: error),
+            ] else if (plan != null && !plan!.dataAvailable) ...[
+              const SizedBox(height: 10),
+              _InlineNotice(
+                icon: Icons.info_outline_rounded,
+                text: UiStrings.t('harvest_no_spatial_data'),
+              ),
+            ],
           ],
         );
       },
@@ -13405,87 +14509,173 @@ class _HarvestZonePlanList extends StatelessWidget {
   }
 }
 
-class _HarvestZonePlanCard extends StatelessWidget {
-  final _HarvestZone zone;
-  final String stageStatus;
+class _HarvestZoneLabelMarker extends StatelessWidget {
+  final HarvestGradeZone zone;
+  final bool selected;
 
-  const _HarvestZonePlanCard({required this.zone, required this.stageStatus});
+  const _HarvestZoneLabelMarker({required this.zone, required this.selected});
 
   @override
   Widget build(BuildContext context) {
-    final riskText =
-        '${LocaleText.number(zone.risk * 100, fractionDigits: 0)}/100';
+    final color = _harvestGradeColor(zone.fieldGrade);
     return Container(
-      constraints: const BoxConstraints(minHeight: 126),
-      padding: const EdgeInsets.all(12),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: zone.color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: zone.color.withValues(alpha: 0.28)),
+        color: selected ? Colors.white : color,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: selected ? color : Colors.white, width: 2.5),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 2)),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Text(
+        zone.fieldGrade,
+        style: TextStyle(
+          color: selected ? color : Colors.white,
+          fontSize: 18,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _HarvestGradeCoverageBanner extends StatelessWidget {
+  final double coveragePercent;
+
+  const _HarvestGradeCoverageBanner({required this.coveragePercent});
+
+  @override
+  Widget build(BuildContext context) {
+    final displayCoverage = coveragePercent.clamp(0, 100);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.greenPale,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.green.withValues(alpha: 0.24)),
+      ),
+      child: Row(
         children: [
-          Row(
+          const Icon(
+            Icons.grid_view_rounded,
+            color: AppTheme.greenDark,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              UiStrings.f('harvest_grade_distribution', {
+                'value': LocaleText.number(displayCoverage, fractionDigits: 0),
+              }),
+              style: const TextStyle(
+                color: AppTheme.greenDark,
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HarvestGradeCard extends StatelessWidget {
+  final HarvestGradeZone zone;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _HarvestGradeCard({
+    required this.zone,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _harvestGradeColor(zone.fieldGrade);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label:
+          '${UiStrings.t('field_grade')} ${zone.fieldGrade}, ${LocaleText.number(zone.areaPercent, fractionDigits: 0)}%',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: selected ? 0.16 : 0.07),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: color.withValues(alpha: selected ? 0.95 : 0.36),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: zone.color,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  zone.grade,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
+              Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Text(
+                      zone.fieldGrade,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
+                  const Spacer(),
+                  if (selected)
+                    Icon(Icons.check_circle_rounded, color: color, size: 18),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${LocaleText.number(zone.areaPercent, fractionDigits: 0)}%',
+                maxLines: 1,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  zone.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: zone.color,
-                    fontWeight: FontWeight.w900,
-                  ),
+              const SizedBox(height: 2),
+              Text(
+                '${LocaleText.number(zone.areaAcres, fractionDigits: 2)} ${UiStrings.t('acres_short')}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                '${LocaleText.number(zone.fieldScore, fractionDigits: 0)}/100',
+                maxLines: 1,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            zone.detail,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppTheme.textMuted,
-              height: 1.25,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            UiStrings.f('stage_risk_value', {
-              'stage': stageStatus,
-              'risk': riskText,
-            }),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppTheme.textDark,
-              height: 1.25,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -14499,6 +15689,7 @@ class _FarmPage extends StatelessWidget {
     );
     return _PageScaffold(
       title: '',
+      storageKey: const PageStorageKey<String>('farmer-farm-scroll'),
       onRefresh: () => onRefreshAlerts(safeIndex),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

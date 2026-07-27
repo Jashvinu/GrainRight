@@ -15,6 +15,8 @@ class FarmerNotification {
   final String farmName;
   final DateTime createdAt;
   final DateTime? readAt;
+  final String actionRoute;
+  final Map<String, dynamic> payload;
 
   const FarmerNotification({
     required this.id,
@@ -26,6 +28,8 @@ class FarmerNotification {
     required this.farmName,
     required this.createdAt,
     required this.readAt,
+    this.actionRoute = '',
+    this.payload = const {},
   });
 
   bool get isRead => readAt != null;
@@ -41,6 +45,8 @@ class FarmerNotification {
       farmName: farmName,
       createdAt: createdAt,
       readAt: readAt ?? this.readAt,
+      actionRoute: actionRoute,
+      payload: payload,
     );
   }
 
@@ -65,6 +71,10 @@ class FarmerNotification {
       farmName: '${json['farm_name'] ?? json['farmName'] ?? ''}',
       createdAt: readDate(json['created_at'] ?? json['createdAt']),
       readAt: readNullableDate(json['read_at'] ?? json['readAt']),
+      actionRoute: '${json['action_route'] ?? json['actionRoute'] ?? ''}',
+      payload: json['payload'] is Map
+          ? Map<String, dynamic>.from(json['payload'] as Map)
+          : const {},
     );
   }
 }

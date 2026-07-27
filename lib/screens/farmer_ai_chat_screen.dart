@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import '../controllers/auth_controller.dart';
@@ -29,6 +28,8 @@ class FarmerAiChatScreen extends StatefulWidget {
   final int? daysAfterSowing;
   final Map<String, dynamic> weatherSnapshot;
   final Map<String, dynamic> farmContext;
+  final String initialDraft;
+  final ValueChanged<String>? onDraftChanged;
   final VoidCallback? onUpdateFarmStatus;
   final double bottomContentInset;
 
@@ -45,6 +46,8 @@ class FarmerAiChatScreen extends StatefulWidget {
     this.daysAfterSowing,
     this.weatherSnapshot = const <String, dynamic>{},
     this.farmContext = const <String, dynamic>{},
+    this.initialDraft = '',
+    this.onDraftChanged,
     this.onUpdateFarmStatus,
     this.bottomContentInset = 12,
   });
@@ -63,7 +66,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   ];
 
   final _service = SatelliteService();
-  final _promptController = TextEditingController();
+  late final TextEditingController _promptController;
   final _scrollController = ScrollController();
   final _messages = <_ChatMessage>[];
   bool _isSending = false;
@@ -71,6 +74,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   @override
   void initState() {
     super.initState();
+    _promptController = TextEditingController(text: widget.initialDraft);
     _messages.addAll([_ChatMessage(isUser: false, key: 'ai_chat_welcome')]);
     unawaited(_loadRecentFarmMemory());
   }
@@ -90,6 +94,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
       _messages.add(_ChatMessage(isUser: true, text: prompt));
       _messages.add(const _ChatMessage(isUser: false, key: 'ai_chat_thinking'));
       _promptController.clear();
+      widget.onDraftChanged?.call('');
     });
     _scrollToBottom();
 
@@ -430,16 +435,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
   }
 
   String _welcomeText() {
-    final parts = [
-      if (_effectiveFarmName != null) UiStrings.label(_effectiveFarmName!),
-      if (_effectiveCrop != null)
-        '${UiStrings.option(_effectiveCrop!)}${_effectiveVariety != null ? ' • ${UiStrings.option(_effectiveVariety!)}' : ''}',
-    ];
-    final subject = parts.isEmpty
-        ? UiStrings.t('ai_chat_active_farm')
-        : parts.join(' • ');
-
-    return UiStrings.f('ai_chat_welcome', {'subject': subject});
+    return UiStrings.t('ai_chat_welcome');
   }
 
   String _formatAnswer(FarmAssistantAnswer answer) {
@@ -572,12 +568,6 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
     return item.text;
   }
 
-  double? _num(Object? raw) {
-    if (raw is num) return raw.toDouble();
-    if (raw is String) return double.tryParse(raw);
-    return null;
-  }
-
   void _sendQuickPrompt(String key) {
     if (_isSending) return;
     final value = UiStrings.t(key);
@@ -638,124 +628,6 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
       'ai_chat_prompt_yield' => Icons.trending_up_rounded,
       _ => Icons.auto_awesome_rounded,
     };
-  }
-
-  Widget _farmContextPanel() {
-    final farmName = _effectiveFarmName ?? UiStrings.t('ai_chat_active_farm');
-    final crop = _effectiveCrop;
-    final variety = _effectiveVariety;
-    final stage = _effectiveGrowthStage;
-    final days = widget.daysAfterSowing;
-    final rain24h = _num(widget.weatherSnapshot['rain_24h_mm']);
-    final rain7d = _num(
-      widget.weatherSnapshot['rain_7d_mm'] ??
-          widget.weatherSnapshot['total_rain_mm'],
-    );
-    final waterNeed = '${widget.weatherSnapshot['water_need_label'] ?? ''}'
-        .trim();
-    final subtitle = [
-      if (crop != null) UiStrings.option(crop),
-      if (variety != null) UiStrings.option(variety),
-      if (stage != null) UiStrings.option(stage),
-    ].join(' • ');
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE1E9DD)),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.greenDark.withValues(alpha: 0.07),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: AppTheme.greenPale,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.psychology_alt_rounded,
-                  color: AppTheme.greenDark,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      UiStrings.label(farmName),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textDark,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (subtitle.isNotEmpty || days != null) ...[
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (subtitle.isNotEmpty)
-                  _ContextPill(icon: Icons.eco_rounded, label: subtitle),
-                if (days != null)
-                  _ContextPill(
-                    icon: Icons.today_rounded,
-                    label: UiStrings.f('days_after_sowing_value', {
-                      'days': days,
-                    }),
-                  ),
-                if (rain24h != null)
-                  _ContextPill(
-                    icon: Icons.water_drop_rounded,
-                    label: UiStrings.f('rain_24h_value', {
-                      'value': LocaleText.number(rain24h, fractionDigits: 1),
-                    }),
-                  ),
-                if (rain7d != null)
-                  _ContextPill(
-                    icon: Icons.grain_rounded,
-                    label: UiStrings.f('rain_7d_value', {
-                      'value': LocaleText.number(rain7d, fractionDigits: 1),
-                    }),
-                  ),
-                if (waterNeed.isNotEmpty)
-                  _ContextPill(icon: Icons.opacity_rounded, label: waterNeed),
-              ],
-            ),
-          ],
-          if (widget.onUpdateFarmStatus != null) ...[
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: widget.onUpdateFarmStatus,
-              icon: const Icon(Icons.edit_note_rounded),
-              label: Text(UiStrings.t('ai_chat_update_farm_status')),
-            ),
-          ],
-        ],
-      ),
-    );
   }
 
   Widget _messageBody(_ChatMessage item) {
@@ -936,6 +808,7 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
                   ),
                   child: TextField(
                     controller: _promptController,
+                    onChanged: widget.onDraftChanged,
                     enabled: !_isSending,
                     minLines: 1,
                     maxLines: 4,
@@ -1006,42 +879,50 @@ class _FarmerAiChatScreenState extends State<FarmerAiChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.surface,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leadingWidth: appBackButtonLeadingWidth,
-        leading: appBackButtonLeading(context),
-        title: Text(UiStrings.t('ai_chat_title')),
-      ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: ListView.separated(
-                controller: _scrollController,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  16,
-                  16,
-                  _composerReservedSpace(context) + widget.bottomContentInset,
-                ),
-                itemCount: _messages.length + 1,
-                separatorBuilder: (_, index) =>
-                    SizedBox(height: index == 0 ? 14 : 12),
-                itemBuilder: (context, index) {
-                  if (index == 0) return _farmContextPanel();
-                  return _messageTile(context, _messages[index - 1]);
-                },
-              ),
-            ),
-            Positioned(left: 0, right: 0, bottom: 0, child: _composer()),
-          ],
+    Widget content() {
+      return Scaffold(
+        backgroundColor: AppTheme.surface,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leadingWidth: appBackButtonLeadingWidth,
+          leading: appBackButtonLeading(context),
+          title: Text(UiStrings.t('ai_chat_title')),
         ),
-      ),
-    );
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ListView.separated(
+                  key: const PageStorageKey<String>('farmer-ai-chat-scroll'),
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    16,
+                    16,
+                    _composerReservedSpace(context) + widget.bottomContentInset,
+                  ),
+                  itemCount: _messages.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    return _messageTile(context, _messages[index]);
+                  },
+                ),
+              ),
+              Positioned(left: 0, right: 0, bottom: 0, child: _composer()),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (!Get.isRegistered<LanguageController>()) return content();
+    final language = Get.find<LanguageController>();
+    return Obx(() {
+      language.language.value;
+      return content();
+    });
   }
 }
 
@@ -1085,45 +966,6 @@ class _QuickPromptChip extends StatelessWidget {
         color: AppTheme.textDark,
         fontWeight: FontWeight.w800,
         fontSize: 12.5,
-      ),
-    );
-  }
-}
-
-class _ContextPill extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _ContextPill({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7FAF5),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE1E9DD)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: AppTheme.greenDark),
-          const SizedBox(width: 6),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textDark,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
