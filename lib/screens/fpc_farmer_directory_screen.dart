@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../core/localization/ui_strings.dart';
 import '../core/theme/app_theme.dart';
+import '../models/farmer_delivery_timeline_item.dart';
 import '../models/fpc_farmer_profile.dart';
 import '../services/fpc_operating_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
@@ -301,7 +302,7 @@ class _SearchAndFilter extends StatelessWidget {
                   ('inactive', 'Inactive'),
                 ])
                   ChoiceChip(
-                    label: Text(option.$2),
+                    label: Text(UiStrings.option(option.$2)),
                     selected: status == option.$1,
                     onSelected: (_) => onStatus(option.$1),
                   ),
@@ -422,8 +423,8 @@ class _FarmerCard extends StatelessWidget {
               _InlineDetail(
                 icon: Icons.agriculture_outlined,
                 text: [
-                  farmer.crop,
-                  farmer.variety,
+                  UiStrings.option(farmer.crop),
+                  UiStrings.option(farmer.variety),
                 ].where((item) => item.isNotEmpty).join(' • '),
               ),
               _InlineDetail(
@@ -445,9 +446,11 @@ class _FarmerCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      farmer.isVerified
-                          ? 'Verified farmer profile'
-                          : _value(farmer.kycStatus, 'KYC not recorded'),
+                      UiStrings.fromEnglish(
+                        farmer.isVerified
+                            ? 'Verified farmer profile'
+                            : _value(farmer.kycStatus, 'KYC not recorded'),
+                      ),
                       style: const TextStyle(
                         color: AppTheme.textMuted,
                         fontSize: 12,
@@ -557,7 +560,9 @@ class _FarmerProfileSheet extends StatelessWidget {
                       if (farmer.fpcRating.isNotEmpty)
                         _ProfileTag(
                           icon: Icons.star_rounded,
-                          text: 'Rating ${farmer.fpcRating}',
+                          text: UiStrings.f('fpc_rating_value', {
+                            'value': farmer.fpcRating,
+                          }),
                         ),
                     ],
                   ),
@@ -629,6 +634,8 @@ class _FarmerProfileSheet extends StatelessWidget {
                       ('Link status', farmer.linkStatus),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  _FarmerDeliveryTimelineSection(farmerId: farmer.farmerId),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     onPressed: () {
@@ -651,6 +658,126 @@ class _FarmerProfileSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FarmerDeliveryTimelineSection extends StatelessWidget {
+  final String farmerId;
+
+  const _FarmerDeliveryTimelineSection({required this.farmerId});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<FarmerDeliveryTimelineItem>>(
+      future: FpcOperatingService().loadFarmerDeliveryTimeline(farmerId),
+      builder: (context, snapshot) {
+        final items = snapshot.data ?? const <FarmerDeliveryTimelineItem>[];
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFDDE8D4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.local_shipping_outlined,
+                    color: AppTheme.greenDark,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      UiStrings.fromEnglish('Delivery and payments'),
+                      style: const TextStyle(
+                        color: AppTheme.greenDark,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const Center(child: CircularProgressIndicator())
+              else if (snapshot.hasError)
+                Text(
+                  '${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                )
+              else if (items.isEmpty)
+                Text(
+                  UiStrings.fromEnglish('No delivery or payment records yet.'),
+                  style: const TextStyle(color: AppTheme.textMuted),
+                )
+              else
+                for (final item in items.take(8)) ...[
+                  _DeliveryProfileRow(item: item),
+                  if (item != items.take(8).last) const Divider(height: 20),
+                ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DeliveryProfileRow extends StatelessWidget {
+  final FarmerDeliveryTimelineItem item;
+
+  const _DeliveryProfileRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final details = [
+      item.statusLabel,
+      if (item.paymentStatusLabel.isNotEmpty) item.paymentStatusLabel,
+      if (item.quantityKg != null) '${_formatNumber(item.quantityKg!)} kg',
+      if (item.amount != null)
+        '${item.currency} ${_formatNumber(item.amount!)}',
+      if (item.occurredAt != null) _formatDateTime(item.occurredAt),
+    ].where((part) => part.trim().isNotEmpty).join(' • ');
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(_deliveryIcon(item.type), color: AppTheme.greenDark, size: 20),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                UiStrings.fromEnglish(item.typeLabel),
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              if (details.isNotEmpty)
+                Text(
+                  UiStrings.fromEnglish(details),
+                  style: const TextStyle(
+                    color: AppTheme.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  static IconData _deliveryIcon(String type) => switch (type) {
+    'seed_request' => Icons.spa_outlined,
+    'seed_delivery' => Icons.local_shipping_outlined,
+    'procurement_delivery' => Icons.assignment_turned_in_outlined,
+    'procurement_lot' => Icons.inventory_2_outlined,
+    'farmer_payment' => Icons.payments_outlined,
+    'buyer_dispatch' => Icons.fire_truck_outlined,
+    _ => Icons.timeline_rounded,
+  };
 }
 
 class _ProfileSection extends StatelessWidget {
@@ -682,7 +809,7 @@ class _ProfileSection extends StatelessWidget {
               Icon(icon, color: AppTheme.greenDark),
               const SizedBox(width: 8),
               Text(
-                title,
+                UiStrings.fromEnglish(title),
                 style: const TextStyle(
                   color: AppTheme.greenDark,
                   fontSize: 17,
@@ -738,7 +865,7 @@ class _HistorySection extends StatelessWidget {
               Icon(icon, color: AppTheme.greenDark),
               const SizedBox(width: 8),
               Text(
-                title,
+                UiStrings.fromEnglish(title),
                 style: const TextStyle(
                   color: AppTheme.greenDark,
                   fontSize: 17,
@@ -749,7 +876,10 @@ class _HistorySection extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (rows.isEmpty)
-            Text(emptyText, style: const TextStyle(color: AppTheme.textMuted))
+            Text(
+              UiStrings.fromEnglish(emptyText),
+              style: const TextStyle(color: AppTheme.textMuted),
+            )
           else
             for (var index = 0; index < rows.length; index++) ...[
               if (index > 0) const Divider(height: 22),
@@ -782,7 +912,7 @@ class _ProfileRow extends StatelessWidget {
           SizedBox(
             width: 118,
             child: Text(
-              label,
+              UiStrings.fromEnglish(label),
               style: const TextStyle(
                 color: AppTheme.textMuted,
                 fontWeight: FontWeight.w700,
@@ -791,7 +921,7 @@ class _ProfileRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              value,
+              UiStrings.localizedValue(value),
               style: const TextStyle(fontWeight: FontWeight.w800, height: 1.3),
             ),
           ),
@@ -821,7 +951,7 @@ class _ProfileTag extends StatelessWidget {
           Icon(icon, size: 17, color: AppTheme.greenDark),
           const SizedBox(width: 5),
           Text(
-            text,
+            UiStrings.fromEnglish(text),
             style: const TextStyle(
               color: AppTheme.greenDark,
               fontSize: 12,
@@ -877,7 +1007,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        active ? 'Active' : 'Inactive',
+        UiStrings.option(active ? 'Active' : 'Inactive'),
         style: TextStyle(
           color: active ? const Color(0xFF087F5B) : AppTheme.textMuted,
           fontSize: 11,
@@ -974,4 +1104,17 @@ String _formatDate(DateTime? value) {
   final local = value.toLocal();
   String two(int part) => part.toString().padLeft(2, '0');
   return '${two(local.day)}/${two(local.month)}/${local.year}';
+}
+
+String _formatDateTime(DateTime? value) {
+  if (value == null) return '';
+  final local = value.toLocal();
+  String two(int part) => part.toString().padLeft(2, '0');
+  return '${two(local.day)}/${two(local.month)}/${local.year} '
+      '${two(local.hour)}:${two(local.minute)}';
+}
+
+String _formatNumber(double value) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return value.toStringAsFixed(2);
 }

@@ -388,8 +388,9 @@ class _OverviewTab extends StatelessWidget {
         Icons.inventory_2_outlined,
       ),
       _MetricItem(
-        'Stakeholders',
-        snapshot.metrics['stakeholderApplications'] ??
+        'Shareholders',
+        snapshot.metrics['shareholderDirectoryTotal'] ??
+            snapshot.metrics['stakeholderApplications'] ??
             snapshot.stakeholders.length,
         Icons.handshake_outlined,
       ),
@@ -451,14 +452,14 @@ class _OverviewTab extends StatelessWidget {
                   icon: Icons.fact_check_outlined,
                   title: 'Approval gate stays protected',
                   body:
-                      'Stakeholder payments remain locked until admin approval is recorded.',
+                      'Shareholder payments remain locked until admin approval is recorded.',
                 ),
                 SizedBox(height: 10),
                 _AdminInfoPanel(
                   icon: Icons.history_rounded,
                   title: 'Review history is visible',
                   body:
-                      'Every stakeholder decision keeps its status, note, actor and time in the review sheet.',
+                      'Every shareholder decision keeps its status, note, actor and time in the review sheet.',
                 ),
               ],
             ),
@@ -605,17 +606,25 @@ class _StakeholdersTab extends StatefulWidget {
 
 class _StakeholdersTabState extends State<_StakeholdersTab> {
   final _searchCtrl = TextEditingController();
+  final _candidateSearchCtrl = TextEditingController();
+  Timer? _candidateSearchTimer;
   String _query = '';
+  bool _showCandidateRoster = false;
 
   @override
   void dispose() {
+    _candidateSearchTimer?.cancel();
     _searchCtrl.dispose();
+    _candidateSearchCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      if (_showCandidateRoster) {
+        return _buildCandidateRoster(context);
+      }
       final filter = widget.admin.stakeholderFilter.value;
       final allItems = _sortStakeholderQueue(widget.snapshot.stakeholders);
       final statusItems = _filterStakeholders(allItems, filter);
@@ -635,6 +644,11 @@ class _StakeholdersTabState extends State<_StakeholdersTab> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               sliver: SliverList.list(
                 children: [
+                  _ShareholderAdminModeSelector(
+                    showCandidateRoster: false,
+                    onChanged: _setCandidateRosterMode,
+                  ),
+                  const SizedBox(height: 10),
                   _StakeholderQueueHero(items: allItems),
                   const SizedBox(height: 10),
                   if (shortcutItem != null) ...[
@@ -668,9 +682,9 @@ class _StakeholdersTabState extends State<_StakeholdersTab> {
                 hasScrollBody: false,
                 child: _EmptyAdminPanel(
                   icon: Icons.handshake_outlined,
-                  title: 'No stakeholder applications found',
+                  title: 'No shareholder applications found',
                   body:
-                      'Applications submitted by farmer stakeholders appear here.',
+                      'Applications submitted by farmer shareholders appear here.',
                 ),
               )
             else if (visibleItems.isEmpty)
@@ -705,6 +719,550 @@ class _StakeholdersTabState extends State<_StakeholdersTab> {
         ),
       );
     });
+  }
+
+  void _setCandidateRosterMode(bool showCandidateRoster) {
+    if (_showCandidateRoster == showCandidateRoster) return;
+    setState(() => _showCandidateRoster = showCandidateRoster);
+    if (showCandidateRoster &&
+        widget.admin.shareholderCandidatePage.value == null &&
+        !widget.admin.isLoadingShareholderCandidates.value) {
+      unawaited(widget.admin.loadShareholderCandidates(resetOffset: true));
+    }
+  }
+
+  void _scheduleCandidateSearch(String value) {
+    _candidateSearchTimer?.cancel();
+    _candidateSearchTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      widget.admin.searchShareholderCandidates(value);
+    });
+  }
+
+  Widget _buildCandidateRoster(BuildContext context) {
+    final page = widget.admin.shareholderCandidatePage.value;
+    final rows = page?.rows ?? const <AdminShareholderCandidate>[];
+    final loading = widget.admin.isLoadingShareholderCandidates.value;
+    final error = widget.admin.shareholderCandidateError.value.trim();
+    final village = widget.admin.shareholderCandidateVillage.value;
+    final taluka = widget.admin.shareholderCandidateTaluka.value;
+    final district = widget.admin.shareholderCandidateDistrict.value;
+
+    return RefreshIndicator(
+      onRefresh: () => widget.admin.loadShareholderCandidates(),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            sliver: SliverList.list(
+              children: [
+                _ShareholderAdminModeSelector(
+                  showCandidateRoster: true,
+                  onChanged: _setCandidateRosterMode,
+                ),
+                const SizedBox(height: 10),
+                _ShareholderCandidateHero(
+                  page: page ?? AdminShareholderCandidatePage.empty(),
+                ),
+                const SizedBox(height: 10),
+                _ShareholderCandidateSearchField(
+                  controller: _candidateSearchCtrl,
+                  onChanged: (value) {
+                    setState(() {});
+                    _scheduleCandidateSearch(value);
+                  },
+                  onSubmitted: (value) {
+                    _candidateSearchTimer?.cancel();
+                    widget.admin.searchShareholderCandidates(value);
+                  },
+                  onClear: _candidateSearchCtrl.text.trim().isEmpty
+                      ? null
+                      : () {
+                          _candidateSearchTimer?.cancel();
+                          _candidateSearchCtrl.clear();
+                          widget.admin.searchShareholderCandidates('');
+                          setState(() {});
+                        },
+                ),
+                const SizedBox(height: 10),
+                _ShareholderCandidateFilters(
+                  villages: page?.villages ?? const [],
+                  talukas: page?.talukas ?? const [],
+                  districts: page?.districts ?? const [],
+                  village: village,
+                  taluka: taluka,
+                  district: district,
+                  onVillageChanged: widget.admin.setShareholderCandidateVillage,
+                  onTalukaChanged: widget.admin.setShareholderCandidateTaluka,
+                  onDistrictChanged:
+                      widget.admin.setShareholderCandidateDistrict,
+                ),
+                if (loading) ...[
+                  const SizedBox(height: 10),
+                  const LinearProgressIndicator(),
+                ],
+                if (error.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  _AdminInfoPanel(
+                    icon: Icons.error_outline_rounded,
+                    title: 'Shareholder directory could not load',
+                    body: error,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (page == null && loading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (rows.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _EmptyAdminPanel(
+                icon: Icons.groups_2_outlined,
+                title: 'No matching shareholders',
+                body:
+                    'Change the village, taluka or district filter, or clear search.',
+              ),
+            )
+          else ...[
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              sliver: SliverList.builder(
+                itemCount: rows.length,
+                itemBuilder: (context, index) => _ShareholderCandidateCard(
+                  key: ValueKey(rows[index].sourceRecordKey),
+                  item: rows[index],
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+              sliver: SliverToBoxAdapter(
+                child: _ShareholderCandidatePagination(
+                  page: page!,
+                  isLoading: loading,
+                  onPrevious: widget.admin.previousShareholderCandidatePage,
+                  onNext: widget.admin.nextShareholderCandidatePage,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ShareholderAdminModeSelector extends StatelessWidget {
+  final bool showCandidateRoster;
+  final ValueChanged<bool> onChanged;
+
+  const _ShareholderAdminModeSelector({
+    required this.showCandidateRoster,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<bool>(
+      key: const ValueKey('admin-shareholder-directory-mode'),
+      segments: const [
+        ButtonSegment<bool>(
+          value: false,
+          icon: Icon(Icons.fact_check_outlined),
+          label: Text('Applications'),
+        ),
+        ButtonSegment<bool>(
+          value: true,
+          icon: Icon(Icons.groups_2_outlined),
+          label: Text('Verified shareholders'),
+        ),
+      ],
+      selected: {showCandidateRoster},
+      showSelectedIcon: false,
+      onSelectionChanged: (selection) => onChanged(selection.first),
+    );
+  }
+}
+
+class _ShareholderCandidateHero extends StatelessWidget {
+  final AdminShareholderCandidatePage page;
+
+  const _ShareholderCandidateHero({required this.page});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = page.summary['totalRecords'] ?? page.totalCount;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _adminCardDecoration(tint: Colors.white),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.how_to_reg_outlined, color: AppTheme.greenDark),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Verified shareholder directory',
+                  style: TextStyle(
+                    color: AppTheme.greenDark,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'All directory members are shown as verified, approved and allotted shareholders.',
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontWeight: FontWeight.w700,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _CandidateMetricChip('All records', total),
+              _CandidateMetricChip('Verified and approved', total),
+              _CandidateMetricChip('Allotted shareholders', total),
+              _CandidateMetricChip('Villages', page.villages.length),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CandidateMetricChip extends StatelessWidget {
+  final String label;
+  final Object value;
+
+  const _CandidateMetricChip(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: const Icon(Icons.circle, size: 9, color: AppTheme.green),
+      label: Text(
+        '$label: $value',
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _ShareholderCandidateSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final ValueChanged<String> onSubmitted;
+  final VoidCallback? onClear;
+
+  const _ShareholderCandidateSearchField({
+    required this.controller,
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      key: const ValueKey('admin-shareholder-candidate-search'),
+      controller: controller,
+      textInputAction: TextInputAction.search,
+      onChanged: onChanged,
+      onSubmitted: onSubmitted,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search_rounded),
+        suffixIcon: onClear == null
+            ? null
+            : IconButton(
+                tooltip: 'Clear shareholder search',
+                onPressed: onClear,
+                icon: const Icon(Icons.close_rounded),
+              ),
+        labelText: 'Search verified shareholders',
+        hintText: 'Name, gender, village, address, taluka or district',
+      ),
+    );
+  }
+}
+
+class _ShareholderCandidateFilters extends StatelessWidget {
+  final List<String> villages;
+  final List<String> talukas;
+  final List<String> districts;
+  final String village;
+  final String taluka;
+  final String district;
+  final ValueChanged<String> onVillageChanged;
+  final ValueChanged<String> onTalukaChanged;
+  final ValueChanged<String> onDistrictChanged;
+
+  const _ShareholderCandidateFilters({
+    required this.villages,
+    required this.talukas,
+    required this.districts,
+    required this.village,
+    required this.taluka,
+    required this.district,
+    required this.onVillageChanged,
+    required this.onTalukaChanged,
+    required this.onDistrictChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        _CandidateFilterDropdown(
+          key: const ValueKey('admin-shareholder-village-filter'),
+          label: 'Village',
+          allLabel: 'All villages',
+          value: village,
+          options: villages,
+          onChanged: onVillageChanged,
+        ),
+        _CandidateFilterDropdown(
+          label: 'Taluka',
+          allLabel: 'All talukas',
+          value: taluka,
+          options: talukas,
+          onChanged: onTalukaChanged,
+        ),
+        _CandidateFilterDropdown(
+          label: 'District',
+          allLabel: 'All districts',
+          value: district,
+          options: districts,
+          onChanged: onDistrictChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _CandidateFilterDropdown extends StatelessWidget {
+  final String label;
+  final String allLabel;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  const _CandidateFilterDropdown({
+    super.key,
+    required this.label,
+    required this.allLabel,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedOptions = options.toSet().toList(growable: false);
+    final selected = normalizedOptions.contains(value) ? value : '';
+    return SizedBox(
+      width: 220,
+      child: DropdownButtonFormField<String>(
+        initialValue: selected,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: label, isDense: true),
+        items: [
+          DropdownMenuItem(value: '', child: Text(allLabel)),
+          ...normalizedOptions.map(
+            (option) => DropdownMenuItem(
+              value: option,
+              child: Text(option, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ],
+        onChanged: (next) => onChanged(next ?? ''),
+      ),
+    );
+  }
+}
+
+class _ShareholderCandidateCard extends StatelessWidget {
+  final AdminShareholderCandidate item;
+
+  const _ShareholderCandidateCard({super.key, required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final location = [
+      item.village,
+      item.taluka,
+      item.district,
+    ].where((value) => value.trim().isNotEmpty).join(' • ');
+    final shareNoun = item.proposedShareCount == 1 ? 'share' : 'shares';
+    final shareLabel = '${item.proposedShareCount} allotted $shareNoun';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: _adminCardDecoration(tint: Colors.white),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: AppTheme.green.withValues(alpha: 0.12),
+            foregroundColor: AppTheme.greenDark,
+            child: const Icon(Icons.person_outline_rounded),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.fullName,
+                  style: const TextStyle(
+                    color: AppTheme.textDark,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (location.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    location,
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                if (item.memberAddress.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    item.memberAddress,
+                    style: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 9),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 7,
+                  children: [
+                    _CandidateTag(shareLabel, color: AppTheme.greenDark),
+                    _CandidateTag(
+                      item.amountRecorded
+                          ? '₹${LocaleText.number(item.proposedTotalAmount, fractionDigits: 0)} amount'
+                          : 'Amount not recorded',
+                      color: item.amountRecorded
+                          ? AppTheme.green
+                          : AppTheme.textMuted,
+                    ),
+                    _CandidateTag(
+                      item.gender.trim().isEmpty
+                          ? 'Gender not recorded'
+                          : item.gender,
+                      color: AppTheme.textMuted,
+                    ),
+                    const _CandidateTag(
+                      'Verified and approved shareholder',
+                      color: AppTheme.greenDark,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CandidateTag extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _CandidateTag(this.label, {required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _ShareholderCandidatePagination extends StatelessWidget {
+  final AdminShareholderCandidatePage page;
+  final bool isLoading;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+
+  const _ShareholderCandidatePagination({
+    required this.page,
+    required this.isLoading,
+    required this.onPrevious,
+    required this.onNext,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final first = page.rows.isEmpty ? 0 : page.offset + 1;
+    final last = page.offset + page.rows.length;
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Showing $first-$last of ${page.totalCount}',
+            style: const TextStyle(
+              color: AppTheme.textMuted,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: isLoading || page.offset <= 0 ? null : onPrevious,
+          icon: const Icon(Icons.chevron_left_rounded),
+          label: const Text('Previous'),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed:
+              isLoading || page.offset + page.rows.length >= page.totalCount
+              ? null
+              : onNext,
+          icon: const Icon(Icons.chevron_right_rounded),
+          label: const Text('Next'),
+        ),
+      ],
+    );
   }
 }
 
@@ -793,7 +1351,7 @@ class _StakeholderQueueHero extends StatelessWidget {
         .length;
     return _AdminSectionHeader(
       icon: Icons.fact_check_outlined,
-      title: 'Stakeholder approval queue',
+      title: 'Shareholder approval queue',
       subtitle: UiStrings.f('stakeholder_queue_counts', {
         'submitted': submitted,
         'review': review,

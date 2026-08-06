@@ -39,12 +39,12 @@ class StakeholderService {
           return _loadDirectOrFallback();
         }
         throw StakeholderServiceException(
-          '${data['error'] ?? 'Stakeholder plan sync failed.'}',
+          '${data['error'] ?? 'Shareholder plan sync failed.'}',
         );
       }
       if (data.isEmpty) {
         throw const StakeholderServiceException(
-          'Stakeholder plan sync failed.',
+          'Shareholder plan sync failed.',
         );
       }
       return StakeholderPlanBundle.fromJson(data);
@@ -55,7 +55,7 @@ class StakeholderService {
         return _loadDirectOrFallback();
       }
       throw StakeholderServiceException(
-        _cleanRemoteError(error, 'Stakeholder plan sync failed.'),
+        _cleanRemoteError(error, 'Shareholder plan sync failed.'),
       );
     }
   }
@@ -89,12 +89,12 @@ class StakeholderService {
           return loadForFarmer(farmer);
         }
         throw StakeholderServiceException(
-          '${data['error'] ?? 'Stakeholder interest submission failed.'}',
+          '${data['error'] ?? 'Shareholder interest submission failed.'}',
         );
       }
       if (data.isEmpty) {
         throw const StakeholderServiceException(
-          'Stakeholder interest submission failed.',
+          'Shareholder interest submission failed.',
         );
       }
       return StakeholderPlanBundle.fromJson(data);
@@ -108,7 +108,7 @@ class StakeholderService {
         return loadForFarmer(farmer);
       }
       throw StakeholderServiceException(
-        _cleanRemoteError(error, 'Stakeholder interest submission failed.'),
+        _cleanRemoteError(error, 'Shareholder interest submission failed.'),
       );
     }
   }
@@ -467,7 +467,7 @@ class StakeholderService {
       );
       if (activePlan == null || activePlan.id.isEmpty) {
         throw const StakeholderServiceException(
-          'Stakeholder plan setup is not available yet. Try again later.',
+          'Shareholder plan setup is not available yet. Try again later.',
         );
       }
 
@@ -561,7 +561,7 @@ class StakeholderService {
       final saved = await _upsertStakeholderApplication(row);
       if (saved == null) {
         throw const StakeholderServiceException(
-          'Stakeholder interest submission failed.',
+          'Shareholder interest submission failed.',
         );
       }
       return StakeholderPlanBundle(
@@ -573,7 +573,7 @@ class StakeholderService {
       rethrow;
     } catch (_) {
       throw const StakeholderServiceException(
-        'Stakeholder interest submission failed. Try again later.',
+        'Shareholder interest submission failed. Try again later.',
       );
     }
   }
@@ -742,7 +742,9 @@ class StakeholderService {
 
   bool _isUploadedDocumentPath(String value, String documentKind) {
     final path = value.trim();
-    return path.contains('/$documentKind/') && path.split('/').length >= 3;
+    return !path.startsWith('local/') &&
+        path.contains('/$documentKind/') &&
+        path.split('/').length >= 3;
   }
 
   String _contentTypeFor(String fileName, Uint8List bytes) {
@@ -874,7 +876,7 @@ class StakeholderService {
       case 403:
         return 'Document upload was blocked. Login again and retry.';
       case 404:
-        return 'Stakeholder document storage is not configured.';
+        return 'Shareholder document storage is not configured.';
       case 409:
         return 'This document file already exists. Please retry.';
       default:
@@ -901,7 +903,7 @@ class StakeholderService {
     final text = error.toString().replaceFirst('Exception: ', '').trim();
     if (text.isEmpty) return fallback;
     if (_isFunctionNotFound(error)) {
-      return 'Stakeholder plan sync is not available yet. Try again later.';
+      return 'Shareholder plan sync is not available yet. Try again later.';
     }
     return text;
   }

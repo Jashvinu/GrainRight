@@ -82,6 +82,42 @@ void main() {
     return controller;
   }
 
+  StakeholderApplication applicationWithPaymentStatus(String paymentStatus) {
+    return StakeholderApplication.fromJson({
+      'id': 'application-1',
+      'plan_id': 'plan-1',
+      'user_id': 'user-1',
+      'farmer_phone': '9876543210',
+      'selected_amount': 100,
+      'estimated_shares': 1,
+      'status': StakeholderApplicationStatus.approved,
+      'payment_status': paymentStatus,
+    });
+  }
+
+  test(
+    'allows checkout only for test payment statuses that can be retried',
+    () {
+      final controller = StakeholderController()
+        ..application.value = applicationWithPaymentStatus(
+          StakeholderPaymentStatus.gatewayOrderCreated,
+        );
+
+      expect(controller.canStartPayment, isTrue);
+
+      controller.application.value = applicationWithPaymentStatus(
+        StakeholderPaymentStatus.gatewayAuthorized,
+      );
+      expect(controller.canStartPayment, isFalse);
+
+      controller.application.value = applicationWithPaymentStatus(
+        StakeholderPaymentStatus.gatewayCaptured,
+      );
+      expect(controller.canStartPayment, isFalse);
+      expect(controller.hasPaidShares, isTrue);
+    },
+  );
+
   test('keeps full Aadhaar number and derives last four digits', () {
     final controller = StakeholderController();
 
@@ -178,67 +214,73 @@ void main() {
     expect(service.uploadedKinds, ['nominee_signature', 'farmer_signature']);
   });
 
-  test(
-    'keeps signature steps non-blocking when upload storage fails',
-    () async {
-      final service = _SignatureUploadService(failUploads: true);
-      final controller = StakeholderController(service: service)
-        ..plan.value = StakeholderPlan.fallback()
-        ..selectedAmount.value = 100
-        ..consentInterestOnly.value = true
-        ..consentNoGuaranteedReturn.value = true
-        ..consentDataUse.value = true
-        ..contractReadAccepted.value = true
-        ..farmerFullName.value = 'Farmer Name'
-        ..farmerFatherName.value = 'Father Name'
-        ..farmerMobileNumber.value = '9876543210'
-        ..farmerAadhaarNumber.value = '123456786789'
-        ..farmerAadhaarLast4.value = '6789'
-        ..farmerAddress.value = 'At post Akole'
-        ..farmerVillage.value = 'Akole'
-        ..farmerTaluka.value = 'Akole'
-        ..farmerDistrict.value = 'Ahmednagar'
-        ..farmerPincode.value = '422601'
-        ..farmerTotalLandAcres.value = '2.5'
-        ..farmerAgriRecordId.value = 'AGR-123'
-        ..nomineeName.value = 'Nominee Name'
-        ..nomineeAddress.value = 'At post Akole'
-        ..nomineeMobileNumber.value = '9876501234'
-        ..setPanNumber('ABCDE1234F')
-        ..setLandRecordDetails(landRecordSummary)
-        ..bankName.value = 'HDFC Bank'
-        ..accountHolderName.value = 'Farmer Name'
-        ..bankAccountNumber.value = '9876543210'
-        ..ifscCode.value = 'HDFC0001234';
-      final bytes = Uint8List.fromList([1, 2, 3]);
+  test('rejects local signature markers as uploaded documents', () {
+    final controller = readyController()
+      ..nomineeSignature.value = 'local/nominee_signature/nominee-signature.png'
+      ..farmerSignature.value = 'local/farmer_signature/farmer-signature.png';
 
-      final nomineeSaved = await controller.uploadNomineeSignature(
-        farmer: _farmer,
-        bytes: bytes,
-        fileName: 'nominee-signature.png',
-      );
-      final farmerSaved = await controller.uploadFarmerSignature(
-        farmer: _farmer,
-        bytes: bytes,
-        fileName: 'farmer-signature.png',
-      );
+    expect(controller.hasUploadedNomineeSignature, isFalse);
+    expect(controller.hasUploadedFarmerSignature, isFalse);
+    expect(controller.hasFarmerApplicationDetails, isFalse);
+    expect(controller.hasContractAcceptance, isFalse);
+  });
 
-      expect(nomineeSaved, isTrue);
-      expect(farmerSaved, isTrue);
-      expect(
-        controller.nomineeSignature.value,
-        contains('/nominee_signature/'),
-      );
-      expect(controller.nomineeSignature.value, startsWith('local/'));
-      expect(controller.farmerSignature.value, contains('/farmer_signature/'));
-      expect(controller.farmerSignature.value, startsWith('local/'));
-      expect(controller.errorMessage.value, isEmpty);
-      expect(controller.hasFarmerApplicationDetails, isTrue);
-      expect(controller.hasContractAcceptance, isTrue);
-      expect(controller.canSubmitBuyApplication, isTrue);
-      expect(service.uploadedKinds, isEmpty);
-    },
-  );
+  test('keeps signature steps blocked when remote upload fails', () async {
+    final service = _SignatureUploadService(failUploads: true);
+    final controller = StakeholderController(service: service)
+      ..plan.value = StakeholderPlan.fallback()
+      ..selectedAmount.value = 100
+      ..consentInterestOnly.value = true
+      ..consentNoGuaranteedReturn.value = true
+      ..consentDataUse.value = true
+      ..contractReadAccepted.value = true
+      ..farmerFullName.value = 'Farmer Name'
+      ..farmerFatherName.value = 'Father Name'
+      ..farmerMobileNumber.value = '9876543210'
+      ..farmerAadhaarNumber.value = '123456786789'
+      ..farmerAadhaarLast4.value = '6789'
+      ..farmerAddress.value = 'At post Akole'
+      ..farmerVillage.value = 'Akole'
+      ..farmerTaluka.value = 'Akole'
+      ..farmerDistrict.value = 'Ahmednagar'
+      ..farmerPincode.value = '422601'
+      ..farmerTotalLandAcres.value = '2.5'
+      ..farmerAgriRecordId.value = 'AGR-123'
+      ..nomineeName.value = 'Nominee Name'
+      ..nomineeAddress.value = 'At post Akole'
+      ..nomineeMobileNumber.value = '9876501234'
+      ..setPanNumber('ABCDE1234F')
+      ..setLandRecordDetails(landRecordSummary)
+      ..bankName.value = 'HDFC Bank'
+      ..accountHolderName.value = 'Farmer Name'
+      ..bankAccountNumber.value = '9876543210'
+      ..ifscCode.value = 'HDFC0001234';
+    final bytes = Uint8List.fromList([1, 2, 3]);
+
+    final nomineeSaved = await controller.uploadNomineeSignature(
+      farmer: _farmer,
+      bytes: bytes,
+      fileName: 'nominee-signature.png',
+    );
+    final farmerSaved = await controller.uploadFarmerSignature(
+      farmer: _farmer,
+      bytes: bytes,
+      fileName: 'farmer-signature.png',
+    );
+
+    expect(nomineeSaved, isFalse);
+    expect(farmerSaved, isFalse);
+    expect(controller.nomineeSignature.value, isEmpty);
+    expect(controller.farmerSignature.value, isEmpty);
+    expect(
+      controller.errorMessage.value,
+      'Stakeholder document storage is not configured.',
+    );
+    expect(controller.hasFarmerApplicationDetails, isFalse);
+    expect(controller.hasContractAcceptance, isFalse);
+    expect(controller.canSubmitBuyApplication, isFalse);
+    expect(service.uploadedKinds, isEmpty);
+  });
 
   test('keeps expanded manual 7/12 fields in the saved summary', () {
     const details = StakeholderLandRecordDetails(

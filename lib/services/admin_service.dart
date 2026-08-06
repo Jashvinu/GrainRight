@@ -407,10 +407,184 @@ class AdminStakeholderTimelineEntry {
   }
 }
 
+class AdminShareholderCandidate {
+  final String id;
+  final String sourceRecordKey;
+  final String directorySource;
+  final String sourceFile;
+  final String sourceSheet;
+  final int sourcePartNo;
+  final int sourcePage;
+  final int sourceOrdinal;
+  final String fullName;
+  final String gender;
+  final String village;
+  final String mainVillage;
+  final String taluka;
+  final String district;
+  final String memberAddress;
+  final bool addressInferred;
+  final int proposedShareCount;
+  final double shareUnitValue;
+  final double proposedTotalAmount;
+  final bool amountRecorded;
+  final String shareStatus;
+  final String farmerStatus;
+  final String candidateStatus;
+  final double ocrConfidence;
+  final bool adminPromoted;
+  final String adminPromotionBasis;
+  final String verificationStatus;
+
+  const AdminShareholderCandidate({
+    required this.id,
+    required this.sourceRecordKey,
+    this.directorySource = 'candidate_roster',
+    required this.sourceFile,
+    this.sourceSheet = '',
+    required this.sourcePartNo,
+    required this.sourcePage,
+    required this.sourceOrdinal,
+    required this.fullName,
+    required this.gender,
+    required this.village,
+    required this.mainVillage,
+    required this.taluka,
+    required this.district,
+    this.memberAddress = '',
+    this.addressInferred = false,
+    required this.proposedShareCount,
+    required this.shareUnitValue,
+    required this.proposedTotalAmount,
+    this.amountRecorded = true,
+    this.shareStatus = 'proposed',
+    required this.farmerStatus,
+    required this.candidateStatus,
+    required this.ocrConfidence,
+    this.adminPromoted = false,
+    this.adminPromotionBasis = '',
+    this.verificationStatus = 'verification_pending',
+  });
+
+  factory AdminShareholderCandidate.fromJson(Map<String, dynamic> json) {
+    return AdminShareholderCandidate(
+      id: _text(json['id']),
+      sourceRecordKey: _text(json['source_record_key']),
+      directorySource: _text(json['directory_source'], 'candidate_roster'),
+      sourceFile: _text(json['source_file']),
+      sourceSheet: _text(json['source_sheet']),
+      sourcePartNo: _int(json['source_part_no']) ?? 0,
+      sourcePage: _int(json['source_page']) ?? 0,
+      sourceOrdinal: _int(json['source_ordinal']) ?? 0,
+      fullName: _text(json['full_name'], 'Shareholder record'),
+      gender: _text(json['gender']),
+      village: _text(json['village']),
+      mainVillage: _text(json['main_village']),
+      taluka: _text(json['taluka']),
+      district: _text(json['district']),
+      memberAddress: _text(json['member_address']),
+      addressInferred: json['address_inferred'] == true,
+      proposedShareCount: _int(json['proposed_share_count']) ?? 1,
+      shareUnitValue: _double(json['share_unit_value']) ?? 100,
+      proposedTotalAmount: _double(json['proposed_total_amount']) ?? 100,
+      amountRecorded: json['amount_recorded'] != false,
+      shareStatus: _text(json['share_status'], 'proposed'),
+      farmerStatus: _text(json['farmer_status'], 'unverified'),
+      candidateStatus: _text(
+        json['candidate_status'],
+        'pending_consent_kyc_payment',
+      ),
+      ocrConfidence: _double(json['ocr_confidence']) ?? 0,
+      adminPromoted: json['admin_promoted'] == true,
+      adminPromotionBasis: _text(json['admin_promotion_basis']),
+      verificationStatus: _text(
+        json['verification_status'],
+        'verification_pending',
+      ),
+    );
+  }
+}
+
+class AdminShareholderCandidatePage {
+  final List<AdminShareholderCandidate> rows;
+  final int totalCount;
+  final int offset;
+  final int limit;
+  final List<String> villages;
+  final List<String> talukas;
+  final List<String> districts;
+  final Map<String, int> summary;
+
+  const AdminShareholderCandidatePage({
+    required this.rows,
+    required this.totalCount,
+    required this.offset,
+    required this.limit,
+    required this.villages,
+    required this.talukas,
+    required this.districts,
+    required this.summary,
+  });
+
+  factory AdminShareholderCandidatePage.fromJson(Map<String, dynamic> json) {
+    final filters = json['filters'] is Map
+        ? Map<String, dynamic>.from(json['filters'] as Map)
+        : const <String, dynamic>{};
+    return AdminShareholderCandidatePage(
+      rows: _maps(
+        json['rows'],
+      ).map(AdminShareholderCandidate.fromJson).toList(growable: false),
+      totalCount: _int(json['totalCount'] ?? json['total_count']) ?? 0,
+      offset: _int(json['offset']) ?? 0,
+      limit: _int(json['limit']) ?? 100,
+      villages: _stringList(filters['villages']),
+      talukas: _stringList(filters['talukas']),
+      districts: _stringList(filters['districts']),
+      summary: _intMap(json['summary']),
+    );
+  }
+
+  static AdminShareholderCandidatePage empty() {
+    return const AdminShareholderCandidatePage(
+      rows: [],
+      totalCount: 0,
+      offset: 0,
+      limit: 100,
+      villages: [],
+      talukas: [],
+      districts: [],
+      summary: {},
+    );
+  }
+}
+
 class AdminService {
   SupabaseClient get _client => Supabase.instance.client;
 
   Future<AdminDashboardSnapshot> loadDashboard() async {
+    final directoryFuture = loadShareholderCandidates(limit: 1)
+        .then<AdminShareholderCandidatePage?>(
+          (directory) => directory,
+          onError: (_) => null,
+        );
+    final dashboard = await _loadDashboardWorkflow();
+    final directory = await directoryFuture;
+    if (directory == null) return dashboard;
+    final shareholderTotal =
+        directory.summary['totalRecords'] ?? directory.totalCount;
+    return AdminDashboardSnapshot(
+      generatedAt: dashboard.generatedAt,
+      metrics: {
+        ...dashboard.metrics,
+        'shareholderDirectoryTotal': shareholderTotal,
+      },
+      farmers: dashboard.farmers,
+      fpcRecords: dashboard.fpcRecords,
+      stakeholders: dashboard.stakeholders,
+    );
+  }
+
+  Future<AdminDashboardSnapshot> _loadDashboardWorkflow() async {
     try {
       final response = await _invokeFunction('admin-workflow-sync', {
         'action': 'load',
@@ -457,7 +631,7 @@ class AdminService {
       final data = _responseMap(response.data);
       if (data['success'] == false) {
         throw AdminServiceException(
-          '${data['error'] ?? 'Stakeholder review failed.'}',
+          '${data['error'] ?? 'Shareholder review failed.'}',
         );
       }
     } on AdminServiceException {
@@ -472,7 +646,38 @@ class AdminService {
         return;
       }
       throw AdminServiceException(
-        _cleanRemoteError(error, 'Stakeholder review failed.'),
+        _cleanRemoteError(error, 'Shareholder review failed.'),
+      );
+    }
+  }
+
+  Future<AdminShareholderCandidatePage> loadShareholderCandidates({
+    String search = '',
+    String village = '',
+    String taluka = '',
+    String district = '',
+    int offset = 0,
+    int limit = 100,
+  }) async {
+    try {
+      final data = await _client.rpc(
+        'admin_shareholder_directory',
+        params: {
+          'p_search': search.trim(),
+          'p_village': village.trim(),
+          'p_taluka': taluka.trim(),
+          'p_district': district.trim(),
+          'p_offset': offset < 0 ? 0 : offset,
+          'p_limit': limit.clamp(1, 200),
+        },
+      );
+      return AdminShareholderCandidatePage.fromJson(_responseMap(data));
+    } catch (error) {
+      throw AdminServiceException(
+        _cleanRemoteError(
+          error,
+          'Merged shareholder directory is not available.',
+        ),
       );
     }
   }
@@ -517,7 +722,7 @@ class AdminService {
       if (data['success'] == false) {
         if (_isFunctionNotFoundData(data)) return null;
         throw AdminServiceException(
-          '${data['error'] ?? 'Stakeholder admin sync failed.'}',
+          '${data['error'] ?? 'Shareholder admin sync failed.'}',
         );
       }
       return _snapshotFromRows(
@@ -686,7 +891,7 @@ class AdminService {
         .maybeSingle();
     if (saved == null) {
       throw const AdminServiceException(
-        'Stakeholder application was not found.',
+        'Shareholder application was not found.',
       );
     }
     final title = switch (status) {
@@ -751,7 +956,7 @@ class AdminService {
     final text = error.toString().replaceFirst('Exception: ', '').trim();
     if (_isFunctionNotFound(error)) return fallback;
     if (_isMissingBucket(error)) {
-      return 'Stakeholder document storage is not configured.';
+      return 'Shareholder document storage is not configured.';
     }
     return text.isEmpty ? fallback : text;
   }
@@ -820,6 +1025,14 @@ List<Map<String, dynamic>> _maps(Object? raw) {
   return raw
       .whereType<Map>()
       .map((row) => Map<String, dynamic>.from(row))
+      .toList(growable: false);
+}
+
+List<String> _stringList(Object? raw) {
+  if (raw is! List) return const [];
+  return raw
+      .map(_text)
+      .where((value) => value.isNotEmpty)
       .toList(growable: false);
 }
 

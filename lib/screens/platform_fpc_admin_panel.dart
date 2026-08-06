@@ -146,7 +146,11 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
                             ),
                           ),
                         ),
-                        Chip(label: Text('${application['status'] ?? ''}')),
+                        Chip(
+                          label: Text(
+                            UiStrings.option('${application['status'] ?? ''}'),
+                          ),
+                        ),
                       ],
                     ),
                     Text(
@@ -223,7 +227,9 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
                           child: Text(UiStrings.fromEnglish('Deactivate')),
                         ),
                       ],
-                      child: Chip(label: Text('${fpc['status'] ?? ''}')),
+                      child: Chip(
+                        label: Text(UiStrings.option('${fpc['status'] ?? ''}')),
+                      ),
                     ),
                   ],
                 ),
@@ -290,7 +296,9 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
                     child: Text(UiStrings.fromEnglish('Reset password')),
                   ),
                 ],
-                child: Chip(label: Text('${member['status'] ?? ''}')),
+                child: Chip(
+                  label: Text(UiStrings.option('${member['status'] ?? ''}')),
+                ),
               ),
             ),
           ),
@@ -453,7 +461,7 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
                         : Icons.notifications_off_outlined,
                   ),
                   title: Text(
-                    eventKey.replaceAll('_', ' '),
+                    UiStrings.option(eventKey.replaceAll('_', ' ')),
                     style: const TextStyle(fontWeight: FontWeight.w900),
                   ),
                   subtitle: Text(
@@ -488,7 +496,9 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
           child: ListTile(
             leading: const Icon(Icons.history_rounded),
             title: Text(
-              '${event['action'] ?? 'event'}'.replaceAll('_', ' '),
+              UiStrings.option(
+                '${event['action'] ?? 'event'}'.replaceAll('_', ' '),
+              ),
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             subtitle: Text(
@@ -681,9 +691,10 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              UiStrings.fromEnglish(
-                '${result.fileName} contains ${result.rowCount} records.',
-              ),
+              UiStrings.f('fpc_report_generated', {
+                'file': result.fileName,
+                'count': result.rowCount,
+              }),
             ),
           ),
         );
@@ -714,7 +725,7 @@ class _PlatformFpcAdminPanelState extends State<PlatformFpcAdminPanel>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  eventKey.replaceAll('_', ' '),
+                  UiStrings.option(eventKey.replaceAll('_', ' ')),
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
                 const SizedBox(height: 10),

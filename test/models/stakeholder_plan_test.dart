@@ -33,6 +33,28 @@ void main() {
     expect(plan.isValidAmount(100), isTrue);
   });
 
+  test('accepts only an explicitly test-mode Razorpay order', () {
+    final testOrder = StakeholderRazorpayOrder.fromJson({
+      'keyId': 'rzp_test_example',
+      'orderId': 'order_test',
+      'amountSubunits': 10000,
+      'currency': 'INR',
+      'receipt': 'stake-test',
+      'environment': 'test',
+    });
+    final liveOrder = StakeholderRazorpayOrder.fromJson({
+      'keyId': 'rzp_live_example',
+      'orderId': 'order_live',
+      'amountSubunits': 10000,
+      'currency': 'INR',
+      'receipt': 'stake-live',
+      'environment': 'test',
+    });
+
+    expect(testOrder.isTestMode, isTrue);
+    expect(liveOrder.isTestMode, isFalse);
+  });
+
   test('parses stakeholder application aliases', () {
     final application = StakeholderApplication.fromJson({
       'id': 'app-1',

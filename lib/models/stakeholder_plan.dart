@@ -21,6 +21,11 @@ class StakeholderPaymentMethod {
 class StakeholderPaymentStatus {
   static const pending = 'pending';
   static const gatewayOrderCreated = 'gateway_order_created';
+  static const gatewaySignatureVerified = 'gateway_signature_verified';
+  static const gatewayAuthorized = 'gateway_authorized';
+  static const gatewayCaptured = 'gateway_captured';
+  static const gatewayRefunded = 'gateway_refunded';
+  // Kept for records created by the previous integration.
   static const gatewayVerified = 'gateway_verified';
   static const bankTransferSubmitted = 'bank_transfer_submitted';
   static const failed = 'failed';
@@ -69,7 +74,7 @@ class StakeholderPlan {
     return StakeholderPlan(
       id: _text(json['id']),
       planCode: _text(json['plan_code'] ?? json['planCode']),
-      title: _text(json['title'], 'Kalsubai Farms Stakeholder Plan'),
+      title: _text(json['title'], 'Kalsubai Farms Shareholder Plan'),
       summary: _text(json['summary']),
       currency: _text(json['currency'], 'INR'),
       shareUnitValue:
@@ -91,7 +96,7 @@ class StakeholderPlan {
     return const StakeholderPlan(
       id: '',
       planCode: 'kalsubai-farmer-stakeholder-v1',
-      title: 'Kalsubai Farms Farmer Stakeholder Plan',
+      title: 'Kalsubai Farms Farmer Shareholder Plan',
       summary:
           'Apply to buy farmer stakeholder shares. Final allocation is confirmed only after Kalsubai Farms review.',
       currency: 'INR',
@@ -440,6 +445,7 @@ class StakeholderRazorpayOrder {
   final int amountSubunits;
   final String currency;
   final String receipt;
+  final String environment;
 
   const StakeholderRazorpayOrder({
     required this.keyId,
@@ -447,7 +453,11 @@ class StakeholderRazorpayOrder {
     required this.amountSubunits,
     required this.currency,
     required this.receipt,
+    required this.environment,
   });
+
+  bool get isTestMode =>
+      environment == 'test' && keyId.trim().startsWith('rzp_test_');
 
   factory StakeholderRazorpayOrder.fromJson(Map<String, dynamic> json) {
     return StakeholderRazorpayOrder(
@@ -457,6 +467,7 @@ class StakeholderRazorpayOrder {
           _int(json['amountSubunits'] ?? json['amount_subunits']) ?? 0,
       currency: _text(json['currency'], 'INR'),
       receipt: _text(json['receipt']),
+      environment: _text(json['environment']),
     );
   }
 }

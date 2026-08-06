@@ -10,9 +10,20 @@ import {
   requireUserId,
   text,
 } from "../_shared/farmer-links.ts";
+import {
+  isRazorpayTestKeyId,
+  razorpayBasicAuth,
+  verifyHmacSha256Hex,
+} from "../_shared/razorpay.ts";
 
 const documentBucket = "stakeholder-documents";
 const amountStep = 100;
+const activePaymentAttemptStatuses = [
+  "creating",
+  "order_created",
+  "signature_verified",
+  "authorized",
+];
 
 function createServiceClient() {
   const url = Deno.env.get("SUPABASE_URL");
@@ -157,7 +168,10 @@ function aadhaarNumber(value: string) {
 }
 
 function isUploadedDocumentPath(value: string, kind: string) {
-  return value.includes(`/${kind}/`) && value.split("/").length >= 3;
+  const path = value.trim();
+  return !path.startsWith("local/") &&
+    path.includes(`/${kind}/`) &&
+    path.split("/").length >= 3;
 }
 
 function landRecordFieldKey(label: string) {
@@ -1031,33 +1045,65 @@ async function adminSignedDocumentUrl(
   };
 }
 
-async function createRazorpayOrder(amountSubunits: number, receipt: string) {
+function razorpayTestConfig():
+  | { keyId: string; keySecret: string }
+  | Response {
+  const mode = text(Deno.env.get("RAZORPAY_MODE"));
   const keyId = text(Deno.env.get("RAZORPAY_KEY_ID"));
   const keySecret = text(Deno.env.get("RAZORPAY_KEY_SECRET"));
-  if (keyId.length === 0 || keySecret.length === 0) {
+  if (mode !== "test" || keyId.length === 0 || keySecret.length === 0) {
+    return errorResponse(
+      "Razorpay Test Mode is not configured yet.",
+      503,
+      undefined,
+      "razorpay_not_configured",
+    );
+  }
+  if (!isRazorpayTestKeyId(keyId)) {
+    return errorResponse(
+      "Only Razorpay Test Mode is allowed by this app build.",
+      503,
+      undefined,
+      "razorpay_test_mode_required",
+    );
+  }
+  return { keyId, keySecret };
+}
+
+async function createRazorpayOrder(
+  config: { keyId: string; keySecret: string },
+  amountSubunits: number,
+  receipt: string,
+  applicationId: string,
+) {
+  let response: Response;
+  try {
+    response = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Authorization": razorpayBasicAuth(config.keyId, config.keySecret),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: amountSubunits,
+        currency: "INR",
+        receipt,
+        notes: {
+          environment: "test",
+          stakeholder_application_id: applicationId,
+        },
+      }),
+    });
+  } catch (error) {
     return {
       error: errorResponse(
-        "Razorpay is not configured yet.",
-        503,
-        undefined,
-        "razorpay_not_configured",
+        "Could not reach Razorpay Test Mode.",
+        502,
+        error,
+        "razorpay_order_failed",
       ),
     };
   }
-
-  const response = await fetch("https://api.razorpay.com/v1/orders", {
-    method: "POST",
-    headers: {
-      "Authorization": `Basic ${btoa(`${keyId}:${keySecret}`)}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      amount: amountSubunits,
-      currency: "INR",
-      receipt,
-      payment_capture: 1,
-    }),
-  });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     return {
@@ -1071,27 +1117,46 @@ async function createRazorpayOrder(amountSubunits: number, receipt: string) {
   }
   return {
     order: data as Record<string, unknown>,
-    keyId,
+    keyId: config.keyId,
   };
 }
 
-async function hmacSha256Hex(secret: string, message: string) {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    encoder.encode(message),
-  );
-  return Array.from(new Uint8Array(signature))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+async function fetchRazorpayPayment(
+  config: { keyId: string; keySecret: string },
+  paymentId: string,
+) {
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://api.razorpay.com/v1/payments/${encodeURIComponent(paymentId)}`,
+      {
+        headers: {
+          "Authorization": razorpayBasicAuth(config.keyId, config.keySecret),
+        },
+      },
+    );
+  } catch (error) {
+    return {
+      error: errorResponse(
+        "Could not reach Razorpay Test Mode for payment verification.",
+        502,
+        error,
+        "razorpay_payment_lookup_failed",
+      ),
+    };
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      error: errorResponse(
+        "Could not verify the Razorpay Test payment.",
+        502,
+        data,
+        "razorpay_payment_lookup_failed",
+      ),
+    };
+  }
+  return { payment: data as Record<string, unknown> };
 }
 
 async function ensureDocumentBucket(supabase: any) {
@@ -1302,10 +1367,17 @@ Deno.serve(async (req) => {
       planId,
       linkedFarmer,
     );
+    const existingApplicationId = text(existing?.id);
     const existingStatus = text(existing?.status);
     const existingPaymentStatus = text(existing?.payment_status);
     const paymentComplete = existingPaymentStatus === "gateway_verified" ||
+      existingPaymentStatus === "gateway_captured" ||
       existingPaymentStatus === "bank_transfer_submitted";
+    const razorpayPaymentInProgress = [
+      "gateway_order_created",
+      "gateway_signature_verified",
+      "gateway_authorized",
+    ].includes(existingPaymentStatus);
     if (action === "submit_interest" && existingStatus.length > 0) {
       const bundle = await loadApplicationBundle(
         supabase,
@@ -1320,22 +1392,33 @@ Deno.serve(async (req) => {
       );
     }
     if (action === "create_razorpay_order") {
-      if (existingStatus !== "approved" || paymentComplete) {
+      if (
+        existingStatus !== "approved" ||
+        paymentComplete ||
+        (
+          razorpayPaymentInProgress &&
+          existingPaymentStatus !== "gateway_order_created"
+        )
+      ) {
         return errorResponse(
           paymentComplete
-            ? "Payment is already verified for this application."
+            ? "Payment is already complete for this application."
+            : razorpayPaymentInProgress
+            ? "This Razorpay Test payment is waiting for confirmation."
             : "Payment starts after Kalsubai Farms approves the application.",
           409,
           undefined,
           paymentComplete
             ? "stakeholder_payment_already_verified"
+            : razorpayPaymentInProgress
+            ? "stakeholder_payment_in_progress"
             : "stakeholder_payment_requires_approval",
         );
       }
     } else if (action === "verify_razorpay_payment") {
       if (
         existingStatus !== "approved" ||
-        existingPaymentStatus !== "gateway_order_created"
+        existingPaymentStatus === "bank_transfer_submitted"
       ) {
         return errorResponse(
           "Start payment only after the application is approved.",
@@ -1346,7 +1429,11 @@ Deno.serve(async (req) => {
       }
     } else if (
       action === "submit_bank_transfer" &&
-      (existingStatus !== "approved" || paymentComplete)
+      (
+        existingStatus !== "approved" ||
+        paymentComplete ||
+        razorpayPaymentInProgress
+      )
     ) {
       return errorResponse(
         "Bank transfer starts after Kalsubai Farms approves the application.",
@@ -1412,35 +1499,187 @@ Deno.serve(async (req) => {
         "Farmer account, KYC and selected amount were saved for review.",
       );
     } else if (action === "create_razorpay_order") {
-      const input = validateApplicationInput(body, plan, farmer);
-      if (input instanceof Response) return input;
+      if (existingApplicationId.length === 0) {
+        return errorResponse(
+          "Approved stakeholder application was not found.",
+          404,
+          undefined,
+          "stakeholder_application_not_found",
+        );
+      }
+      const selectedAmount = numberValue(existing?.selected_amount);
+      const amountSubunits = Math.round((selectedAmount ?? 0) * 100);
+      if (
+        !selectedAmount ||
+        selectedAmount <= 0 ||
+        Math.abs(selectedAmount * 100 - amountSubunits) > 0.001
+      ) {
+        return errorResponse(
+          "The approved payment amount is invalid.",
+          409,
+          undefined,
+          "stakeholder_approved_amount_invalid",
+        );
+      }
 
-      const amountSubunits = Math.round(Number(input.selectedAmount) * 100);
-      const receipt = `stake-${Date.now()}`.slice(0, 40);
-      const created = await createRazorpayOrder(amountSubunits, receipt);
-      if (created.error) return created.error;
+      const config = razorpayTestConfig();
+      if (config instanceof Response) return config;
+
+      const { data: activeAttempt, error: activeAttemptError } = await supabase
+        .from("stakeholder_payment_attempts")
+        .select("*")
+        .eq("application_id", existingApplicationId)
+        .eq("user_id", userId)
+        .in("status", activePaymentAttemptStatuses)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activeAttemptError) throw activeAttemptError;
+
+      if (activeAttempt) {
+        const existingOrderId = text(activeAttempt.provider_order_id);
+        if (
+          Number(activeAttempt.amount_subunits) !== amountSubunits ||
+          text(activeAttempt.currency) !== "INR"
+        ) {
+          return errorResponse(
+            "The approved amount changed after payment started.",
+            409,
+            undefined,
+            "stakeholder_payment_amount_changed",
+          );
+        }
+        if (existingOrderId.length === 0) {
+          return errorResponse(
+            "Razorpay Test payment setup is already in progress. Try again shortly.",
+            409,
+            undefined,
+            "stakeholder_payment_in_progress",
+          );
+        }
+        const bundle = await loadApplicationBundle(
+          supabase,
+          userId,
+          plan,
+          linkedFarmer,
+        );
+        return successResponse(
+          {
+            ...bundle,
+            order: {
+              keyId: config.keyId,
+              orderId: existingOrderId,
+              amountSubunits,
+              currency: "INR",
+              receipt: text(activeAttempt.receipt),
+              environment: "test",
+            },
+          },
+          200,
+          "stakeholder_razorpay_order_reused",
+        );
+      }
+
+      const applicationReceipt = existingApplicationId.replaceAll("-", "")
+        .slice(0, 16);
+      const receipt = `stake-${applicationReceipt}-${Date.now().toString(36)}`
+        .slice(0, 40);
+      const { data: attempt, error: attemptError } = await supabase
+        .from("stakeholder_payment_attempts")
+        .insert({
+          application_id: existingApplicationId,
+          user_id: userId,
+          environment: "test",
+          provider: "razorpay",
+          receipt,
+          amount_subunits: amountSubunits,
+          currency: "INR",
+          status: "creating",
+        })
+        .select("*")
+        .single();
+      if (attemptError) {
+        if (text(attemptError.code) === "23505") {
+          return errorResponse(
+            "Razorpay Test payment setup is already in progress. Try again shortly.",
+            409,
+            undefined,
+            "stakeholder_payment_in_progress",
+          );
+        }
+        throw attemptError;
+      }
+
+      const created = await createRazorpayOrder(
+        config,
+        amountSubunits,
+        receipt,
+        existingApplicationId,
+      );
+      if (created.error) {
+        await supabase
+          .from("stakeholder_payment_attempts")
+          .update({
+            status: "failed",
+            failure_code: "razorpay_order_failed",
+            failure_description: "Razorpay Test order creation failed.",
+          })
+          .eq("id", attempt.id);
+        return created.error;
+      }
       const order = created.order!;
       const razorpayOrderId = text(order.id);
-      const saved = await saveApplication(supabase, {
-        existing,
-        plan,
-        userId,
-        farmer: linkedFarmer,
-        rawFarmer: farmer,
-        input,
-        paymentMethod: "razorpay",
-        paymentStatus: "gateway_order_created",
-        status: "approved",
-        extra: {
+      if (
+        razorpayOrderId.length === 0 ||
+        Number(order.amount) !== amountSubunits ||
+        text(order.currency) !== "INR"
+      ) {
+        await supabase
+          .from("stakeholder_payment_attempts")
+          .update({
+            status: "failed",
+            failure_code: "razorpay_order_mismatch",
+            failure_description:
+              "Razorpay Test order did not match the approved payment.",
+          })
+          .eq("id", attempt.id);
+        return errorResponse(
+          "Razorpay returned an unexpected Test order.",
+          502,
+          undefined,
+          "razorpay_order_mismatch",
+        );
+      }
+
+      const { error: attemptSaveError } = await supabase
+        .from("stakeholder_payment_attempts")
+        .update({
+          provider_order_id: razorpayOrderId,
+          provider_status: text(order.status),
+          status: "order_created",
+        })
+        .eq("id", attempt.id);
+      if (attemptSaveError) throw attemptSaveError;
+
+      const { data: saved, error: saveError } = await supabase
+        .from("stakeholder_applications")
+        .update({
           razorpay_order_id: razorpayOrderId,
-        },
-      });
+          razorpay_payment_id: "",
+          razorpay_signature: "",
+          payment_method: "razorpay",
+          payment_status: "gateway_order_created",
+        })
+        .eq("id", existingApplicationId)
+        .select("*")
+        .single();
+      if (saveError) throw saveError;
       await addEvent(
         supabase,
         saved.id,
         "submitted",
-        "Razorpay payment started",
-        "Farmer created a payment order for stakeholder review.",
+        "Razorpay Test payment started",
+        "A test-only payment order was created. No real money was charged.",
       );
       const bundle = await loadApplicationBundle(
         supabase,
@@ -1455,8 +1694,9 @@ Deno.serve(async (req) => {
             keyId: created.keyId,
             orderId: razorpayOrderId,
             amountSubunits,
-            currency: text(order.currency) || "INR",
+            currency: "INR",
             receipt,
+            environment: "test",
           },
         },
         200,
@@ -1478,35 +1718,31 @@ Deno.serve(async (req) => {
         "razorpaySignature",
         "razorpay_signature",
       );
-      const keySecret = text(Deno.env.get("RAZORPAY_KEY_SECRET"));
-      if (keySecret.length === 0) {
-        return errorResponse(
-          "Razorpay is not configured yet.",
-          503,
-          undefined,
-          "razorpay_not_configured",
-        );
-      }
-      const expected = await hmacSha256Hex(
-        keySecret,
-        `${razorpayOrderId}|${razorpayPaymentId}`,
-      );
       if (
         razorpayOrderId.length === 0 ||
         razorpayPaymentId.length === 0 ||
-        razorpaySignature.length === 0 ||
-        expected !== razorpaySignature
+        razorpaySignature.length === 0
       ) {
         return errorResponse(
-          "Payment verification failed.",
+          "Razorpay Test payment details are incomplete.",
           400,
           undefined,
-          "razorpay_signature_invalid",
+          "razorpay_payment_details_required",
         );
       }
-      if (
-        !existing?.id || text(existing.razorpay_order_id) !== razorpayOrderId
-      ) {
+
+      const config = razorpayTestConfig();
+      if (config instanceof Response) return config;
+
+      const { data: attempt, error: attemptError } = await supabase
+        .from("stakeholder_payment_attempts")
+        .select("*")
+        .eq("application_id", existingApplicationId)
+        .eq("user_id", userId)
+        .eq("provider_order_id", razorpayOrderId)
+        .maybeSingle();
+      if (attemptError) throw attemptError;
+      if (!attempt) {
         return errorResponse(
           "Payment order was not found for this farmer.",
           404,
@@ -1514,6 +1750,74 @@ Deno.serve(async (req) => {
           "razorpay_order_not_found",
         );
       }
+
+      const validSignature = await verifyHmacSha256Hex(
+        config.keySecret,
+        `${razorpayOrderId}|${razorpayPaymentId}`,
+        razorpaySignature,
+      );
+      if (!validSignature) {
+        return errorResponse(
+          "Payment verification failed.",
+          400,
+          undefined,
+          "razorpay_signature_invalid",
+        );
+      }
+
+      const fetched = await fetchRazorpayPayment(config, razorpayPaymentId);
+      if (fetched.error) return fetched.error;
+      const payment = fetched.payment!;
+      if (
+        text(payment.id) !== razorpayPaymentId ||
+        text(payment.order_id) !== razorpayOrderId ||
+        Number(payment.amount) !== Number(attempt.amount_subunits) ||
+        text(payment.currency) !== text(attempt.currency)
+      ) {
+        return errorResponse(
+          "Razorpay Test payment does not match the approved order.",
+          409,
+          undefined,
+          "razorpay_payment_mismatch",
+        );
+      }
+
+      const providerStatus = text(payment.status);
+      const attemptStatus = providerStatus === "captured"
+        ? "captured"
+        : providerStatus === "authorized"
+        ? "authorized"
+        : providerStatus === "failed"
+        ? "failed"
+        : providerStatus === "refunded"
+        ? "refunded"
+        : "signature_verified";
+      const applicationPaymentStatus = attemptStatus === "captured"
+        ? "gateway_captured"
+        : attemptStatus === "authorized"
+        ? "gateway_authorized"
+        : attemptStatus === "failed"
+        ? "failed"
+        : attemptStatus === "refunded"
+        ? "gateway_refunded"
+        : "gateway_signature_verified";
+      const now = new Date().toISOString();
+
+      const { error: attemptSaveError } = await supabase
+        .from("stakeholder_payment_attempts")
+        .update({
+          provider_payment_id: razorpayPaymentId,
+          checkout_signature: razorpaySignature,
+          provider_status: providerStatus,
+          status: attemptStatus,
+          failure_code: text(payment.error_code),
+          failure_description: text(payment.error_description),
+          captured_at: attemptStatus === "captured" ? now : null,
+          refunded_at: attemptStatus === "refunded" ? now : null,
+        })
+        .eq("id", attempt.id);
+      if (attemptSaveError) throw attemptSaveError;
+
       const { data: saved, error: saveError } = await supabase
         .from("stakeholder_applications")
         .update({
@@ -1521,11 +1825,10 @@ Deno.serve(async (req) => {
           razorpay_payment_id: razorpayPaymentId,
           razorpay_signature: razorpaySignature,
           payment_method: "razorpay",
-          payment_status: "gateway_verified",
+          payment_status: applicationPaymentStatus,
           status: "approved",
-          submitted_at: new Date().toISOString(),
         })
-        .eq("id", existing.id)
+        .eq("id", existingApplicationId)
         .select("*")
         .maybeSingle();
       if (saveError) throw saveError;
@@ -1533,8 +1836,12 @@ Deno.serve(async (req) => {
         supabase,
         saved?.id,
         "submitted",
-        "Razorpay payment verified",
-        "Payment details were verified and saved for admin review.",
+        attemptStatus === "captured"
+          ? "Razorpay Test payment captured"
+          : "Razorpay Test payment verified",
+        attemptStatus === "captured"
+          ? "Razorpay confirmed the test payment as captured. No real money was charged."
+          : `Razorpay Test payment status: ${providerStatus || "pending"}.`,
       );
     } else {
       return errorResponse(

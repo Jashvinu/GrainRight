@@ -87,18 +87,23 @@ class StakeholderController extends GetxController {
     final currentApplication = application.value;
     return currentApplication?.status ==
             StakeholderApplicationStatus.approved &&
-        currentApplication?.paymentStatus ==
-            StakeholderPaymentStatus.gatewayVerified;
+        [
+          StakeholderPaymentStatus.gatewayCaptured,
+          StakeholderPaymentStatus.gatewayVerified,
+        ].contains(currentApplication?.paymentStatus);
   }
 
   bool get canStartPayment {
     final currentApplication = application.value;
+    final currentPaymentStatus = currentApplication?.paymentStatus ?? '';
     return currentApplication?.status ==
             StakeholderApplicationStatus.approved &&
-        currentApplication?.paymentStatus !=
-            StakeholderPaymentStatus.gatewayVerified &&
-        currentApplication?.paymentStatus !=
-            StakeholderPaymentStatus.bankTransferSubmitted &&
+        [
+          '',
+          StakeholderPaymentStatus.pending,
+          StakeholderPaymentStatus.failed,
+          StakeholderPaymentStatus.gatewayOrderCreated,
+        ].contains(currentPaymentStatus) &&
         !isLoading.value &&
         !isSubmitting.value;
   }
@@ -155,21 +160,30 @@ class StakeholderController extends GetxController {
       _hasPrimaryNomineeDetails &&
       (nomineeCount.value == 1 || _hasSecondNomineeDetails);
 
+  bool get hasUploadedNomineeSignature =>
+      _isUploadedDocumentPath(nomineeSignature.value, 'nominee_signature');
+
+  bool get hasUploadedNominee2Signature =>
+      _isUploadedDocumentPath(nominee2Signature.value, 'nominee2_signature');
+
+  bool get hasUploadedFarmerSignature =>
+      _isUploadedDocumentPath(farmerSignature.value, 'farmer_signature');
+
   bool get _hasPrimaryNomineeDetails =>
       nomineeName.value.trim().length >= 2 &&
       nomineeAddress.value.trim().length >= 5 &&
       _isValidPhone(nomineeMobileNumber.value) &&
-      _isUploadedDocumentPath(nomineeSignature.value, 'nominee_signature');
+      hasUploadedNomineeSignature;
 
   bool get _hasSecondNomineeDetails =>
       nominee2Name.value.trim().length >= 2 &&
       nominee2Address.value.trim().length >= 5 &&
       _isValidPhone(nominee2MobileNumber.value) &&
-      _isUploadedDocumentPath(nominee2Signature.value, 'nominee2_signature');
+      hasUploadedNominee2Signature;
 
   bool get hasContractAcceptance =>
       contractReadAccepted.value &&
-      _isUploadedDocumentPath(farmerSignature.value, 'farmer_signature') &&
+      hasUploadedFarmerSignature &&
       consentInterestOnly.value &&
       consentNoGuaranteedReturn.value &&
       consentDataUse.value;
@@ -581,11 +595,6 @@ class StakeholderController extends GetxController {
       onUploaded(uploaded.path);
       return true;
     } catch (error) {
-      if (_isSignatureDocumentKind(documentKind) && bytes.isNotEmpty) {
-        onUploaded(_localSignaturePath(documentKind, fileName));
-        errorMessage.value = '';
-        return true;
-      }
       errorMessage.value = _cleanError(error);
       return false;
     } finally {
@@ -651,7 +660,12 @@ class StakeholderController extends GetxController {
         razorpaySignature: razorpaySignature,
       );
       _applyBundle(bundle);
-      return true;
+      final paymentStatus = application.value?.paymentStatus;
+      if (paymentStatus == StakeholderPaymentStatus.failed) {
+        errorMessage.value = 'Razorpay Test payment failed.';
+        return false;
+      }
+      return paymentStatus != StakeholderPaymentStatus.gatewayRefunded;
     } catch (error) {
       errorMessage.value = _cleanError(error);
       return false;
@@ -880,7 +894,7 @@ class StakeholderController extends GetxController {
 
   String _cleanError(Object error) {
     final text = error.toString().replaceFirst('Exception: ', '').trim();
-    return text.isEmpty ? 'Stakeholder plan sync failed.' : text;
+    return text.isEmpty ? 'Shareholder plan sync failed.' : text;
   }
 
   bool _isValidPan(String value) {
@@ -912,24 +926,9 @@ class StakeholderController extends GetxController {
 
   bool _isUploadedDocumentPath(String value, String documentKind) {
     final path = value.trim();
-    return path.contains('/$documentKind/') && path.split('/').length >= 3;
-  }
-
-  bool _isSignatureDocumentKind(String documentKind) {
-    return documentKind == 'farmer_signature' ||
-        documentKind == 'nominee_signature' ||
-        documentKind == 'nominee2_signature';
-  }
-
-  String _localSignaturePath(String documentKind, String fileName) {
-    final rawName = fileName.split(RegExp(r'[\\/]')).last;
-    final safeName = rawName
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9_.-]+'), '-')
-        .replaceAll(RegExp(r'-+'), '-')
-        .replaceAll(RegExp(r'^-|-$'), '');
-    final name = safeName.isEmpty ? '$documentKind.png' : safeName;
-    return 'local/$documentKind/${DateTime.now().millisecondsSinceEpoch}-$name';
+    return !path.startsWith('local/') &&
+        path.contains('/$documentKind/') &&
+        path.split('/').length >= 3;
   }
 
   String _normalizePhone(String value) {

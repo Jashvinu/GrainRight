@@ -12,11 +12,21 @@ class AdminController extends GetxController {
   final AdminService _service;
 
   final snapshot = Rxn<AdminDashboardSnapshot>();
+  final shareholderCandidatePage = Rxn<AdminShareholderCandidatePage>();
   final isLoading = false.obs;
+  final isLoadingShareholderCandidates = false.obs;
   final isReviewing = false.obs;
   final errorMessage = ''.obs;
+  final shareholderCandidateError = ''.obs;
   final adminNote = ''.obs;
   final stakeholderFilter = 'pending'.obs;
+  final shareholderCandidateSearch = ''.obs;
+  final shareholderCandidateVillage = ''.obs;
+  final shareholderCandidateTaluka = ''.obs;
+  final shareholderCandidateDistrict = ''.obs;
+
+  static const shareholderCandidatePageSize = 100;
+  int _candidateRequestToken = 0;
 
   @override
   void onInit() {
@@ -46,6 +56,76 @@ class AdminController extends GetxController {
 
   void setStakeholderFilter(String value) {
     stakeholderFilter.value = value.trim().isEmpty ? 'pending' : value.trim();
+  }
+
+  Future<void> loadShareholderCandidates({
+    bool resetOffset = false,
+    int? offset,
+  }) async {
+    final requestToken = ++_candidateRequestToken;
+    final currentOffset = resetOffset
+        ? 0
+        : (offset ?? shareholderCandidatePage.value?.offset ?? 0);
+    isLoadingShareholderCandidates.value = true;
+    shareholderCandidateError.value = '';
+    try {
+      final page = await _service.loadShareholderCandidates(
+        search: shareholderCandidateSearch.value,
+        village: shareholderCandidateVillage.value,
+        taluka: shareholderCandidateTaluka.value,
+        district: shareholderCandidateDistrict.value,
+        offset: currentOffset,
+        limit: shareholderCandidatePageSize,
+      );
+      if (requestToken == _candidateRequestToken) {
+        shareholderCandidatePage.value = page;
+      }
+    } catch (error) {
+      if (requestToken == _candidateRequestToken) {
+        shareholderCandidateError.value = _cleanError(error);
+        shareholderCandidatePage.value ??=
+            AdminShareholderCandidatePage.empty();
+      }
+    } finally {
+      if (requestToken == _candidateRequestToken) {
+        isLoadingShareholderCandidates.value = false;
+      }
+    }
+  }
+
+  void searchShareholderCandidates(String value) {
+    shareholderCandidateSearch.value = value.trim();
+    unawaited(loadShareholderCandidates(resetOffset: true));
+  }
+
+  void setShareholderCandidateVillage(String value) {
+    shareholderCandidateVillage.value = value.trim();
+    unawaited(loadShareholderCandidates(resetOffset: true));
+  }
+
+  void setShareholderCandidateTaluka(String value) {
+    shareholderCandidateTaluka.value = value.trim();
+    unawaited(loadShareholderCandidates(resetOffset: true));
+  }
+
+  void setShareholderCandidateDistrict(String value) {
+    shareholderCandidateDistrict.value = value.trim();
+    unawaited(loadShareholderCandidates(resetOffset: true));
+  }
+
+  void previousShareholderCandidatePage() {
+    final page = shareholderCandidatePage.value;
+    if (page == null || page.offset <= 0) return;
+    final offset = (page.offset - page.limit).clamp(0, page.totalCount).toInt();
+    unawaited(loadShareholderCandidates(offset: offset));
+  }
+
+  void nextShareholderCandidatePage() {
+    final page = shareholderCandidatePage.value;
+    if (page == null || page.offset + page.rows.length >= page.totalCount) {
+      return;
+    }
+    unawaited(loadShareholderCandidates(offset: page.offset + page.limit));
   }
 
   Future<bool> reviewStakeholder({

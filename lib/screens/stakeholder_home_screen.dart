@@ -18,6 +18,8 @@ import '../models/stakeholder_plan.dart';
 import '../models/verified_farmer_record.dart';
 import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
+import '../controllers/language_controller.dart';
 import '../widgets/farm_hills_background.dart';
 
 class StakeholderHomeScreen extends StatefulWidget {
@@ -84,13 +86,6 @@ class _StakeholderHomeScreenState extends State<StakeholderHomeScreen> {
     return _StakeholderScaffold(
       title: UiStrings.t('stakeholder_home_title'),
       currentRoute: '/stakeholder',
-      actions: [
-        IconButton(
-          tooltip: UiStrings.t('refresh'),
-          onPressed: _refresh,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-      ],
       child: Obx(() {
         final farmer = _auth.verifiedFarmer.value;
         if (farmer == null) {
@@ -822,6 +817,9 @@ class _StakeholderSelectAmountScreenState
   late final TextEditingController _upiController;
   late final Worker _noteWorker;
   final _picker = ImagePicker();
+  final _nomineeSignatureKey = GlobalKey<_SignaturePadPanelState>();
+  final _nominee2SignatureKey = GlobalKey<_SignaturePadPanelState>();
+  final _farmerSignatureKey = GlobalKey<_SignaturePadPanelState>();
   int _step = 0;
 
   @override
@@ -990,8 +988,8 @@ class _StakeholderSelectAmountScreenState
     );
     if (ok) {
       Get.snackbar(
-        'Submitted successfully',
-        'Stakeholder request saved for admin review.',
+        UiStrings.fromEnglish('Submitted successfully'),
+        UiStrings.fromEnglish('Shareholder request saved for admin review.'),
         snackPosition: SnackPosition.BOTTOM,
       );
       Get.offNamed('/stakeholder/status');
@@ -1034,24 +1032,24 @@ class _StakeholderSelectAmountScreenState
     );
   }
 
-  Future<void> _saveFarmerSignature(Uint8List bytes) async {
-    await _stakeholder.uploadFarmerSignature(
+  Future<bool> _saveFarmerSignature(Uint8List bytes) {
+    return _stakeholder.uploadFarmerSignature(
       farmer: Get.find<MainAuthController>().verifiedFarmer.value,
       bytes: bytes,
       fileName: 'farmer-signature.png',
     );
   }
 
-  Future<void> _saveNomineeSignature(Uint8List bytes) async {
-    await _stakeholder.uploadNomineeSignature(
+  Future<bool> _saveNomineeSignature(Uint8List bytes) {
+    return _stakeholder.uploadNomineeSignature(
       farmer: Get.find<MainAuthController>().verifiedFarmer.value,
       bytes: bytes,
       fileName: 'nominee-signature.png',
     );
   }
 
-  Future<void> _saveNominee2Signature(Uint8List bytes) async {
-    await _stakeholder.uploadNominee2Signature(
+  Future<bool> _saveNominee2Signature(Uint8List bytes) {
+    return _stakeholder.uploadNominee2Signature(
       farmer: Get.find<MainAuthController>().verifiedFarmer.value,
       bytes: bytes,
       fileName: 'nominee-2-signature.png',
@@ -1263,7 +1261,34 @@ class _StakeholderSelectAmountScreenState
     return 'Complete this step first.';
   }
 
-  void _continue(StakeholderPlan plan, double amount) {
+  Future<bool> _savePendingSignatures() async {
+    if (_step == 0) {
+      final primarySaved =
+          await _nomineeSignatureKey.currentState?.saveIfNeeded() ??
+          _stakeholder.hasUploadedNomineeSignature;
+      if (!primarySaved) return false;
+      if (_stakeholder.nomineeCount.value == 2) {
+        return await _nominee2SignatureKey.currentState?.saveIfNeeded() ??
+            _stakeholder.hasUploadedNominee2Signature;
+      }
+    } else if (_step == 5) {
+      return await _farmerSignatureKey.currentState?.saveIfNeeded() ??
+          _stakeholder.hasUploadedFarmerSignature;
+    }
+    return true;
+  }
+
+  Future<void> _continue(StakeholderPlan plan, double amount) async {
+    final signaturesSaved = await _savePendingSignatures();
+    if (!mounted) return;
+    if (!signaturesSaved) {
+      final uploadError = _stakeholder.errorMessage.value.trim();
+      _showStakeholderMessage(
+        context,
+        uploadError.isEmpty ? _stepError() : uploadError,
+      );
+      return;
+    }
     if (!_canContinueStep(plan, amount)) {
       _showStakeholderMessage(context, _stepError());
       return;
@@ -1472,9 +1497,10 @@ class _StakeholderSelectAmountScreenState
             onChanged: _stakeholder.setNomineeAddress,
           ),
           _SignaturePadPanel(
+            key: _nomineeSignatureKey,
             title: 'Nominee 1 signature / thumb mark',
             subtitle: 'Draw nominee 1 signature or thumb mark in the box.',
-            uploaded: _stakeholder.nomineeSignature.value.trim().isNotEmpty,
+            uploaded: _stakeholder.hasUploadedNomineeSignature,
             uploading: _stakeholder.isUploadingNomineeSignature.value,
             uploadedText: 'Nominee 1 signature saved',
             emptyText: 'Nominee 1 signature required',
@@ -1506,9 +1532,10 @@ class _StakeholderSelectAmountScreenState
               onChanged: _stakeholder.setNominee2Address,
             ),
             _SignaturePadPanel(
+              key: _nominee2SignatureKey,
               title: 'Nominee 2 signature / thumb mark',
               subtitle: 'Draw nominee 2 signature or thumb mark in the box.',
-              uploaded: _stakeholder.nominee2Signature.value.trim().isNotEmpty,
+              uploaded: _stakeholder.hasUploadedNominee2Signature,
               uploading: _stakeholder.isUploadingNominee2Signature.value,
               uploadedText: 'Nominee 2 signature saved',
               emptyText: 'Nominee 2 signature required',
@@ -1827,10 +1854,11 @@ class _StakeholderSelectAmountScreenState
               ),
               const SizedBox(height: 12),
               _SignaturePadPanel(
+                key: _farmerSignatureKey,
                 title: 'Farmer signature / thumb mark',
                 subtitle:
                     'Draw farmer signature or thumb mark after reading the contract.',
-                uploaded: _stakeholder.farmerSignature.value.trim().isNotEmpty,
+                uploaded: _stakeholder.hasUploadedFarmerSignature,
                 uploading: _stakeholder.isUploadingFarmerSignature.value,
                 uploadedText: 'Farmer signature saved',
                 emptyText: 'Farmer signature required',
@@ -1881,10 +1909,10 @@ class _StakeholderSelectAmountScreenState
                       ? Icons.verified_rounded
                       : Icons.lock_outline_rounded,
                   title: _stakeholder.hasPaidShares
-                      ? 'Shares bought'
+                      ? 'Test payment captured'
                       : UiStrings.t('stakeholder_application_locked_title'),
                   body: _stakeholder.hasPaidShares
-                      ? 'Your bought shares are saved in stakeholder login and farmer profile.'
+                      ? 'Razorpay captured the test payment. No real money was charged and no shares were allocated.'
                       : UiStrings.t('stakeholder_application_locked_body'),
                   actionLabel: UiStrings.t('stakeholder_status_title'),
                   onAction: () => Get.offNamed('/stakeholder/status'),
@@ -2447,20 +2475,21 @@ class _StakeholderScaffold extends StatelessWidget {
   final String title;
   final String currentRoute;
   final Widget child;
-  final List<Widget> actions;
   final bool showBack;
 
   const _StakeholderScaffold({
     required this.title,
     required this.currentRoute,
     required this.child,
-    this.actions = const [],
     this.showBack = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 760;
+    final language = Get.isRegistered<LanguageController>()
+        ? Get.find<LanguageController>()
+        : null;
     return Scaffold(
       drawer: wide ? null : _StakeholderDrawer(currentRoute: currentRoute),
       appBar: AppBar(
@@ -2479,7 +2508,19 @@ class _StakeholderScaffold extends StatelessWidget {
               ),
         title: Text(UiStrings.fromEnglish(title)),
         actions: [
-          ...actions,
+          if (language != null)
+            Obx(
+              () => Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Center(
+                  child: LanguageSelectorButton(
+                    code: language.language.value,
+                    onChanged: language.setLanguage,
+                    compact: MediaQuery.sizeOf(context).width < 520,
+                  ),
+                ),
+              ),
+            ),
           if (showBack && !wide) ...[
             Builder(
               builder: (context) => Padding(
@@ -2941,10 +2982,12 @@ class _PlanHeroCard extends StatelessWidget {
     final hasApplication = application != null;
     final paymentReady =
         application?.status == StakeholderApplicationStatus.approved &&
-        application?.paymentStatus !=
-            StakeholderPaymentStatus.gatewayVerified &&
-        application?.paymentStatus !=
-            StakeholderPaymentStatus.bankTransferSubmitted;
+        [
+          '',
+          StakeholderPaymentStatus.pending,
+          StakeholderPaymentStatus.failed,
+          StakeholderPaymentStatus.gatewayOrderCreated,
+        ].contains(application?.paymentStatus ?? '');
     final locked =
         hasApplication &&
         application!.status != StakeholderApplicationStatus.submitted;
@@ -3118,13 +3161,13 @@ class _StakeholderSubmissionSuccessCard extends StatelessWidget {
     };
     final body = switch (status) {
       StakeholderApplicationStatus.approved =>
-        'Admin approved this stakeholder request. Payment can start from this page.',
+        'Admin approved this shareholder request. Payment can start from this page.',
       StakeholderApplicationStatus.rejected =>
-        'Admin rejected this stakeholder request. Check the admin note or contact Kalsubai Farms.',
+        'Admin rejected this shareholder request. Check the admin note or contact Kalsubai Farms.',
       StakeholderApplicationStatus.underReview =>
-        'Kalsubai Farms admin is reviewing the submitted farmer stakeholder request.',
+        'Kalsubai Farms admin is reviewing the submitted farmer shareholder request.',
       _ =>
-        'Your farmer stakeholder request is saved and waiting for admin review.',
+        'Your farmer shareholder request is saved and waiting for admin review.',
     };
     return Container(
       padding: const EdgeInsets.all(14),
@@ -3146,7 +3189,7 @@ class _StakeholderSubmissionSuccessCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
+                  UiStrings.fromEnglish(title),
                   style: const TextStyle(
                     color: AppTheme.greenDark,
                     fontSize: 16,
@@ -3155,7 +3198,7 @@ class _StakeholderSubmissionSuccessCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  body,
+                  UiStrings.fromEnglish(body),
                   style: const TextStyle(
                     color: AppTheme.textDark,
                     fontWeight: FontWeight.w700,
@@ -3245,7 +3288,7 @@ class _StakeholderApplicationDetailsCard extends StatelessWidget {
       application.farmerPincode,
     ].where((part) => part.trim().isNotEmpty).join(', ');
     return _Section(
-      title: 'Submitted stakeholder details',
+      title: 'Submitted shareholder details',
       subtitle: 'Farmer, nominee, KYC, land and bank details saved for review.',
       child: Column(
         children: [
@@ -3337,8 +3380,10 @@ class _ShareholderSummaryCard extends StatelessWidget {
     final farmer = Get.isRegistered<MainAuthController>()
         ? Get.find<MainAuthController>().verifiedFarmer.value
         : null;
-    final paid =
-        application?.paymentStatus == StakeholderPaymentStatus.gatewayVerified;
+    final paid = [
+      StakeholderPaymentStatus.gatewayCaptured,
+      StakeholderPaymentStatus.gatewayVerified,
+    ].contains(application?.paymentStatus);
     final approved =
         application?.status == StakeholderApplicationStatus.approved;
     final amount = application?.selectedAmount ?? selectedAmount;
@@ -3350,9 +3395,9 @@ class _ShareholderSummaryCard extends StatelessWidget {
           ? 'Approved Share Application'
           : 'Short Shareholder Format',
       subtitle: paid
-          ? 'Bought shares are now linked to this stakeholder and farmer profile.'
+          ? 'The test payment was captured. This does not allocate real shares.'
           : approved
-          ? 'Admin approved this application. Start payment to buy shares.'
+          ? 'Admin approved this application. Run a Razorpay Test payment.'
           : 'Review this format before submitting interest for admin approval.',
       child: _MetricGrid(
         metrics: [
@@ -3370,7 +3415,7 @@ class _ShareholderSummaryCard extends StatelessWidget {
           _MetricData(
             'Shareholder status',
             paid
-                ? 'Shares bought'
+                ? 'Test payment captured'
                 : approved
                 ? 'Approved for payment'
                 : _statusLabel(application?.status),
@@ -3419,6 +3464,11 @@ class _StakeholderPaymentCardState extends State<_StakeholderPaymentCard> {
     final farmer = Get.find<MainAuthController>().verifiedFarmer.value;
     final order = await widget.stakeholder.createRazorpayOrder(farmer);
     if (order == null) return;
+    if (!order.isTestMode) {
+      widget.stakeholder.errorMessage.value =
+          'Payment blocked: this app accepts Razorpay Test Mode orders only.';
+      return;
+    }
     final completer = Completer<bool>();
     _activeOrder = order;
     _paymentCompleter = completer;
@@ -3428,17 +3478,14 @@ class _StakeholderPaymentCardState extends State<_StakeholderPaymentCard> {
         'amount': order.amountSubunits,
         'currency': order.currency,
         'name': 'Kalsubai Farms',
-        'description': 'Approved stakeholder share payment',
+        'description': UiStrings.fromEnglish(
+          'Shareholder application test payment',
+        ),
         'order_id': order.orderId,
         'allow_rotation': true,
         'prefill': {
           'name': farmer?.farmerName.trim() ?? '',
           'contact': farmer?.phone ?? '',
-        },
-        'notes': {
-          'farmer_id': farmer?.farmerId ?? '',
-          'selected_amount': widget.stakeholder.selectedAmount.value
-              .toStringAsFixed(0),
         },
         'theme': {'color': '#0B5D2A'},
       });
@@ -3465,7 +3512,15 @@ class _StakeholderPaymentCardState extends State<_StakeholderPaymentCard> {
     _activeOrder = null;
     _paymentCompleter = null;
     if (ok && mounted) {
-      _showStakeholderMessage(context, 'Payment verified. Shares bought.');
+      final captured =
+          widget.stakeholder.application.value?.paymentStatus ==
+          StakeholderPaymentStatus.gatewayCaptured;
+      _showStakeholderMessage(
+        context,
+        captured
+            ? 'Test payment captured. No real money was charged.'
+            : 'Test payment verified. Waiting for Razorpay capture confirmation.',
+      );
       Get.offNamed('/stakeholder/status');
     }
   }
@@ -3487,12 +3542,30 @@ class _StakeholderPaymentCardState extends State<_StakeholderPaymentCard> {
   Widget build(BuildContext context) {
     final application = widget.stakeholder.application.value;
     return _Section(
-      title: 'Start Payment',
+      title: 'Razorpay Test Payment',
       subtitle:
-          'Your application is approved. Complete payment to buy the approved shares.',
+          'Test Mode only. No real money will be charged and no shares will be allocated.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7E0),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE9B949)),
+            ),
+            child: Text(
+              UiStrings.fromEnglish(
+                'TEST MODE • Use Razorpay test payment details only.',
+              ),
+              style: const TextStyle(
+                color: Color(0xFF7A4E00),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           _MetricGrid(
             metrics: [
               _MetricData(
@@ -3519,7 +3592,7 @@ class _StakeholderPaymentCardState extends State<_StakeholderPaymentCard> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.payment_rounded),
-              label: Text(UiStrings.t('pay_now_buy_shares')),
+              label: Text(UiStrings.fromEnglish('Open Razorpay Test Checkout')),
             ),
           ),
         ],
@@ -3658,14 +3731,16 @@ class _MetricGrid extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    metric.title,
+                    UiStrings.fromEnglish(metric.title),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _smallMutedStyle,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    metric.value.trim().isEmpty ? '-' : metric.value,
+                    metric.value.trim().isEmpty
+                        ? '-'
+                        : UiStrings.fromEnglish(metric.value),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -3778,7 +3853,7 @@ class _StakeholderChecklist extends StatelessWidget {
   Widget build(BuildContext context) {
     final readyCount = items.where((item) => item.ready).length;
     return _Section(
-      title: 'Farmer stakeholder checklist',
+      title: 'Farmer shareholder checklist',
       subtitle: '$readyCount/${items.length} ready before allocation review.',
       child: Wrap(
         spacing: 8,
@@ -3817,7 +3892,7 @@ class _ChecklistPill extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            item.label,
+            UiStrings.fromEnglish(item.label),
             style: TextStyle(
               color: color,
               fontSize: 12,
@@ -4579,9 +4654,10 @@ class _SignaturePadPanel extends StatefulWidget {
   final bool uploading;
   final String uploadedText;
   final String emptyText;
-  final Future<void> Function(Uint8List bytes) onSave;
+  final Future<bool> Function(Uint8List bytes) onSave;
 
   const _SignaturePadPanel({
+    super.key,
     required this.title,
     required this.subtitle,
     required this.uploaded,
@@ -4623,14 +4699,23 @@ class _SignaturePadPanelState extends State<_SignaturePadPanel> {
     );
   }
 
-  Future<void> _save() async {
-    if (!_hasInk || widget.uploading) return;
+  Future<bool> _save() async {
+    if (!_hasInk || widget.uploading) return false;
     final size = _canvasSize == Size.zero ? const Size(320, 156) : _canvasSize;
     final bytes = await _renderSignaturePng(
       _strokes.map((stroke) => List<Offset>.from(stroke)).toList(),
       size,
     );
-    await widget.onSave(bytes);
+    final saved = await widget.onSave(bytes);
+    if (saved && mounted) {
+      setState(_strokes.clear);
+    }
+    return saved;
+  }
+
+  Future<bool> saveIfNeeded() {
+    if (_hasInk) return _save();
+    return Future.value(widget.uploaded);
   }
 
   void _clear() {
@@ -5152,7 +5237,7 @@ class _PolicyChecklistPanel extends StatelessWidget {
             onChanged: onContractReadAccepted,
             title: 'Application is interest only',
             body:
-                'This form records interest for farmer stakeholder shares. It is not a confirmed allocation.',
+                'This form records interest for farmer shareholder shares. It is not a confirmed allocation.',
           ),
           _PolicyCheckItem(
             value: consentInterestOnly,
@@ -5173,7 +5258,7 @@ class _PolicyChecklistPanel extends StatelessWidget {
             onChanged: onConsentDataUse,
             title: 'Data use and signature consent',
             body:
-                'Submitted farmer, KYC, bank and nominee details are used only for stakeholder review, compliance and records.',
+                'Submitted farmer, KYC, bank and nominee details are used only for shareholder review, compliance and records.',
             last: true,
           ),
           if (!contractReadAccepted)
@@ -5444,29 +5529,39 @@ String _paymentMethodLabel(String? method) {
     case StakeholderPaymentMethod.razorpay:
       return 'Razorpay';
     case StakeholderPaymentMethod.bankTransfer:
-      return 'Bank transfer';
+      return UiStrings.fromEnglish('Bank transfer');
   }
-  return 'Not selected';
+  return UiStrings.fromEnglish('Not selected');
 }
 
 String _paymentStatusLabel(String? status) {
   switch ((status ?? '').trim()) {
     case StakeholderPaymentStatus.gatewayOrderCreated:
-      return 'Payment started';
+      return UiStrings.fromEnglish('Test payment started');
+    case StakeholderPaymentStatus.gatewaySignatureVerified:
+      return UiStrings.fromEnglish('Test signature verified');
+    case StakeholderPaymentStatus.gatewayAuthorized:
+      return UiStrings.fromEnglish('Test payment authorized');
+    case StakeholderPaymentStatus.gatewayCaptured:
+      return UiStrings.fromEnglish('Test payment captured');
+    case StakeholderPaymentStatus.gatewayRefunded:
+      return UiStrings.fromEnglish('Test payment refunded');
     case StakeholderPaymentStatus.gatewayVerified:
-      return 'Payment verified';
+      return UiStrings.fromEnglish('Payment verified (legacy)');
     case StakeholderPaymentStatus.bankTransferSubmitted:
-      return 'Bank transfer submitted';
+      return UiStrings.fromEnglish('Bank transfer submitted');
     case StakeholderPaymentStatus.failed:
-      return 'Payment failed';
+      return UiStrings.fromEnglish('Payment failed');
   }
-  return 'Pending';
+  return UiStrings.t('pending');
 }
 
 String _uploadedLabel(String path) {
   final clean = path.trim();
-  if (clean.isEmpty) return 'Not uploaded';
-  return clean.startsWith('local/') ? 'Saved in form' : 'Uploaded';
+  if (clean.isEmpty) return UiStrings.fromEnglish('Not uploaded');
+  return clean.startsWith('local/')
+      ? UiStrings.fromEnglish('Saved in form')
+      : UiStrings.fromEnglish('Uploaded');
 }
 
 String _firstNonEmpty(String? value, String fallback) {
@@ -5514,7 +5609,9 @@ String _maskedPan(String value) {
 String _maskedAccount(String value) {
   final account = value.replaceAll(RegExp(r'\D'), '');
   if (account.length <= 4) return account.isEmpty ? '-' : account;
-  return 'ending ${account.substring(account.length - 4)}';
+  return UiStrings.f('ending_value', {
+    'value': account.substring(account.length - 4),
+  });
 }
 
 String _normalizedAccount(String value) {
