@@ -22,6 +22,9 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
   Map<String, int> _counts = const {};
   Map<String, dynamic> _metrics = const {};
   String? _selectedModule;
+  String? _requestedOperation;
+  bool _returnToSetup = false;
+  Map<String, dynamic> _prefill = const {};
   List<Map<String, dynamic>> _rows = const [];
   bool _loading = true;
   String _error = '';
@@ -30,8 +33,16 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
   void initState() {
     super.initState();
     final requested = Get.arguments;
-    if (requested is Map && requested['module'] is String) {
-      _selectedModule = requested['module'] as String;
+    if (requested is Map) {
+      _returnToSetup = requested['return_to_setup'] == true;
+      if (requested['module'] is String) {
+        _selectedModule = requested['module'] as String;
+        _requestedOperation = requested['open_operation'] as String?;
+        final prefill = requested['prefill'];
+        if (prefill is Map) {
+          _prefill = Map<String, dynamic>.from(prefill);
+        }
+      }
     }
     _load();
   }
@@ -67,6 +78,22 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
     await _load();
   }
 
+  void _goBack() {
+    if (_selectedModule != null && !_returnToSetup) {
+      setState(() {
+        _selectedModule = null;
+        _requestedOperation = null;
+        _prefill = const {};
+      });
+      return;
+    }
+    if (Get.previousRoute.isNotEmpty && Get.previousRoute != Get.currentRoute) {
+      Get.back();
+    } else {
+      Get.offNamed('/fpo');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final module = _selectedModule;
@@ -77,6 +104,12 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
           : fpcModuleDefinition(module).title,
       actions: [
         IconButton(
+          tooltip: UiStrings.fromEnglish('Back'),
+          onPressed: _goBack,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        IconButton(
+          tooltip: UiStrings.fromEnglish('Refresh'),
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.refresh_rounded),
         ),
@@ -91,22 +124,64 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
               module: module,
               rows: _rows,
               service: _service,
-              onBack: () => setState(() => _selectedModule = null),
+              onBack: _returnToSetup
+                  ? Get.back
+                  : () => setState(() => _selectedModule = null),
               onChanged: _load,
+              initialOperation: _requestedOperation,
+              initialValues: _prefill,
             ),
     );
   }
 
   Widget _moduleDashboard() => ListView(
-    padding: const EdgeInsets.fromLTRB(20, 14, 20, 112),
+    padding: const EdgeInsets.fromLTRB(16, 14, 16, 112),
     children: [
-      _Hero(
-        title: _membership?.fpcName ?? 'FPC workspace',
-        subtitle: UiStrings.t('fpc_os_workspace_summary'),
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  UiStrings.fromEnglish(
+                    _membership?.fpcName ?? 'FPC workspace',
+                  ),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  UiStrings.t('fpc_os_workspace_summary'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppTheme.textMuted),
+                ),
+              ],
+            ),
+          ),
+          IconButton.filledTonal(
+            tooltip: UiStrings.fromEnglish('Analytics'),
+            onPressed: () => Get.toNamed('/fpo/analytics'),
+            icon: const Icon(Icons.analytics_rounded),
+          ),
+        ],
       ),
-      const SizedBox(height: 14),
+      const SizedBox(height: 12),
       _KpiStrip(metrics: _metrics),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
+      Text(
+        UiStrings.fromEnglish('Operations'),
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        UiStrings.fromEnglish('Network → harvest → procurement → sale'),
+        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+      ),
+      const SizedBox(height: 8),
       LayoutBuilder(
         builder: (context, constraints) {
           final columns = constraints.maxWidth >= 950
@@ -122,7 +197,7 @@ class _FpcOperatingSystemScreenState extends State<FpcOperatingSystemScreen> {
               crossAxisCount: columns,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
-              childAspectRatio: columns == 2 ? 1.08 : 1.28,
+              mainAxisExtent: columns == 2 ? 108 : 104,
             ),
             itemBuilder: (context, index) {
               final item = fpcModuleDefinitions[index];
@@ -161,6 +236,13 @@ const fpcModuleDefinitions = <FpcModuleDefinition>[
     'Farmer record',
     'Linked farmers, KYC, farms, history and payments.',
     Icons.groups_rounded,
+  ),
+  FpcModuleDefinition(
+    'crop_programs',
+    'Seed-to-Sale Programs',
+    'Farmer enrollment',
+    'Issue seed, track mandatory field checks, approve harvest and protect selling.',
+    Icons.hub_rounded,
   ),
   FpcModuleDefinition(
     'farm_monitoring',
@@ -289,14 +371,9 @@ class _KpiStrip extends StatelessWidget {
       ),
       ('Open lots', '${metrics['open_lots'] ?? 0}', Icons.inventory_2_outlined),
       ('Stock kg', _number(metrics['stock_kg']), Icons.warehouse_outlined),
-      (
-        'Pending payments',
-        '${metrics['pending_payments'] ?? 0}',
-        Icons.payments_outlined,
-      ),
     ];
     return SizedBox(
-      height: 92,
+      height: 82,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: values.length,
@@ -304,22 +381,23 @@ class _KpiStrip extends StatelessWidget {
         itemBuilder: (context, index) {
           final item = values[index];
           return Container(
-            width: 142,
-            padding: const EdgeInsets.all(13),
+            width: 132,
+            padding: const EdgeInsets.all(11),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE3E9DD)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(item.$3, size: 19, color: AppTheme.greenDark),
+                Icon(item.$3, size: 18, color: AppTheme.greenDark),
                 const Spacer(),
                 Text(
                   item.$2,
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
-                    fontSize: 17,
+                    fontSize: 16,
                   ),
                 ),
                 Text(
@@ -339,34 +417,6 @@ class _KpiStrip extends StatelessWidget {
       (num.tryParse('$value') ?? 0).toStringAsFixed(1);
 }
 
-class _Hero extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  const _Hero({required this.title, required this.subtitle});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          UiStrings.fromEnglish(title),
-          style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          UiStrings.fromEnglish(subtitle),
-          style: TextStyle(color: Colors.grey.shade700, height: 1.35),
-        ),
-      ],
-    ),
-  );
-}
-
 class _ModuleCard extends StatelessWidget {
   final FpcModuleDefinition definition;
   final int count;
@@ -379,12 +429,12 @@ class _ModuleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
-    borderRadius: BorderRadius.circular(18),
+    borderRadius: BorderRadius.circular(16),
     child: InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -398,16 +448,16 @@ class _ModuleCard extends StatelessWidget {
                 ),
               ],
             ),
-            const Spacer(),
             Text(
               UiStrings.fromEnglish(definition.title),
-              maxLines: 2,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
-              UiStrings.fromEnglish(definition.description),
-              maxLines: 2,
+              UiStrings.fromEnglish(definition.itemLabel),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
             ),
@@ -431,7 +481,7 @@ class _ErrorState extends StatelessWidget {
         children: [
           const Icon(Icons.cloud_off_rounded, size: 44),
           const SizedBox(height: 10),
-          Text(message, textAlign: TextAlign.center),
+          Text(UiStrings.authError(message), textAlign: TextAlign.center),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: onRetry,

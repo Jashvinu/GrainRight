@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'fpc_operating_models.dart';
+
 class FpcAccountIdentity {
   final String organizationName;
   final String displayName;
@@ -32,6 +34,29 @@ class FpcAccountIdentity {
       appMetadata: user?.appMetadata,
       email: user?.email,
       userId: user?.id,
+    );
+  }
+
+  factory FpcAccountIdentity.fromMembership(
+    FpcMembershipContext membership, {
+    Map<String, dynamic>? userMetadata,
+    Map<String, dynamic>? appMetadata,
+    String? email,
+    String? userId,
+  }) {
+    final fallback = FpcAccountIdentity.fromMetadata(
+      userMetadata: userMetadata,
+      appMetadata: appMetadata,
+      email: email,
+      userId: userId,
+    );
+    return FpcAccountIdentity(
+      organizationName: membership.fpcName,
+      displayName: fallback.displayName,
+      email: fallback.email,
+      role: membership.role,
+      userId: fallback.userId,
+      phone: fallback.phone,
     );
   }
 

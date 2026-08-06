@@ -63,7 +63,9 @@ class _FpcLoginScreenState extends State<FpcLoginScreen> {
         onBack: _goBack,
         fallbackIcon: Icons.groups_2_outlined,
         info: RoleLoginInfoStrip(
-          icon: Icons.verified_user_outlined,
+          icon: notice.isEmpty
+              ? Icons.verified_user_outlined
+              : Icons.info_outline_rounded,
           text: notice.isEmpty ? UiStrings.t('fpc_login_info') : notice,
         ),
         form: Form(

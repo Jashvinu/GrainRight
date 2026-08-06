@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 abstract class _TrustedRoleMiddleware extends GetMiddleware {
   Set<String> get roles;
+  bool get requireFpcBinding => false;
 
   @override
   RouteSettings? redirect(String? route) {
@@ -21,7 +22,13 @@ abstract class _TrustedRoleMiddleware extends GetMiddleware {
         rawRoles.map((value) => '$value'.trim().toLowerCase()),
       );
     }
-    if (serverRoles.any(roles.contains)) return null;
+    if (serverRoles.any(roles.contains)) {
+      if (requireFpcBinding &&
+          '${user.appMetadata['fpc_id'] ?? ''}'.trim().isEmpty) {
+        return const RouteSettings(name: '/login');
+      }
+      return null;
+    }
     return const RouteSettings(name: '/login');
   }
 }
@@ -40,11 +47,17 @@ class FpcAdminRouteMiddleware extends _TrustedRoleMiddleware {
     'fpo/fpc',
     'fpc_admin',
   };
+
+  @override
+  bool get requireFpcBinding => true;
 }
 
 class FieldOfficerRouteMiddleware extends _TrustedRoleMiddleware {
   @override
   Set<String> get roles => const {'field_officer'};
+
+  @override
+  bool get requireFpcBinding => true;
 }
 
 class FpcLoginRouteMiddleware extends _TrustedRoleMiddleware {
@@ -57,4 +70,7 @@ class FpcLoginRouteMiddleware extends _TrustedRoleMiddleware {
     'fpc_admin',
     'field_officer',
   };
+
+  @override
+  bool get requireFpcBinding => true;
 }

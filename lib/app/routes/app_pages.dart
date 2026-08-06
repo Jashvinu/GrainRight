@@ -11,7 +11,10 @@ import '../../screens/farmer_home_screen.dart';
 import '../../screens/farmer_login_screen.dart';
 import '../../screens/farmer_signup_screen.dart';
 import '../../screens/fpc_login_screen.dart';
+import '../../screens/fpc_analytics_screen.dart';
 import '../../screens/fpc_qr_hub_screen.dart';
+import '../../screens/fpc_seeds_screen.dart';
+import '../../screens/fpc_setup_screen.dart';
 import '../../screens/fpo_farmer_qr_scan_screen.dart';
 import '../../screens/fpc_farmer_directory_screen.dart';
 import '../../screens/fpo_grading_review_screen.dart';
@@ -140,8 +143,23 @@ class AppPages {
       middlewares: [FpcAdminRouteMiddleware()],
     ),
     GetPage(
+      name: '/fpo/setup',
+      page: () => const FpcSetupScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
       name: '/fpo/operations',
       page: () => const FpcOperatingSystemScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/analytics',
+      page: () => const FpcAnalyticsScreen(),
+      middlewares: [FpcAdminRouteMiddleware()],
+    ),
+    GetPage(
+      name: '/fpo/seeds',
+      page: () => const FpcSeedsScreen(),
       middlewares: [FpcAdminRouteMiddleware()],
     ),
     GetPage(

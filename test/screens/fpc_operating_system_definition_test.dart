@@ -5,11 +5,12 @@ void main() {
   test('operating system exposes every blueprint module', () {
     final keys = fpcModuleDefinitions.map((module) => module.key).toSet();
 
-    expect(fpcModuleDefinitions, hasLength(15));
+    expect(fpcModuleDefinitions, hasLength(16));
     expect(
       keys,
       containsAll({
         'farmer_network',
+        'crop_programs',
         'farm_monitoring',
         'harvest_planning',
         'procurement',

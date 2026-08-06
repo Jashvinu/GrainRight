@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 class BrandText extends StatelessWidget {
@@ -11,8 +12,8 @@ class BrandText extends StatelessWidget {
     return Text.rich(
       TextSpan(
         children: [
-            TextSpan(
-            text: 'Kalsubai',
+          TextSpan(
+            text: UiStrings.t('brand_kalsubai'),
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,
@@ -23,7 +24,7 @@ class BrandText extends StatelessWidget {
             ),
           ),
           TextSpan(
-            text: ' Farms',
+            text: UiStrings.t('brand_farms'),
             style: TextStyle(
               fontSize: fontSize,
               fontWeight: FontWeight.w800,

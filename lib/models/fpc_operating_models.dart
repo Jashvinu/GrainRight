@@ -4,6 +4,7 @@ class FpcMembershipContext {
   final String fpcName;
   final String role;
   final String status;
+  final String fpcStatus;
   final bool mustChangePassword;
 
   const FpcMembershipContext({
@@ -12,6 +13,7 @@ class FpcMembershipContext {
     required this.fpcName,
     required this.role,
     required this.status,
+    this.fpcStatus = 'active',
     required this.mustChangePassword,
   });
 
@@ -29,6 +31,7 @@ class FpcMembershipContext {
       fpcName: _text(fpcMap['name'], 'FPC workspace'),
       role: _text(json['role']),
       status: _text(json['status']),
+      fpcStatus: _text(fpcMap['status'], 'active'),
       mustChangePassword: json['must_change_password'] == true,
     );
   }
@@ -39,8 +42,97 @@ class FpcMembershipContext {
     'role': role,
     'status': status,
     'must_change_password': mustChangePassword,
-    'fpcs': {'name': fpcName, 'status': 'active'},
+    'fpcs': {'name': fpcName, 'status': fpcStatus},
   };
+}
+
+class FpcSetupItem {
+  final String key;
+  final String title;
+  final String description;
+  final String route;
+  final bool complete;
+  final bool required;
+
+  const FpcSetupItem({
+    required this.key,
+    required this.title,
+    required this.description,
+    required this.route,
+    required this.complete,
+    this.required = true,
+  });
+
+  factory FpcSetupItem.fromJson(Map<String, dynamic> json) => FpcSetupItem(
+    key: _text(json['key']),
+    title: _text(json['title']),
+    description: _text(json['description']),
+    route: _text(json['route']),
+    complete: json['complete'] == true,
+    required: json['required'] != false,
+  );
+
+  Map<String, dynamic> toJson() => {
+    'key': key,
+    'title': title,
+    'description': description,
+    'route': route,
+    'complete': complete,
+    'required': required,
+  };
+}
+
+class FpcSetupReadiness {
+  final List<FpcSetupItem> items;
+  final List<String> selectedGrains;
+
+  const FpcSetupReadiness({
+    required this.items,
+    this.selectedGrains = const [],
+  });
+
+  static const allowedGrains = ['Rice', 'Ragi', 'Bajra'];
+
+  bool get isComplete =>
+      items.where((item) => item.required).every((item) => item.complete);
+
+  int get completeRequiredCount =>
+      items.where((item) => item.required && item.complete).length;
+
+  int get requiredCount => items.where((item) => item.required).length;
+
+  List<FpcSetupItem> get missingRequiredItems =>
+      items.where((item) => item.required && !item.complete).toList();
+
+  factory FpcSetupReadiness.fromJson(Map<String, dynamic> json) {
+    return FpcSetupReadiness(
+      items: _rows(json['items']).map(FpcSetupItem.fromJson).toList(),
+      selectedGrains: _stringList(json['selected_grains']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'items': items.map((item) => item.toJson()).toList(growable: false),
+    'selected_grains': selectedGrains,
+  };
+}
+
+class FpcSessionContext {
+  final FpcMembershipContext membership;
+  final FpcSetupReadiness readiness;
+  final Map<String, dynamic> fpc;
+  final Map<String, dynamic> subscription;
+
+  const FpcSessionContext({
+    required this.membership,
+    required this.readiness,
+    this.fpc = const {},
+    this.subscription = const {},
+  });
+
+  bool get isAdmin => membership.isAdmin;
+  bool get isFieldOfficer => membership.isFieldOfficer;
+  bool get mustChangePassword => membership.mustChangePassword;
 }
 
 class FpcOperationRecord {
@@ -90,8 +182,12 @@ class FieldAssignmentRecord {
   final String instructions;
   final String farmerId;
   final String farmId;
+  final String officerUserId;
   final String status;
   final int serverVersion;
+  final String cropProgramEnrollmentId;
+  final String cropProgramCheckId;
+  final String seedIssueId;
   final DateTime? scheduledFor;
 
   const FieldAssignmentRecord({
@@ -101,8 +197,12 @@ class FieldAssignmentRecord {
     required this.instructions,
     required this.farmerId,
     required this.farmId,
+    this.officerUserId = '',
     required this.status,
     required this.serverVersion,
+    required this.cropProgramEnrollmentId,
+    required this.cropProgramCheckId,
+    required this.seedIssueId,
     this.scheduledFor,
   });
 
@@ -114,8 +214,12 @@ class FieldAssignmentRecord {
       instructions: _text(json['instructions']),
       farmerId: _text(json['farmer_id']),
       farmId: _text(json['farm_id']),
+      officerUserId: _text(json['officer_user_id']),
       status: _text(json['status']),
       serverVersion: (json['server_version'] as num?)?.toInt() ?? 1,
+      cropProgramEnrollmentId: _text(json['crop_program_enrollment_id']),
+      cropProgramCheckId: _text(json['crop_program_check_id']),
+      seedIssueId: _text(json['seed_issue_id']),
       scheduledFor: DateTime.tryParse(_text(json['scheduled_for'])),
     );
   }
@@ -127,8 +231,14 @@ class FieldAssignmentRecord {
     'instructions': instructions,
     'farmer_id': farmerId,
     'farm_id': farmId,
+    if (officerUserId.isNotEmpty) 'officer_user_id': officerUserId,
     'status': status,
     'server_version': serverVersion,
+    if (cropProgramEnrollmentId.isNotEmpty)
+      'crop_program_enrollment_id': cropProgramEnrollmentId,
+    if (cropProgramCheckId.isNotEmpty)
+      'crop_program_check_id': cropProgramCheckId,
+    if (seedIssueId.isNotEmpty) 'seed_issue_id': seedIssueId,
     if (scheduledFor != null)
       'scheduled_for': scheduledFor!.toUtc().toIso8601String(),
   };
@@ -168,6 +278,14 @@ List<Map<String, dynamic>> _rows(Object? value) {
       .whereType<Map>()
       .map((row) => Map<String, dynamic>.from(row))
       .toList(growable: false);
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => _text(item))
+      .where((item) => item.isNotEmpty)
+      .toList();
 }
 
 String _text(Object? value, [String fallback = '']) {

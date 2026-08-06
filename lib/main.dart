@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,11 +12,13 @@ import 'config/runtime_config.dart';
 import 'config/supabase_config.dart';
 import 'services/offline_map_download_manager.dart';
 import 'services/local_notification_service.dart';
+import 'services/push_notification_service.dart';
 import 'app.dart';
 
 void main() {
   runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
+    PushNotificationService.registerBackgroundHandler();
     _installGlobalErrorHandlers();
     runApp(const _StartupLoadingApp());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -115,6 +118,12 @@ Future<void> _initializeDeferredPlatformServices() async {
     _reportUncaughtError(error, stack);
   }
   if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  try {
+    await Firebase.initializeApp();
+    await PushNotificationService.instance.initialize();
+  } catch (error, stack) {
+    _reportUncaughtError(error, stack);
+  }
   await _initializeWorkmanager();
 }
 
@@ -162,7 +171,8 @@ class _StartupLoadingApp extends StatelessWidget {
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
                     color: Color(0xFF0B5D2A),
-                  ),                ),
+                  ),
+                ),
               ],
             ),
           ),

@@ -4,6 +4,7 @@ import 'package:cross_file/cross_file.dart';
 
 import '../models/fpc_operating_models.dart';
 import '../models/fpc_farmer_profile.dart';
+import '../models/farmer_delivery_timeline_item.dart';
 
 class FpcOperatingException implements Exception {
   final String message;
@@ -12,7 +13,49 @@ class FpcOperatingException implements Exception {
   String toString() => message;
 }
 
+class FpcAnalyticsDay {
+  final DateTime date;
+  final double procurementKg;
+  final double salesAmount;
+  final int activityCount;
+
+  const FpcAnalyticsDay({
+    required this.date,
+    required this.procurementKg,
+    required this.salesAmount,
+    required this.activityCount,
+  });
+}
+
+class FpcAnalyticsSnapshot {
+  final DateTime start;
+  final DateTime end;
+  final double procurementKg;
+  final double salesAmount;
+  final double stockMovementKg;
+  final double farmerPayoutAmount;
+  final int pendingPayments;
+  final int activeFarmers;
+  final int salesOrders;
+  final List<FpcAnalyticsDay> daily;
+
+  const FpcAnalyticsSnapshot({
+    required this.start,
+    required this.end,
+    required this.procurementKg,
+    required this.salesAmount,
+    required this.stockMovementKg,
+    required this.farmerPayoutAmount,
+    required this.pendingPayments,
+    required this.activeFarmers,
+    required this.salesOrders,
+    required this.daily,
+  });
+}
+
 class FpcOperatingService {
+  static const _fpcReadTimeout = Duration(seconds: 8);
+
   SupabaseClient get _client => Supabase.instance.client;
 
   Future<FpcMembershipContext> loadMembership() async {
@@ -21,11 +64,14 @@ class FpcOperatingService {
     final row = await _client
         .from('fpc_memberships')
         .select(
-          'id,fpc_id,role,status,must_change_password,fpcs!inner(name,status)',
+          'id,fpc_id,role,status,must_change_password,'
+          'fpcs!inner(id,name,legal_name,status,email,phone,'
+          'registration_number,gstin,address)',
         )
         .eq('user_id', userId)
         .eq('status', 'active')
-        .maybeSingle();
+        .maybeSingle()
+        .timeout(_fpcReadTimeout);
     if (row == null) {
       throw const FpcOperatingException('No active FPC membership was found.');
     }
@@ -34,6 +80,118 @@ class FpcOperatingService {
       throw const FpcOperatingException('This FPC is not active.');
     }
     return FpcMembershipContext.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  Future<FpcSessionContext> loadSessionContext() async {
+    final membership = await loadMembership();
+    final results = await Future.wait<Object?>([
+      _client
+          .from('fpcs')
+          .select()
+          .eq('id', membership.fpcId)
+          .maybeSingle()
+          .timeout(_fpcReadTimeout)
+          .catchError((_) => null),
+      _client
+          .from('fpc_subscriptions')
+          .select()
+          .eq('fpc_id', membership.fpcId)
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle()
+          .timeout(_fpcReadTimeout)
+          .catchError((_) => null),
+      loadSetupReadiness(membership)
+          .timeout(_fpcReadTimeout)
+          .catchError((_) => _fallbackReadiness(membership)),
+    ]);
+    return FpcSessionContext(
+      membership: membership,
+      fpc: _map(results[0]),
+      subscription: _map(results[1]),
+      readiness: results[2] is FpcSetupReadiness
+          ? results[2] as FpcSetupReadiness
+          : _fallbackReadiness(membership),
+    );
+  }
+
+  Future<FpcSetupReadiness> loadSetupReadiness([
+    FpcMembershipContext? membership,
+  ]) async {
+    final context = membership ?? await loadMembership();
+    final counts = await Future.wait<int>([
+      _countActiveFieldOfficers(context.fpcId),
+      _countWhere('collection_centers', {
+        'fpc_id': context.fpcId,
+        'active': true,
+      }),
+      _countWhere('fpc_seed_batches', {'fpc_id': context.fpcId}),
+      _countWhere('fpc_crop_programs', {'fpc_id': context.fpcId}),
+      _countWhere('fpc_farmer_links', {'fpc_id': context.fpcId}),
+      _countWhere('quality_certificates', {'fpc_id': context.fpcId}),
+    ]);
+    final fieldOfficerCount = counts[0];
+    final hasProfile =
+        context.fpcId.isNotEmpty &&
+        context.fpcName.trim().isNotEmpty &&
+        context.fpcStatus == 'active';
+    final hasSeedOrProgram = counts[2] > 0 || counts[3] > 0;
+    return FpcSetupReadiness(
+      items: [
+        FpcSetupItem(
+          key: 'profile',
+          title: 'FPC profile active',
+          description:
+              'Approved organization, active membership and server profile are required.',
+          route: '/fpo/profile',
+          complete: hasProfile,
+        ),
+        FpcSetupItem(
+          key: 'field_team',
+          title: 'Create Field Officer',
+          description:
+              'Add an active Field Officer before farmer visits and seed delivery.',
+          route: '/fpo/team',
+          complete: fieldOfficerCount > 0,
+        ),
+        FpcSetupItem(
+          key: 'seed_stock',
+          title: 'Seed stock or crop program',
+          description: hasSeedOrProgram
+              ? '${counts[3]} crop program${counts[3] == 1 ? '' : 's'} and ${counts[2]} seed batch${counts[2] == 1 ? '' : 'es'} found.'
+              : 'Register seed stock or create a crop program before distribution.',
+          route: '/fpo/seeds',
+          complete: hasSeedOrProgram,
+          required: false,
+        ),
+        FpcSetupItem(
+          key: 'collection_center',
+          title: 'Collection center ready',
+          description: counts[1] > 0
+              ? '${counts[1]} active collection center${counts[1] == 1 ? '' : 's'} ready for receiving.'
+              : 'Create an active collection center before receiving farmer produce.',
+          route: '/fpo/operations',
+          complete: counts[1] > 0,
+          required: false,
+        ),
+        FpcSetupItem(
+          key: 'farmer_network',
+          title: 'Farmer network started',
+          description: 'Link farmers through verified QR scan.',
+          route: '/fpo/farmers',
+          complete: counts[4] > 0,
+          required: false,
+        ),
+        FpcSetupItem(
+          key: 'quality_flow',
+          title: 'Quality workflow used',
+          description: 'Run grading or quality certificate review.',
+          route: '/fpo/grain-grading',
+          complete: counts[5] > 0,
+          required: false,
+        ),
+      ],
+    );
   }
 
   Future<PlatformFpcSnapshot> loadPlatformSnapshot() async {
@@ -419,9 +577,26 @@ class FpcOperatingService {
     return rows.map(FpcFarmerProfile.fromLinkRow).toList(growable: false);
   }
 
+  Future<List<FarmerDeliveryTimelineItem>> loadFarmerDeliveryTimeline(
+    String farmerId,
+  ) async {
+    final id = farmerId.trim();
+    if (id.isEmpty) return const [];
+    final rows = await _client
+        .from('farmer_delivery_timeline')
+        .select()
+        .eq('farmer_id', id)
+        .order('occurred_at', ascending: false)
+        .limit(300);
+    return _rows(
+      rows,
+    ).map(FarmerDeliveryTimelineItem.fromJson).toList(growable: false);
+  }
+
   Future<Map<String, int>> loadOperationalCounts() async {
     final results = await Future.wait([
       _count('fpc_farmer_links'),
+      _count('fpc_seed_requests'),
       _count('fpc_farmer_links'),
       _count('harvest_plans'),
       _count('procurement_lots'),
@@ -439,6 +614,7 @@ class FpcOperatingService {
     ]);
     const modules = [
       'farmer_network',
+      'crop_programs',
       'farm_monitoring',
       'harvest_planning',
       'procurement',
@@ -461,6 +637,73 @@ class FpcOperatingService {
   }
 
   Future<List<Map<String, dynamic>>> loadModuleRows(String module) async {
+    if (module == 'crop_programs') {
+      return _combined([
+        (
+          'seed_request',
+          await _client
+              .from('fpc_seed_requests')
+              .select(
+                '*,program:fpc_crop_programs(name,crop,variety),'
+                'enrollment:fpc_program_enrollments(status)',
+              )
+              .order('updated_at', ascending: false)
+              .limit(300),
+        ),
+        (
+          'program',
+          await _client
+              .from('fpc_crop_programs')
+              .select()
+              .order('created_at', ascending: false)
+              .limit(100),
+        ),
+        (
+          'seed_batch',
+          await _client
+              .from('fpc_seed_batches')
+              .select()
+              .order('created_at', ascending: false)
+              .limit(200),
+        ),
+        (
+          'enrollment',
+          await _client
+              .from('fpc_program_enrollments')
+              .select()
+              .order('updated_at', ascending: false)
+              .limit(300),
+        ),
+        (
+          'seed_issue',
+          await _client
+              .from('fpc_seed_issues')
+              .select(
+                '*,enrollment:fpc_program_enrollments(farmer_id,farm_id,crop,status)',
+              )
+              .order('updated_at', ascending: false)
+              .limit(300),
+        ),
+        (
+          'seed_payment',
+          await _client
+              .from('fpc_seed_payment_attempts')
+              .select(
+                '*,seed_request:fpc_seed_requests(farmer_id,farm_id,status,payment_status)',
+              )
+              .order('updated_at', ascending: false)
+              .limit(300),
+        ),
+        (
+          'evaluation',
+          await _client
+              .from('fpc_compliance_evaluations')
+              .select()
+              .order('created_at', ascending: false)
+              .limit(300),
+        ),
+      ]);
+    }
     if (module == 'procurement') {
       return _combined([
         (
@@ -492,20 +735,23 @@ class FpcOperatingService {
     if (module == 'collection_center') {
       return _combined([
         (
+          'center',
+          await _client
+              .from('collection_centers')
+              .select()
+              .order('active', ascending: false)
+              .order('name')
+              .order('village')
+              .order('id')
+              .limit(100),
+        ),
+        (
           'receipt',
           await _client
               .from('fpc_procurement_records')
               .select()
               .order('received_at', ascending: false)
               .limit(300),
-        ),
-        (
-          'center',
-          await _client
-              .from('collection_centers')
-              .select()
-              .order('name')
-              .limit(100),
         ),
       ]);
     }
@@ -671,6 +917,10 @@ class FpcOperatingService {
       'buyers',
       'sales_orders',
       'dispatches',
+      'fpc_crop_programs',
+      'fpc_seed_batches',
+      'fpc_program_enrollments',
+      'fpc_seed_requests',
     };
     if (!allowed.contains(table)) {
       throw const FpcOperatingException('Unsupported lookup.');
@@ -754,6 +1004,115 @@ class FpcOperatingService {
     };
   }
 
+  Future<FpcAnalyticsSnapshot> loadAnalytics({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    final rangeStart = DateTime(start.year, start.month, start.day).toUtc();
+    final rangeEnd = DateTime(end.year, end.month, end.day).toUtc();
+    if (rangeEnd.isBefore(rangeStart)) {
+      throw const FpcOperatingException(
+        'Choose an end date after the start date.',
+      );
+    }
+    final exclusiveEnd = rangeEnd.add(const Duration(days: 1));
+    final results = await Future.wait([
+      _client
+          .from('fpc_procurement_records')
+          .select('net_weight_kg,received_at,farmer_id')
+          .gte('received_at', rangeStart.toIso8601String())
+          .lt('received_at', exclusiveEnd.toIso8601String())
+          .limit(5000),
+      _client
+          .from('sales_orders')
+          .select('total,ordered_at,status')
+          .gte('ordered_at', rangeStart.toIso8601String())
+          .lt('ordered_at', exclusiveEnd.toIso8601String())
+          .limit(5000),
+      _client
+          .from('stock_ledger')
+          .select('quantity_kg,created_at')
+          .gte('created_at', rangeStart.toIso8601String())
+          .lt('created_at', exclusiveEnd.toIso8601String())
+          .limit(5000),
+      _client
+          .from('farmer_payment_ledger')
+          .select('final_amount,status,created_at')
+          .gte('created_at', rangeStart.toIso8601String())
+          .lt('created_at', exclusiveEnd.toIso8601String())
+          .limit(5000),
+    ]);
+    final procurement = _rows(results[0]);
+    final sales = _rows(
+      results[1],
+    ).where((row) => '${row['status']}' != 'cancelled').toList(growable: false);
+    final stock = _rows(results[2]);
+    final payments = _rows(results[3]);
+    final daily = <DateTime, _AnalyticsDayBuilder>{};
+
+    void addToDay(Object? value, void Function(_AnalyticsDayBuilder day) add) {
+      final parsed = value == null ? null : DateTime.tryParse('$value');
+      if (parsed == null) return;
+      final date = DateTime(parsed.year, parsed.month, parsed.day);
+      add(daily.putIfAbsent(date, () => _AnalyticsDayBuilder()));
+    }
+
+    for (final row in procurement) {
+      addToDay(row['received_at'], (day) {
+        day.procurementKg += _number(row['net_weight_kg']);
+        day.activityCount++;
+      });
+    }
+    for (final row in sales) {
+      addToDay(row['ordered_at'], (day) {
+        day.salesAmount += _number(row['total']);
+        day.activityCount++;
+      });
+    }
+    for (final row in payments) {
+      addToDay(row['created_at'], (day) => day.activityCount++);
+    }
+
+    final days = <FpcAnalyticsDay>[];
+    for (
+      var date = DateTime(rangeStart.year, rangeStart.month, rangeStart.day);
+      !date.isAfter(rangeEnd);
+      date = date.add(const Duration(days: 1))
+    ) {
+      final day = daily[date] ?? _AnalyticsDayBuilder();
+      days.add(
+        FpcAnalyticsDay(
+          date: date,
+          procurementKg: day.procurementKg,
+          salesAmount: day.salesAmount,
+          activityCount: day.activityCount,
+        ),
+      );
+    }
+
+    return FpcAnalyticsSnapshot(
+      start: rangeStart,
+      end: rangeEnd,
+      procurementKg: _sum(procurement, 'net_weight_kg'),
+      salesAmount: _sum(sales, 'total'),
+      stockMovementKg: _sum(stock, 'quantity_kg').abs(),
+      farmerPayoutAmount: _sum(
+        payments.where((row) => '${row['status']}' == 'paid').toList(),
+        'final_amount',
+      ),
+      pendingPayments: payments
+          .where((row) => !{'paid', 'reversed'}.contains('${row['status']}'))
+          .length,
+      activeFarmers: procurement
+          .map((row) => '${row['farmer_id'] ?? ''}'.trim())
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .length,
+      salesOrders: sales.length,
+      daily: days,
+    );
+  }
+
   Future<List<Map<String, dynamic>>> loadNotifications({
     bool unreadOnly = false,
   }) async {
@@ -832,10 +1191,65 @@ class FpcOperatingService {
     return result.count;
   }
 
+  Future<int> _countWhere(String table, Map<String, Object?> filters) async {
+    try {
+      dynamic query = _client.from(table).select('id').count(CountOption.exact);
+      for (final entry in filters.entries) {
+        final value = entry.value;
+        if (value is String && value.isEmpty) continue;
+        if (value != null) query = query.eq(entry.key, value);
+      }
+      final result = await query;
+      return result.count as int? ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<int> _countActiveFieldOfficers(String fpcId) async {
+    try {
+      final memberships = await loadMemberships(fpcId);
+      return memberships
+          .where(
+            (row) =>
+                row['role'] == 'field_officer' && row['status'] == 'active',
+          )
+          .length;
+    } catch (_) {
+      return _countWhere('fpc_memberships', {
+        'fpc_id': fpcId,
+        'role': 'field_officer',
+        'status': 'active',
+      });
+    }
+  }
+
+  FpcSetupReadiness _fallbackReadiness(FpcMembershipContext membership) {
+    final hasProfile =
+        membership.fpcId.isNotEmpty &&
+        membership.fpcName.trim().isNotEmpty &&
+        membership.fpcStatus == 'active';
+    return FpcSetupReadiness(
+      items: [
+        FpcSetupItem(
+          key: 'profile',
+          title: 'FPC profile active',
+          description:
+              'Approved organization, active membership and server profile are required.',
+          route: '/fpo/profile',
+          complete: hasProfile,
+        ),
+      ],
+    );
+  }
+
   double _sum(List<Map<String, dynamic>> rows, String key) => rows.fold(
     0,
     (sum, row) => sum + (num.tryParse('${row[key] ?? 0}')?.toDouble() ?? 0),
   );
+
+  double _number(Object? value) =>
+      num.tryParse('${value ?? 0}')?.toDouble() ?? 0;
 
   List<Map<String, dynamic>> _combined(List<(String, Object?)> groups) => [
     for (final group in groups)
@@ -864,4 +1278,10 @@ class FpcOperatingService {
         .map((row) => Map<String, dynamic>.from(row))
         .toList(growable: false);
   }
+}
+
+class _AnalyticsDayBuilder {
+  double procurementKg = 0;
+  double salesAmount = 0;
+  int activityCount = 0;
 }

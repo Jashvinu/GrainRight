@@ -5,22 +5,61 @@ import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
 import '../controllers/main_auth_controller.dart';
+import '../models/fpc_operating_models.dart';
 import '../services/fpc_preferences_service.dart';
+import '../services/fpc_operating_service.dart';
 import '../widgets/fpc_bottom_nav.dart';
 import '../models/fpc_account_identity.dart';
 
-class FpcProfileScreen extends StatelessWidget {
+class FpcProfileScreen extends StatefulWidget {
   const FpcProfileScreen({super.key});
 
   @override
+  State<FpcProfileScreen> createState() => _FpcProfileScreenState();
+}
+
+class _FpcProfileScreenState extends State<FpcProfileScreen> {
+  final _service = FpcOperatingService();
+  FpcSessionContext? _session;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final session = await _service.loadSessionContext();
+      if (!mounted) return;
+      setState(() => _session = session);
+    } catch (_) {
+      // Keep metadata fallback when the server profile cannot be reached.
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final account = _FpcAccountSnapshot.current();
+    final account = _session == null
+        ? _FpcAccountSnapshot.current()
+        : _FpcAccountSnapshot.fromSession(_session!);
     return FpcWorkspaceScaffold(
       current: FpcNavTab.profile,
       title: UiStrings.t('fpc_profile'),
+      actions: [
+        IconButton(
+          tooltip: UiStrings.fromEnglish('Refresh'),
+          onPressed: _loading ? null : _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ],
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 112),
         children: [
+          if (_loading) const LinearProgressIndicator(),
           _FpcHeroPanel(
             icon: Icons.badge_outlined,
             title: account.organizationLabel,
@@ -71,7 +110,14 @@ class FpcProfileScreen extends StatelessWidget {
               const _InfoRow(
                 icon: Icons.cloud_done_outlined,
                 label: 'Profile sync',
-                value: 'Auth metadata and FPC profile table',
+                value: 'Server FPC membership and profile table',
+              ),
+              _InfoRow(
+                icon: Icons.fact_check_outlined,
+                label: 'Setup readiness',
+                value: _session?.readiness.isComplete == true
+                    ? 'Complete'
+                    : 'Incomplete',
               ),
             ],
           ),
@@ -166,9 +212,7 @@ class _FpcSettingsScreenState extends State<FpcSettingsScreen> {
                       ),
                 secondary: const Icon(Icons.sync_rounded),
                 title: Text(UiStrings.t('auto_refresh_fpc_ledgers')),
-                subtitle: Text(
-                  UiStrings.t('auto_refresh_fpc_ledgers_desc'),
-                ),
+                subtitle: Text(UiStrings.t('auto_refresh_fpc_ledgers_desc')),
               ),
               SwitchListTile(
                 value: _preferences.reviewQueueAlerts,
@@ -179,9 +223,7 @@ class _FpcSettingsScreenState extends State<FpcSettingsScreen> {
                       ),
                 secondary: const Icon(Icons.fact_check_outlined),
                 title: Text(UiStrings.t('review_queue_alerts')),
-                subtitle: Text(
-                  UiStrings.t('review_queue_alerts_desc'),
-                ),
+                subtitle: Text(UiStrings.t('review_queue_alerts_desc')),
               ),
               SwitchListTile(
                 value: _preferences.marketplaceInterestAlerts,
@@ -192,9 +234,7 @@ class _FpcSettingsScreenState extends State<FpcSettingsScreen> {
                       ),
                 secondary: const Icon(Icons.storefront_rounded),
                 title: Text(UiStrings.t('marketplace_interest_alerts')),
-                subtitle: Text(
-                  UiStrings.t('marketplace_interest_alerts_desc'),
-                ),
+                subtitle: Text(UiStrings.t('marketplace_interest_alerts_desc')),
               ),
               SwitchListTile(
                 value: _preferences.scannerSoundFeedback,
@@ -205,9 +245,7 @@ class _FpcSettingsScreenState extends State<FpcSettingsScreen> {
                       ),
                 secondary: const Icon(Icons.volume_up_outlined),
                 title: Text(UiStrings.t('scanner_sound_feedback')),
-                subtitle: Text(
-                  UiStrings.t('scanner_sound_feedback_desc'),
-                ),
+                subtitle: Text(UiStrings.t('scanner_sound_feedback_desc')),
               ),
             ],
           ),
@@ -382,6 +420,30 @@ class _FpcAccountSnapshot {
       roleLabel: account.roleLabel,
     );
   }
+
+  static _FpcAccountSnapshot fromSession(FpcSessionContext session) {
+    final fallback = FpcAccountIdentity.current();
+    final fpc = session.fpc;
+    String field(String key) => '${fpc[key] ?? ''}'.trim();
+    return _FpcAccountSnapshot(
+      userId: fallback.userId.isEmpty
+          ? UiStrings.t('not_signed_in')
+          : fallback.userId,
+      email: field('email').isNotEmpty ? field('email') : fallback.email,
+      displayName: fallback.displayName.isEmpty
+          ? UiStrings.t('not_added')
+          : fallback.displayName,
+      organization: field('name').isNotEmpty
+          ? field('name')
+          : session.membership.fpcName,
+      phone: field('phone').isNotEmpty
+          ? field('phone')
+          : fallback.phone.isEmpty
+          ? UiStrings.t('not_added')
+          : fallback.phone,
+      roleLabel: session.membership.role.toUpperCase(),
+    );
+  }
 }
 
 class _FpcHeroPanel extends StatelessWidget {
@@ -520,7 +582,7 @@ class _InfoRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  value,
+                  UiStrings.localizedValue(value),
                   style: const TextStyle(
                     color: AppTheme.textDark,
                     fontWeight: FontWeight.w900,

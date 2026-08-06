@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -5,12 +7,18 @@ import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_motion.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
+import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
+import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/fpc_account_identity.dart';
+import '../models/fpc_operating_models.dart';
+import '../services/fpc_notification_realtime_service.dart';
+import '../services/fpc_operating_service.dart';
 
 enum FpcNavTab {
   home,
   operations,
+  seeds,
   team,
   qrHub,
   farmerScan,
@@ -18,6 +26,7 @@ enum FpcNavTab {
   receiver,
   grading,
   review,
+  analytics,
   profile,
   settings,
   activity,
@@ -112,6 +121,9 @@ class FpcBottomNavBar extends StatelessWidget {
       case FpcNavTab.operations:
         Get.offNamed('/fpo/operations');
         return;
+      case FpcNavTab.seeds:
+        Get.offNamed('/fpo/seeds');
+        return;
       case FpcNavTab.team:
         Get.offNamed('/fpo/team');
         return;
@@ -133,6 +145,9 @@ class FpcBottomNavBar extends StatelessWidget {
       case FpcNavTab.review:
         Get.offNamed('/fpo/grading-review');
         return;
+      case FpcNavTab.analytics:
+        Get.offNamed('/fpo/analytics');
+        return;
       case FpcNavTab.profile:
         Get.offNamed('/fpo/profile');
         return;
@@ -149,7 +164,7 @@ class FpcBottomNavBar extends StatelessWidget {
   }
 }
 
-class FpcWorkspaceScaffold extends StatelessWidget {
+class FpcWorkspaceScaffold extends StatefulWidget {
   final FpcNavTab current;
   final String title;
   final Widget body;
@@ -157,6 +172,7 @@ class FpcWorkspaceScaffold extends StatelessWidget {
   final bool extendBody;
   final bool showBottomNav;
   final bool showQrAction;
+  final bool allowSetupGate;
 
   const FpcWorkspaceScaffold({
     super.key,
@@ -167,17 +183,200 @@ class FpcWorkspaceScaffold extends StatelessWidget {
     this.extendBody = true,
     this.showBottomNav = true,
     this.showQrAction = true,
+    this.allowSetupGate = true,
   });
+
+  @override
+  State<FpcWorkspaceScaffold> createState() => _FpcWorkspaceScaffoldState();
+}
+
+class _FpcWorkspaceScaffoldState extends State<FpcWorkspaceScaffold> {
+  final _notificationService = FpcOperatingService();
+  final _realtimeService = FpcNotificationRealtimeService();
+  List<Map<String, dynamic>> _notifications = const [];
+  FpcSessionContext? _session;
+  bool _notificationsLoading = false;
+  bool _popupVisible = false;
+
+  int get _unreadCount =>
+      _notifications.where((row) => row['read_at'] == null).length;
+
+  String _notificationText(Object? value, {String fallback = ''}) {
+    final text = '${value ?? fallback}'.trim();
+    return UiStrings.fromEnglish(text);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSession());
+    unawaited(_loadNotifications());
+    unawaited(
+      _realtimeService.start(onNotification: _handleRealtimeNotification),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_realtimeService.stop());
+    super.dispose();
+  }
+
+  Future<void> _loadSession() async {
+    try {
+      final session = await _notificationService.loadSessionContext();
+      if (!mounted) return;
+      setState(() => _session = session);
+    } catch (_) {
+      // Route middleware and page services still enforce access. The shell
+      // does not hide page content when the optional readiness check fails.
+    }
+  }
+
+  Future<void> _loadNotifications() async {
+    if (mounted) setState(() => _notificationsLoading = true);
+    try {
+      final rows = await _notificationService.loadNotifications();
+      if (mounted) setState(() => _notifications = rows);
+    } catch (_) {
+      // The shell remains usable when notification sync is temporarily down.
+    } finally {
+      if (mounted) setState(() => _notificationsLoading = false);
+    }
+  }
+
+  Future<void> _handleRealtimeNotification(
+    Map<String, dynamic> notification,
+  ) async {
+    if (!mounted) return;
+    setState(() {
+      _notifications = [
+        notification,
+        ..._notifications.where((row) => row['id'] != notification['id']),
+      ];
+    });
+    if (_popupVisible) return;
+    _popupVisible = true;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.notifications_active_rounded,
+          color: AppTheme.greenDark,
+        ),
+        title: Text(
+          _notificationText(notification['title'], fallback: 'FPC update'),
+        ),
+        content: Text(_notificationText(notification['body'])),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(UiStrings.fromEnglish('Later')),
+          ),
+          FilledButton(
+            onPressed: () async {
+              await _markRead(notification);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: Text(UiStrings.fromEnglish('Mark read')),
+          ),
+        ],
+      ),
+    );
+    _popupVisible = false;
+  }
+
+  Future<void> _markRead(Map<String, dynamic> notification) async {
+    final id = '${notification['id'] ?? ''}'.trim();
+    if (id.isEmpty || notification['read_at'] != null) return;
+    await _notificationService.markNotificationRead(id);
+    if (!mounted) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    setState(() {
+      _notifications = [
+        for (final row in _notifications)
+          if (row['id'] == notification['id'])
+            {...row, 'read_at': now}
+          else
+            row,
+      ];
+    });
+  }
+
+  Future<void> _showNotificationInbox() async {
+    await _loadNotifications();
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.notifications_rounded),
+            const SizedBox(width: 8),
+            Expanded(child: Text(UiStrings.fromEnglish('FPC notifications'))),
+          ],
+        ),
+        content: SizedBox(
+          width: 520,
+          child: _notificationsLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _notifications.isEmpty
+              ? Text(UiStrings.fromEnglish('No notifications yet.'))
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _notifications.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final notification = _notifications[index];
+                    final unread = notification['read_at'] == null;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(
+                        unread
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_none_rounded,
+                        color: unread ? AppTheme.greenDark : AppTheme.textMuted,
+                      ),
+                      title: Text(
+                        _notificationText(
+                          notification['title'],
+                          fallback: 'FPC update',
+                        ),
+                        style: TextStyle(
+                          fontWeight: unread
+                              ? FontWeight.w900
+                              : FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: Text(_notificationText(notification['body'])),
+                      onTap: () => _markRead(notification),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(UiStrings.fromEnglish('Close')),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 920;
+        final language = Get.isRegistered<LanguageController>()
+            ? Get.find<LanguageController>()
+            : null;
+        final body = _guardedBody(wide);
         return Scaffold(
           backgroundColor: AppTheme.surface,
-          extendBody: extendBody && !wide,
-          drawer: wide ? null : FpcWorkspaceDrawer(current: current),
+          extendBody: widget.extendBody && !wide,
+          drawer: wide ? null : FpcWorkspaceDrawer(current: widget.current),
           appBar: AppBar(
             automaticallyImplyLeading: false,
             leading: wide
@@ -191,13 +390,38 @@ class FpcWorkspaceScaffold extends StatelessWidget {
                       icon: const Icon(Icons.menu_rounded),
                     ),
                   ),
-            title: Text(UiStrings.fromEnglish(title)),
-            actions: actions,
+            title: Text(UiStrings.fromEnglish(widget.title)),
+            actions: [
+              ...widget.actions,
+              IconButton(
+                key: const Key('fpc-notification-inbox'),
+                tooltip: UiStrings.fromEnglish('Notifications'),
+                onPressed: _showNotificationInbox,
+                icon: Badge(
+                  isLabelVisible: _unreadCount > 0,
+                  label: Text(_unreadCount > 99 ? '99+' : '$_unreadCount'),
+                  child: const Icon(Icons.notifications_none_rounded),
+                ),
+              ),
+              if (language != null)
+                Obx(
+                  () => Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Center(
+                      child: LanguageSelectorButton(
+                        code: language.language.value,
+                        onChanged: language.setLanguage,
+                        compact: constraints.maxWidth < 520,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
-          bottomNavigationBar: showBottomNav && !wide
-              ? FpcBottomNavBar(current: current)
+          bottomNavigationBar: widget.showBottomNav && !wide
+              ? FpcBottomNavBar(current: widget.current)
               : null,
-          floatingActionButton: showQrAction
+          floatingActionButton: widget.showQrAction
               ? FloatingActionButton.extended(
                   key: const Key('fpc-qr-floating-action'),
                   onPressed: () => Get.toNamed('/fpo/qr'),
@@ -208,7 +432,7 @@ class FpcWorkspaceScaffold extends StatelessWidget {
           body: wide
               ? Row(
                   children: [
-                    FpcSideNavigation(current: current),
+                    FpcSideNavigation(current: widget.current),
                     const VerticalDivider(width: 1),
                     Expanded(child: body),
                   ],
@@ -216,6 +440,150 @@ class FpcWorkspaceScaffold extends StatelessWidget {
               : body,
         );
       },
+    );
+  }
+
+  Widget _guardedBody(bool wide) {
+    if (!widget.allowSetupGate) return widget.body;
+    final session = _session;
+    final readiness = session?.readiness;
+    if (session?.isAdmin == true &&
+        readiness != null &&
+        !readiness.isComplete) {
+      final onSetupRoute = Get.currentRoute == '/fpo/setup';
+      if (Get.currentRoute == '/fpo') {
+        return FpcSetupRequiredPanel(readiness: readiness);
+      }
+      if (!onSetupRoute) {
+        return Column(
+          children: [
+            _FpcReadinessBanner(readiness: readiness),
+            Expanded(child: widget.body),
+          ],
+        );
+      }
+    }
+    return widget.body;
+  }
+}
+
+class FpcSetupRequiredPanel extends StatelessWidget {
+  final FpcSetupReadiness readiness;
+
+  const FpcSetupRequiredPanel({super.key, required this.readiness});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 112),
+      children: [
+        _FpcShellStateCard(
+          icon: Icons.rule_folder_outlined,
+          title: 'Complete FPC setup first',
+          message:
+              'Required items are still missing: '
+              '${readiness.missingRequiredItems.map((item) => item.title).join(', ')}.',
+          actionLabel: 'Open setup checklist',
+          onAction: () => Get.offNamed('/fpo/setup'),
+        ),
+      ],
+    );
+  }
+}
+
+class _FpcReadinessBanner extends StatelessWidget {
+  final FpcSetupReadiness readiness;
+
+  const _FpcReadinessBanner({required this.readiness});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFFFFF7ED),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  UiStrings.fromEnglish(
+                    'FPC setup incomplete: ${readiness.missingRequiredItems.length} required item(s) remaining.',
+                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Get.toNamed('/fpo/setup'),
+                child: Text(UiStrings.fromEnglish('Fix setup')),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FpcShellStateCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String message;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  const _FpcShellStateCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Card(
+            elevation: 0,
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: AppTheme.greenDark, size: 42),
+                  const SizedBox(height: 12),
+                  Text(
+                    UiStrings.fromEnglish(title),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    UiStrings.fromEnglish(message),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppTheme.textMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  FilledButton(
+                    onPressed: onAction,
+                    child: Text(UiStrings.fromEnglish(actionLabel)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -256,7 +624,7 @@ class FpcSideNavigation extends StatelessWidget {
               const _FpcAccountHeader(),
               const SizedBox(height: 18),
               _FpcNavGroup(
-                label: 'Workspace',
+                label: 'FPC workspace',
                 current: current,
                 closeDrawerOnTap: closeDrawerOnTap,
                 items: const [
@@ -273,6 +641,13 @@ class FpcSideNavigation extends StatelessWidget {
                     title: 'Operating system',
                     subtitle: 'All FPC modules',
                     route: '/fpo/operations',
+                  ),
+                  _FpcNavEntry(
+                    tab: FpcNavTab.seeds,
+                    icon: Icons.spa_rounded,
+                    title: 'Seeds',
+                    subtitle: 'Programs, stock and distribution',
+                    route: '/fpo/seeds',
                   ),
                   _FpcNavEntry(
                     tab: FpcNavTab.team,
@@ -298,16 +673,9 @@ class FpcSideNavigation extends StatelessWidget {
                   _FpcNavEntry(
                     tab: FpcNavTab.receiver,
                     icon: Icons.assignment_turned_in_outlined,
-                    title: 'Receiver',
+                    title: 'Receive center',
                     subtitle: 'Received lot ledger',
                     route: '/fpo/receiver',
-                  ),
-                  _FpcNavEntry(
-                    tab: FpcNavTab.grading,
-                    icon: Icons.grain_rounded,
-                    title: 'Grain grading',
-                    subtitle: 'Counter grading flow',
-                    route: '/fpo/grain-grading',
                   ),
                   _FpcNavEntry(
                     tab: FpcNavTab.review,
@@ -320,10 +688,17 @@ class FpcSideNavigation extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               _FpcNavGroup(
-                label: 'Account',
+                label: 'FPC account',
                 current: current,
                 closeDrawerOnTap: closeDrawerOnTap,
                 items: const [
+                  _FpcNavEntry(
+                    tab: FpcNavTab.analytics,
+                    icon: Icons.analytics_rounded,
+                    title: 'Analytics',
+                    subtitle: 'Performance and trends',
+                    route: '/fpo/analytics',
+                  ),
                   _FpcNavEntry(
                     tab: FpcNavTab.profile,
                     icon: Icons.badge_outlined,
@@ -341,7 +716,7 @@ class FpcSideNavigation extends StatelessWidget {
                   _FpcNavEntry(
                     tab: FpcNavTab.activity,
                     icon: Icons.timeline_rounded,
-                    title: 'Activity',
+                    title: 'Tasks',
                     subtitle: 'Operational checklist',
                     route: '/fpo/activity',
                   ),
@@ -364,12 +739,46 @@ class FpcSideNavigation extends StatelessWidget {
   }
 }
 
-class _FpcAccountHeader extends StatelessWidget {
+class _FpcAccountHeader extends StatefulWidget {
   const _FpcAccountHeader();
 
   @override
+  State<_FpcAccountHeader> createState() => _FpcAccountHeaderState();
+}
+
+class _FpcAccountHeaderState extends State<_FpcAccountHeader> {
+  FpcAccountIdentity _account = FpcAccountIdentity.current();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadAuthoritativeAccount());
+  }
+
+  Future<void> _loadAuthoritativeAccount() async {
+    try {
+      final membership = await FpcOperatingService().loadMembership();
+      final fallback = FpcAccountIdentity.current();
+      if (!mounted) return;
+      setState(() {
+        _account = FpcAccountIdentity(
+          organizationName: membership.fpcName,
+          displayName: fallback.displayName,
+          email: fallback.email,
+          role: membership.role,
+          userId: fallback.userId,
+          phone: fallback.phone,
+        );
+      });
+    } catch (_) {
+      // Keep the lightweight Auth metadata fallback while the shell loads or
+      // when the session is already being redirected out.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final account = FpcAccountIdentity.current();
+    final account = _account;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -382,7 +791,7 @@ class _FpcAccountHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            account.name,
+            UiStrings.fromEnglish(account.name),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -414,7 +823,7 @@ class _FpcAccountHeader extends StatelessWidget {
                     Text(
                       account.displayName.isNotEmpty
                           ? account.displayName
-                          : 'FPC account',
+                          : UiStrings.t('fpc_account_label'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -453,7 +862,7 @@ class _FpcAccountHeader extends StatelessWidget {
                   vertical: 5,
                 ),
                 child: Text(
-                  '${account.roleLabel} access',
+                  UiStrings.f('role_access', {'role': account.roleLabel}),
                   style: const TextStyle(
                     color: AppTheme.greenDark,
                     fontSize: 12,

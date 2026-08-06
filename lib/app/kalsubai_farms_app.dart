@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
+import 'package:kalsubai_farms/core/localization/ui_strings.dart';
 import 'package:kalsubai_farms/core/theme/app_motion.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
@@ -20,7 +21,7 @@ class KalsubaiFarmsApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Kalsubai Farms',
+      onGenerateTitle: (_) => UiStrings.t('kalsubai_farms'),
       theme: AppTheme.theme,
       locale: initialLocale,
       fallbackLocale: const Locale('en'),

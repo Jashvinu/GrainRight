@@ -66,6 +66,7 @@ class RoleAccountSignupException implements Exception {
 class MainAuthController extends GetxController {
   static const _localGuestIdKey = 'local_guest_id';
   static const _lastFarmerLoginKey = 'last_farmer_login_summary';
+  static const _fpcMembershipTimeout = Duration(seconds: 6);
   static const adminLoginEmail = String.fromEnvironment(
     'ADMIN_LOGIN_EMAIL',
     defaultValue: 'kalsubaifarms@gmail.com',
@@ -154,11 +155,14 @@ class MainAuthController extends GetxController {
       farmerLoginLastSyncAt.value ?? lastFarmerLoginSyncAt.value;
 
   Future<bool> hasAnySession() async {
+    if (_auth.currentSession != null) {
+      isLoggedIn.value = true;
+      return true;
+    }
     await _refreshLocalGuestState();
+    if (hasLocalGuest.value) return true;
     await _refreshVerifiedProfile();
-    return _auth.currentSession != null ||
-        hasLocalGuest.value ||
-        verifiedFarmer.value != null;
+    return verifiedFarmer.value != null;
   }
 
   Future<bool> ensureOfflineSessionWhenOffline() async {
@@ -247,6 +251,15 @@ class MainAuthController extends GetxController {
         email: normalizedEmail,
         password: password,
       );
+      final signedInRole = '${_auth.currentUser?.appMetadata['role'] ?? ''}'
+          .trim()
+          .toLowerCase();
+      if (signedInRole == 'fpc_applicant') {
+        await _auth.signOut();
+        errorMessage.value =
+            'Your FPC application is waiting for Kalsubai Farms approval.';
+        return;
+      }
       if (!_hasServerRole(_auth.currentUser, _fpcServerRoles)) {
         await _auth.signOut();
         errorMessage.value = 'This account is not enabled for FPC login.';
@@ -405,34 +418,41 @@ class MainAuthController extends GetxController {
   Future<String?> resolveFpcLoginRoute(User? user) async {
     final role = '${user?.appMetadata['role'] ?? ''}'.trim().toLowerCase();
     if (role == 'fpc_applicant') return null;
+    if (user == null) return null;
     try {
       final membership = await _client
           .from('fpc_memberships')
           .select('role,status,must_change_password,fpcs!inner(status)')
-          .eq('user_id', user?.id ?? '')
+          .eq('user_id', user.id)
           .eq('status', 'active')
-          .maybeSingle();
+          .maybeSingle()
+          .timeout(_fpcMembershipTimeout);
       if (membership == null) {
-        return const {'fpc', 'fpo', 'fpo_fpc', 'fpo/fpc'}.contains(role)
-            ? '/fpo'
-            : null;
+        return null;
       }
       final fpc = membership['fpcs'];
       final fpcStatus = fpc is Map ? '${fpc['status'] ?? ''}' : '';
       if (fpcStatus.toLowerCase() != 'active') return null;
       final mustChange = membership['must_change_password'] == true;
       if (mustChange) return '/account/change-password';
-      return '${membership['role'] ?? ''}'.toLowerCase() == 'field_officer'
-          ? '/field'
-          : '/fpo';
+      final membershipRole = '${membership['role'] ?? ''}'.toLowerCase();
+      if (membershipRole == 'field_officer') return '/field';
+      // Setup readiness is loaded by the FPC workspace after navigation. It
+      // must not delay restoring an already authenticated FPC session.
+      return '/fpo';
     } on PostgrestException catch (error) {
       final message = '${error.message} ${error.code}'.toLowerCase();
       final schemaUnavailable =
           message.contains('does not exist') ||
           message.contains('schema cache') ||
           message.contains('pgrst205');
-      if (schemaUnavailable) return null;
-      rethrow;
+      if (!schemaUnavailable) {
+        Get.log('FPC session revalidation failed: $error');
+      }
+      return null;
+    } catch (error) {
+      Get.log('FPC session revalidation failed: $error');
+      return null;
     }
   }
 
@@ -1042,12 +1062,20 @@ class MainAuthController extends GetxController {
   }
 
   Future<void> _refreshVerifiedProfileOnce() async {
-    if (_auth.currentUser == null) {
+    final currentUser = _auth.currentUser;
+    if (currentUser == null) {
       verifiedFarmer.value = null;
       isLoggedIn.value =
           _auth.currentSession != null ||
           hasLocalGuest.value ||
           verifiedFarmer.value != null;
+      return;
+    }
+
+    if (_hasServerRole(currentUser, _fpcServerRoles) ||
+        _hasServerRole(currentUser, const {'admin'})) {
+      verifiedFarmer.value = null;
+      isLoggedIn.value = true;
       return;
     }
 
@@ -1350,7 +1378,7 @@ class MainAuthController extends GetxController {
     );
     if (requireAgriRecord && !_hasStakeholderAgriRecord(verifiedRecord)) {
       throw const FarmerVerificationException(
-        'Stakeholder login needs a government agri record. Complete farmer signup with your agri record card first.',
+        'Shareholder login needs a government agri record. Complete farmer signup with your agri record card first.',
         code: 'farmer_agri_record_required',
       );
     }
@@ -1643,7 +1671,7 @@ class MainAuthController extends GetxController {
       case 'farmer_not_found':
         return 'Create a new farmer account. Tap Sign up to continue.';
       case 'farmer_agri_record_required':
-        return 'Stakeholder login needs a government agri record. Complete farmer signup with your agri record card first.';
+        return 'Shareholder login needs a government agri record. Complete farmer signup with your agri record card first.';
       case 'network_issue':
         return 'Network issue. Check internet and try again.';
       case 'farm_sync_failed':
