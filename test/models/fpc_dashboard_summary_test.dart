@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kalsubai_farms/models/fpc_account_identity.dart';
 import 'package:kalsubai_farms/models/fpc_dashboard_summary.dart';
+import 'package:kalsubai_farms/models/fpc_operating_models.dart';
 import 'package:kalsubai_farms/models/marketplace_listing.dart';
 import 'package:kalsubai_farms/services/fpc_procurement_service.dart';
 import 'package:kalsubai_farms/services/grain_grading_service.dart';
@@ -32,6 +33,28 @@ void main() {
       expect(named.name, 'Asha Patil');
       expect(empty.name, 'FPC workspace');
       expect(empty.email, 'FPC account');
+    });
+
+    test('uses authoritative membership organization and role', () {
+      final account = FpcAccountIdentity.fromMembership(
+        FpcMembershipContext.fromJson({
+          'id': 'membership-1',
+          'fpc_id': 'fpc-1',
+          'role': 'field_officer',
+          'status': 'active',
+          'fpcs': {'name': 'Live Membership FPC', 'status': 'active'},
+        }),
+        userMetadata: {
+          'organization_name': 'Editable Metadata FPC',
+          'display_name': 'Asha Patil',
+        },
+        appMetadata: {'role': 'fpc_admin'},
+        email: 'asha@example.com',
+      );
+
+      expect(account.name, 'Live Membership FPC');
+      expect(account.role, 'field_officer');
+      expect(account.displayName, 'Asha Patil');
     });
   });
 

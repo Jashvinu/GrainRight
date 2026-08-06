@@ -10,6 +10,12 @@ void main() {
   final homeSource = File(
     'lib/screens/fpo_home_screen.dart',
   ).readAsStringSync();
+  final dashboardServiceSource = File(
+    'lib/services/fpc_dashboard_service.dart',
+  ).readAsStringSync();
+  final farmerHomeSource = File(
+    'lib/screens/farmer_home_screen.dart',
+  ).readAsStringSync();
   final farmerScanSource = File(
     'lib/screens/fpo_farmer_qr_scan_screen.dart',
   ).readAsStringSync();
@@ -40,12 +46,23 @@ void main() {
     expect(receiverSource, contains('FpcReceiveQrParser.parse(raw)'));
   });
 
-  test('dashboard uses linked active farmers and visual region coverage', () {
-    expect(homeSource, contains('loadFarmerDirectory()'));
-    expect(homeSource, contains("title: 'Active farmer network'"));
-    expect(homeSource, contains('class _RegionCoverage'));
-    expect(homeSource, contains('class _ActiveFarmerCard'));
-    expect(homeSource, contains("arguments: {'farmerId': farmer.farmerId}"));
+  test('dashboard uses the regional procurement snapshot and workflow', () {
+    expect(homeSource, contains('FpcDashboardService'));
+    expect(homeSource, contains('FpcProcurementDashboard'));
+    expect(homeSource, contains('_openClusterManager'));
+    expect(homeSource, contains("'module': 'harvest_planning'"));
+    expect(
+      dashboardServiceSource,
+      contains('fpc_procurement_dashboard_snapshot'),
+    );
     expect(homeSource, isNot(contains('Open marketplace')));
+  });
+
+  test('Farmer Home and procurement dashboard share one health scorer', () {
+    expect(farmerHomeSource, contains('FarmHealthScore.calculate('));
+    expect(
+      farmerHomeSource,
+      contains("import '../models/farm_health_score.dart';"),
+    );
   });
 }

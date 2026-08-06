@@ -24,7 +24,7 @@ class GradingStrings {
   }
 
   static const Map<String, Map<String, String>> _data = {
-    'title': {'en': 'Grain Grading', 'hi': 'अनाज ग्रेडिंग', 'mr': 'धान्य ग्रेडिंग'},
+    'title': {'en': 'Grain Grading', 'hi': 'अनाज गुणवत्ता जांच', 'mr': 'धान्य दर्जा तपासणी'},
     'step_setup': {'en': 'Batch', 'hi': 'बैच', 'mr': 'बॅच'},
     'step_crop': {'en': 'Crop', 'hi': 'फसल', 'mr': 'पीक'},
     'step_grain': {'en': 'Grain photo', 'hi': 'अनाज फोटो', 'mr': 'धान्य फोटो'},
