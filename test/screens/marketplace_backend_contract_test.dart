@@ -138,4 +138,21 @@ void main() {
       contains('revoke all on public.apmc_sync_control'),
     );
   });
+
+  test(
+    'marketplace order cards localize dynamic statuses, units and rates',
+    () {
+      expect(marketSource, contains('UiStrings.marketplaceStatus(value)'));
+      expect(marketSource, contains('UiStrings.marketplaceUnit(value)'));
+      expect(marketSource, contains('_marketStatus(order.status)'));
+      expect(
+        marketSource,
+        contains('_marketQuantity(order.quantity, order.unit)'),
+      );
+      expect(
+        marketSource,
+        isNot(contains("_titleCase(order.status.replaceAll('_', ' '))")),
+      );
+    },
+  );
 }

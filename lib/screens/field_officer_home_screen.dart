@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
 import '../controllers/main_auth_controller.dart';
+import '../core/localization/locale_text.dart';
 import '../core/theme/app_theme.dart';
 import '../core/localization/ui_strings.dart';
 import '../models/fpc_operating_models.dart';
@@ -83,6 +84,13 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    FieldAssignmentRecord? activeVisitAssignment;
+    for (final assignment in _assignments) {
+      if (assignment.status == 'in_progress') {
+        activeVisitAssignment = assignment;
+        break;
+      }
+    }
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
@@ -99,9 +107,9 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _assignments.isEmpty
+        onPressed: activeVisitAssignment == null
             ? null
-            : () => _recordVisit(_assignments.first),
+            : () => _recordVisit(activeVisitAssignment!),
         icon: const Icon(Icons.add_location_alt_outlined),
         label: Text(UiStrings.fromEnglish('Record visit')),
       ),
@@ -185,13 +193,12 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                     for (final assignment in _assignments)
                       _AssignmentCard(
                         assignment: assignment,
-                        onStart: () => _setStatus(
-                          assignment,
-                          assignment.status == 'assigned'
-                              ? 'in_progress'
-                              : 'completed',
-                        ),
-                        onVisit: () => _recordVisit(assignment),
+                        onStart: assignment.status == 'assigned'
+                            ? () => _setStatus(assignment, 'in_progress')
+                            : null,
+                        onVisit: assignment.status == 'in_progress'
+                            ? () => _recordVisit(assignment)
+                            : null,
                         onInsights: assignment.farmId.isEmpty
                             ? null
                             : () => _showFarmInsights(assignment),
@@ -209,12 +216,13 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                         leading: const Icon(Icons.cloud_upload_outlined),
                         title: Text(
                           item.payload['_queue_type'] == 'assignment_status'
-                              ? UiStrings.fromEnglish(
-                                  'Assignment status update',
-                                )
+                              ? UiStrings.t('field_assignment_status_update')
                               : '${item.payload['visit_type'] ?? 'Field visit'}',
                         ),
-                        subtitle: Text(item.error ?? 'Waiting for network'),
+                        subtitle: Text(
+                          item.error ??
+                              UiStrings.t('field_waiting_for_network'),
+                        ),
                         trailing: Text(item.status),
                       ),
                   ],
@@ -305,9 +313,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                 _insightLine('Scout zones', zones.length),
                 const SizedBox(height: 8),
                 Text(
-                  UiStrings.fromEnglish(
-                    'This information is read-only and limited to the assigned farm.',
-                  ),
+                  UiStrings.t('field_assigned_farm_read_only'),
                   style: const TextStyle(color: AppTheme.textMuted),
                 ),
               ],
@@ -344,6 +350,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   );
 
   Future<void> _recordVisit(FieldAssignmentRecord assignment) async {
+    if (assignment.status != 'in_progress') return;
     final checkInAt = DateTime.now().toUtc();
     final cropStage = TextEditingController();
     final harvestDate = TextEditingController();
@@ -355,8 +362,23 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
     final contactPhone = TextEditingController();
     final kycStatus = TextEditingController();
     final reportedIssue = TextEditingController();
+    final deliveredQuantity = TextEditingController();
     final notes = TextEditingController();
     final photos = <XFile>[];
+    var checkpointOutcome = 'verified';
+    final isSeedDelivery = assignment.seedIssueId.isNotEmpty;
+    final isCropCheckpoint = assignment.cropProgramCheckId.isNotEmpty;
+    final isKyc = assignment.type == 'farmer_kyc';
+    final isHarvestWork = {
+      'crop_monitoring',
+      'harvest_survey',
+      'procurement_support',
+      'crop_program_check',
+    }.contains(assignment.type);
+    final isProcurementWork = {
+      'harvest_survey',
+      'procurement_support',
+    }.contains(assignment.type);
     Position? position;
     final save = await showDialog<bool>(
       context: context,
@@ -367,84 +389,132 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: cropStage,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Crop stage'),
-                  ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: harvestDate,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish(
-                      'Expected harvest date (YYYY-MM-DD)',
+                if (isSeedDelivery) ...[
+                  TextField(
+                    controller: deliveredQuantity,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t(
+                        'field_delivered_seed_quantity_kg',
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: quantity,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Estimated quantity (kg)'),
-                  ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: grade,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Expected grade'),
-                  ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: readiness,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Harvest readiness'),
-                  ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: recommendation,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish(
-                      'Procurement recommendation',
+                  const SizedBox(height: 9),
+                ],
+                if (isCropCheckpoint) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: checkpointOutcome,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t('field_crop_checkpoint_result'),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'verified',
+                        child: Text(UiStrings.fromEnglish('Verified')),
+                      ),
+                      DropdownMenuItem(
+                        value: 'failed',
+                        child: Text(UiStrings.fromEnglish('Failed')),
+                      ),
+                    ],
+                    onChanged: (value) => setDialogState(
+                      () => checkpointOutcome = value ?? 'verified',
                     ),
                   ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: centerRecommendation,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish(
-                      'Collection center recommendation',
+                  const SizedBox(height: 9),
+                ],
+                if (!isSeedDelivery && !isKyc) ...[
+                  TextField(
+                    controller: cropStage,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.fromEnglish('Crop stage'),
                     ),
                   ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: contactPhone,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Farmer contact update'),
+                  const SizedBox(height: 9),
+                ],
+                if (isHarvestWork) ...[
+                  TextField(
+                    controller: harvestDate,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t(
+                        'field_expected_harvest_date_format',
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: kycStatus,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('KYC evidence status'),
+                  const SizedBox(height: 9),
+                  TextField(
+                    controller: quantity,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.fromEnglish(
+                        'Estimated quantity (kg)',
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 9),
-                TextField(
-                  controller: reportedIssue,
-                  decoration: InputDecoration(
-                    labelText: UiStrings.fromEnglish('Reported crop issue'),
+                  const SizedBox(height: 9),
+                  TextField(
+                    controller: grade,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t('field_expected_grade'),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 9),
+                  const SizedBox(height: 9),
+                  TextField(
+                    controller: readiness,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.fromEnglish('Harvest readiness'),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                ],
+                if (isProcurementWork) ...[
+                  TextField(
+                    controller: recommendation,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.fromEnglish(
+                        'Procurement recommendation',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  TextField(
+                    controller: centerRecommendation,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t(
+                        'field_collection_center_recommendation',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                ],
+                if (isKyc) ...[
+                  TextField(
+                    controller: contactPhone,
+                    keyboardType: TextInputType.phone,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t('field_farmer_contact_update'),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                  TextField(
+                    controller: kycStatus,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t('field_kyc_evidence_status'),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                ],
+                if (!isSeedDelivery && !isKyc) ...[
+                  TextField(
+                    controller: reportedIssue,
+                    decoration: InputDecoration(
+                      labelText: UiStrings.t('field_reported_crop_issue'),
+                    ),
+                  ),
+                  const SizedBox(height: 9),
+                ],
                 TextField(
                   controller: notes,
                   maxLines: 3,
@@ -470,7 +540,9 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                       },
                       icon: const Icon(Icons.add_a_photo_outlined),
                       label: Text(
-                        UiStrings.fromEnglish('Add photo (${photos.length})'),
+                        UiStrings.f('field_add_photo_count', {
+                          'count': photos.length,
+                        }),
                       ),
                     ),
                     OutlinedButton.icon(
@@ -514,6 +586,29 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
       ),
     );
     if (save != true) return;
+    if (assignment.seedIssueId.isNotEmpty &&
+        (double.tryParse(deliveredQuantity.text.trim()) ?? 0) <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(UiStrings.t('field_enter_delivered_seed_quantity')),
+          ),
+        );
+      }
+      return;
+    }
+    if (isSeedDelivery && photos.isEmpty) {
+      _showValidationMessage(UiStrings.t('field_add_delivery_photo'));
+      return;
+    }
+    if (isSeedDelivery && position == null) {
+      _showValidationMessage(UiStrings.t('field_capture_delivery_location'));
+      return;
+    }
+    if (isCropCheckpoint && photos.isEmpty) {
+      _showValidationMessage(UiStrings.t('field_add_checkpoint_photo'));
+      return;
+    }
     final now = DateTime.now().toUtc();
     final payload = <String, dynamic>{
       'assignment_id': assignment.id,
@@ -536,6 +631,10 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
         'kyc_status': kycStatus.text.trim(),
         'reported_issue': reportedIssue.text.trim(),
         'collection_center_recommendation': centerRecommendation.text.trim(),
+        if (assignment.seedIssueId.isNotEmpty)
+          'delivered_quantity_kg': double.parse(deliveredQuantity.text.trim()),
+        if (assignment.cropProgramCheckId.isNotEmpty)
+          'checkpoint_outcome': checkpointOutcome,
       },
       'check_in': {
         'at': checkInAt.toIso8601String(),
@@ -560,6 +659,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
     } catch (error) {
       if (_queue.shouldQueueAfterError(error)) {
         await _queue.enqueue(payload);
+        await _queue.enqueueAssignmentStatus(assignment, 'completed');
       } else {
         if (mounted) {
           ScaffoldMessenger.of(
@@ -570,6 +670,13 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
       }
     }
     await _load();
+  }
+
+  void _showValidationMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -602,7 +709,10 @@ class _FieldHero extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          '$assigned assigned · $queued waiting to sync',
+          UiStrings.f('field_assignment_sync_summary', {
+            'assigned': assigned,
+            'queued': queued,
+          }),
           style: const TextStyle(
             color: Colors.white70,
             fontWeight: FontWeight.w700,
@@ -639,8 +749,8 @@ class _AccessNote extends StatelessWidget {
 
 class _AssignmentCard extends StatelessWidget {
   final FieldAssignmentRecord assignment;
-  final VoidCallback onStart;
-  final VoidCallback onVisit;
+  final VoidCallback? onStart;
+  final VoidCallback? onVisit;
   final VoidCallback? onInsights;
   const _AssignmentCard({
     required this.assignment,
@@ -664,27 +774,43 @@ class _AssignmentCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ),
-              Chip(label: Text(assignment.status.replaceAll('_', ' '))),
+              Chip(
+                label: Text(
+                  UiStrings.option(assignment.status.replaceAll('_', ' ')),
+                ),
+              ),
             ],
+          ),
+          Text(
+            [
+              UiStrings.option(assignment.type.replaceAll('_', ' ')),
+              if (assignment.farmerId.isNotEmpty)
+                UiStrings.f('field_assignment_farmer_id', {
+                  'id': assignment.farmerId,
+                }),
+              if (assignment.scheduledFor != null)
+                '${UiStrings.fromEnglish('Scheduled')} '
+                    '${LocaleText.date(assignment.scheduledFor!.toLocal())} '
+                    '${LocaleText.time(assignment.scheduledFor!.toLocal())}',
+            ].join(' · '),
+            style: const TextStyle(color: AppTheme.textMuted),
           ),
           if (assignment.instructions.isNotEmpty) Text(assignment.instructions),
           const SizedBox(height: 10),
           Wrap(
             spacing: 8,
             children: [
-              OutlinedButton(
-                onPressed: onStart,
-                child: Text(
-                  UiStrings.fromEnglish(
-                    assignment.status == 'assigned' ? 'Start' : 'Complete',
-                  ),
+              if (assignment.status == 'assigned')
+                OutlinedButton(
+                  onPressed: onStart,
+                  child: Text(UiStrings.t('field_start')),
                 ),
-              ),
-              FilledButton.icon(
-                onPressed: onVisit,
-                icon: const Icon(Icons.edit_location_alt_outlined),
-                label: Text(UiStrings.fromEnglish('Visit')),
-              ),
+              if (assignment.status == 'in_progress')
+                FilledButton.icon(
+                  onPressed: onVisit,
+                  icon: const Icon(Icons.edit_location_alt_outlined),
+                  label: Text(UiStrings.fromEnglish('Record visit')),
+                ),
               if (onInsights != null)
                 OutlinedButton.icon(
                   onPressed: onInsights,

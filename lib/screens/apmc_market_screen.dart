@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:kalsubai_farms/core/localization/locale_text.dart';
@@ -21,6 +20,16 @@ import '../widgets/fpc_bottom_nav.dart';
 
 String _marketText(String english) => UiStrings.fromEnglish(english);
 
+String _marketStatus(String value) => UiStrings.marketplaceStatus(value);
+
+String _marketUnit(String value) => UiStrings.marketplaceUnit(value);
+
+String _marketQuantity(num value, String unit) =>
+    '${LocaleText.number(value)} ${_marketUnit(unit)}';
+
+String _marketRate(num value, String unit) =>
+    '${_money(value)} / ${_marketUnit(unit)}';
+
 String _displayMarketplaceGrade(String raw) {
   final value = raw.trim();
   final normalized = value.toLowerCase();
@@ -34,11 +43,7 @@ String _displayMarketplaceGrade(String raw) {
   return value;
 }
 
-String _money(num value) => NumberFormat.currency(
-  locale: 'en_IN',
-  symbol: '₹',
-  decimalDigits: 0,
-).format(value);
+String _money(num value) => '₹${LocaleText.number(value, fractionDigits: 0)}';
 
 class MarketplacePage extends StatefulWidget {
   final List<Map<String, String>> inventoryLots;
@@ -409,7 +414,7 @@ class _MarketplacePageState extends State<MarketplacePage>
       return _marketText(error.message);
     }
     return _marketText(
-      'Marketplace is temporarily unavailable. Please refresh and try again.',
+      'Marketplace is temporarily unavailable. Please try again.',
     );
   }
 
@@ -496,7 +501,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not send counteroffer'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -524,7 +529,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not accept offer'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -548,7 +553,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not propose final rate'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -569,7 +574,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not confirm final rate'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -590,7 +595,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not accept procurement'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -621,7 +626,7 @@ class _MarketplacePageState extends State<MarketplacePage>
     } catch (error) {
       Get.snackbar(
         _marketText('Could not record cost'),
-        '$error',
+        _marketplaceErrorText(error),
         snackPosition: SnackPosition.BOTTOM,
       );
     } finally {
@@ -811,7 +816,6 @@ class _MarketplacePageState extends State<MarketplacePage>
       return FpcWorkspaceScaffold(
         current: FpcNavTab.marketplace,
         title: _marketText('Marketplace'),
-        actions: [_languageSelector(), const SizedBox(width: 10)],
         body: _body(),
       );
     }
@@ -1295,7 +1299,9 @@ class _MarketplaceListingTile extends StatelessWidget {
         imagePath: listing.imagePaths.firstOrNull ?? '',
         fallbackAsset: _produceFallbackAsset(listing),
       ),
-      badge: _marketText('Farm direct'),
+      badge: _marketText(
+        listing.isFpcExclusive ? 'FPC exclusive' : 'Farm direct',
+      ),
       title: listing.displayProductName,
       subtitle: [
         if (listing.grade.trim().isNotEmpty) listing.grade,
@@ -1752,14 +1758,14 @@ class _NegotiationCard extends StatelessWidget {
                 ),
               ),
               _StatusBadge(
-                label: _titleCase(negotiation.status.replaceAll('_', ' ')),
+                label: _marketStatus(negotiation.status),
                 color: negotiation.isOpen ? AppTheme.green : AppTheme.textMuted,
               ),
             ],
           ),
           const SizedBox(height: 8),
           Text(
-            '${_marketText('Whole lot')}: ${negotiation.listing.quantity} ${negotiation.listing.unit}',
+            '${_marketText('Whole lot')}: ${_marketQuantity(negotiation.listing.quantity, negotiation.listing.unit)}',
             style: const TextStyle(
               color: AppTheme.textMuted,
               fontWeight: FontWeight.w700,
@@ -1768,7 +1774,7 @@ class _NegotiationCard extends StatelessWidget {
           if (offer != null) ...[
             const SizedBox(height: 6),
             Text(
-              '${_money(offer.pricePerUnit)} / ${offer.unit} • ${_marketText(offer.offeredByRole == 'farmer' ? 'Farmer offer' : 'FPC offer')}',
+              '${_marketRate(offer.pricePerUnit, offer.unit)} • ${_marketText(offer.offeredByRole == 'farmer' ? 'Farmer offer' : 'FPC offer')}',
               style: const TextStyle(
                 color: AppTheme.greenDark,
                 fontWeight: FontWeight.w900,
@@ -1944,7 +1950,7 @@ class _OrderCard extends StatelessWidget {
                 ),
               ),
               _StatusBadge(
-                label: _titleCase(order.status.replaceAll('_', ' ')),
+                label: _marketStatus(order.status),
                 color: order.canAcceptProcurement
                     ? Colors.orange.shade700
                     : AppTheme.green,
@@ -1963,26 +1969,26 @@ class _OrderCard extends StatelessWidget {
             children: [
               _MetricText(
                 label: _marketText('Whole lot'),
-                value: '${order.quantity} ${order.unit}',
+                value: _marketQuantity(order.quantity, order.unit),
               ),
               _MetricText(
                 label: _marketText('Provisional rate'),
-                value: '${_money(order.provisionalRate)} / ${order.unit}',
+                value: _marketRate(order.provisionalRate, order.unit),
               ),
               if (order.arrivalQuantityKg != null)
                 _MetricText(
                   label: _marketText('Arrival weight'),
-                  value: '${order.arrivalQuantityKg} kg',
+                  value: _marketQuantity(order.arrivalQuantityKg!, 'kg'),
                 ),
               if (order.arrivalGrade.isNotEmpty)
                 _MetricText(
                   label: _marketText('Arrival grade'),
-                  value: order.arrivalGrade,
+                  value: UiStrings.option(order.arrivalGrade),
                 ),
               if (order.finalRate != null)
                 _MetricText(
                   label: _marketText('Final rate'),
-                  value: '${_money(order.finalRate!)} / kg',
+                  value: _marketRate(order.finalRate!, 'kg'),
                 ),
             ],
           ),
@@ -2232,13 +2238,13 @@ class _ApmcTab extends StatelessWidget {
                 _InfoPill(
                   icon: Icons.calendar_today_outlined,
                   text:
-                      '${_marketText('Latest rate date')}: ${DateFormat('dd MMM yyyy').format(latestArrival.toLocal())}',
+                      '${_marketText('Latest rate date')}: ${LocaleText.date(latestArrival.toLocal())}',
                 ),
               if (latestSync != null)
                 _InfoPill(
                   icon: Icons.sync_rounded,
                   text:
-                      '${_marketText('Last official sync')}: ${DateFormat('dd MMM, HH:mm').format(latestSync.toLocal())}',
+                      '${_marketText('Last official sync')}: ${LocaleText.date(latestSync.toLocal(), pattern: 'dd MMM')}, ${LocaleText.time(latestSync.toLocal())}',
                 ),
             ],
           ),
@@ -2682,6 +2688,19 @@ class _MarketplaceProductDetailPageState
             body: description,
           ),
           if (listing != null) ...[
+            if (listing.isFpcExclusive) ...[
+              const SizedBox(height: 12),
+              _DetailSection(
+                title: _marketText('FPC crop-program sale'),
+                body: listing.protectedFloorRate == null
+                    ? _marketText(
+                        'Only the sponsoring FPC can negotiate this harvest.',
+                      )
+                    : _marketText(
+                        'Only the sponsoring FPC can negotiate. The final rate cannot be below ${_money(listing.protectedFloorRate!)}/kg.',
+                      ),
+              ),
+            ],
             const SizedBox(height: 12),
             _DetailFacts(
               facts: [
@@ -2900,7 +2919,7 @@ class _ApmcRateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final date = rate.arrivalDate == null
         ? ''
-        : DateFormat('dd MMM yyyy').format(rate.arrivalDate!.toLocal());
+        : LocaleText.date(rate.arrivalDate!.toLocal());
     return _MarketCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2925,7 +2944,7 @@ class _ApmcRateCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      rate.commodity,
+                      UiStrings.option(rate.commodity),
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w900,
@@ -2933,8 +2952,8 @@ class _ApmcRateCard extends StatelessWidget {
                     ),
                     Text(
                       [
-                        rate.variety,
-                        rate.grade,
+                        UiStrings.option(rate.variety),
+                        UiStrings.option(rate.grade),
                       ].where((value) => value.isNotEmpty).join(' • '),
                       style: const TextStyle(
                         color: AppTheme.textMuted,
@@ -2945,7 +2964,7 @@ class _ApmcRateCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${_money(rate.modalPrice)}/qtl',
+                '${_money(rate.modalPrice)}/${UiStrings.t('qtl_unit')}',
                 style: const TextStyle(
                   color: AppTheme.green,
                   fontWeight: FontWeight.w900,
@@ -2956,7 +2975,8 @@ class _ApmcRateCard extends StatelessWidget {
           const SizedBox(height: 12),
           _IconLine(
             icon: Icons.location_on_outlined,
-            text: '${rate.market}, ${rate.district}, ${rate.state}',
+            text:
+                '${UiStrings.apmcMarketName(rate.market)}, ${rate.district}, ${rate.state}',
           ),
           const SizedBox(height: 8),
           Row(

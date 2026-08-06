@@ -51,6 +51,21 @@ void main() {
       expect(listing.interestedByMe, isTrue);
       expect(listing.isPaused, isTrue);
     });
+
+    test('loads FPC-exclusive crop-program price protection', () {
+      final listing = MarketplaceListing.fromJson({
+        'id': 'listing-3',
+        'farmer_user_id': 'farmer-user-3',
+        'crop_program_enrollment_id': 'enrollment-1',
+        'exclusive_fpc_id': 'fpc-1',
+        'sale_channel': 'fpc_exclusive',
+        'protected_floor_rate': '44.50',
+        'status': 'listed',
+      });
+
+      expect(listing.isFpcExclusive, isTrue);
+      expect(listing.protectedFloorRate, 44.5);
+    });
   });
 
   group('Marketplace negotiation and order', () {

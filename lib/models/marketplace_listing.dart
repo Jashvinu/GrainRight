@@ -35,6 +35,10 @@ class MarketplaceListing {
   final int interestCount;
   final bool interestedByMe;
   final String interestStatus;
+  final String cropProgramEnrollmentId;
+  final String exclusiveFpcId;
+  final String saleChannel;
+  final double? protectedFloorRate;
 
   const MarketplaceListing({
     required this.id,
@@ -73,6 +77,10 @@ class MarketplaceListing {
     this.closedReason = '',
     this.createdAt,
     this.updatedAt,
+    this.cropProgramEnrollmentId = '',
+    this.exclusiveFpcId = '',
+    this.saleChannel = 'open_market',
+    this.protectedFloorRate,
   });
 
   factory MarketplaceListing.fromJson(Map<String, dynamic> json) {
@@ -118,6 +126,10 @@ class MarketplaceListing {
       interestCount: _int(json['interest_count']) ?? 0,
       interestedByMe: _bool(json['interested_by_me']),
       interestStatus: _text(json['interest_status']),
+      cropProgramEnrollmentId: _text(json['crop_program_enrollment_id']),
+      exclusiveFpcId: _text(json['exclusive_fpc_id']),
+      saleChannel: _text(json['sale_channel'], 'open_market'),
+      protectedFloorRate: _double(json['protected_floor_rate']),
     );
   }
 
@@ -137,6 +149,8 @@ class MarketplaceListing {
   }
 
   bool get isPaused => status.toLowerCase() == 'paused';
+  bool get isFpcExclusive =>
+      saleChannel == 'fpc_exclusive' && exclusiveFpcId.isNotEmpty;
 
   bool get isSold {
     final value = status.toLowerCase();

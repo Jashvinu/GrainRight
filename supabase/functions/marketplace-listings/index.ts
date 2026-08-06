@@ -87,7 +87,7 @@ function listingPayload(
   userId: string,
   body: JsonRecord,
   lotId: string,
-) {
+): JsonRecord {
   const productName = text(item.product_name) ||
     [text(item.crop), text(item.variety)].filter(Boolean).join(" ") ||
     text(item.inventory_id);
@@ -455,6 +455,9 @@ Deno.serve(async (req) => {
         .from("marketplace_listings")
         .select("*")
         .in("status", ["active", "listed"])
+        .or(
+          `exclusive_fpc_id.is.null,exclusive_fpc_id.eq.${access.fpcAdminId}`,
+        )
         .order("created_at", { ascending: false })
         .limit(300);
       if (error) throw error;
@@ -498,9 +501,15 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (error) throw error;
       const row = record(data);
+      const exclusiveFpcId = text(row.exclusive_fpc_id);
       if (
         !row.id ||
-        (!activeListingStatus(row.status) && listingOwner(row) !== userId)
+        (!activeListingStatus(row.status) && listingOwner(row) !== userId) ||
+        (
+          exclusiveFpcId.length > 0 &&
+          listingOwner(row) !== userId &&
+          access.fpcAdminId !== exclusiveFpcId
+        )
       ) {
         return errorResponse(
           "Listing was not found.",
@@ -562,6 +571,56 @@ Deno.serve(async (req) => {
         );
       }
 
+      const { data: complianceData, error: complianceError } = await supabase
+        .rpc("submit_crop_program_harvest", {
+          p_inventory_item_id: text(item.id),
+          p_actor_user_id: userId,
+        });
+      if (complianceError) throw complianceError;
+      const compliance = record(complianceData);
+      let cropProgramEnrollmentId = text(compliance.enrollment_id) ||
+        text(item.crop_program_enrollment_id);
+      let exclusiveFpcId: string | null = null;
+      let protectedFloorRate: number | null = null;
+      if (compliance.enrolled === true && cropProgramEnrollmentId) {
+        const { data: enrollmentData, error: enrollmentError } = await supabase
+          .from("fpc_program_enrollments")
+          .select("id,fpc_id,status")
+          .eq("id", cropProgramEnrollmentId)
+          .maybeSingle();
+        if (enrollmentError) throw enrollmentError;
+        const enrollment = record(enrollmentData);
+        const programStatus = text(enrollment.status);
+        if (!["compliant", "exclusive_sale", "released"].includes(
+          programStatus,
+        )) {
+          return errorResponse(
+            "This harvest cannot be listed until the FPC crop policy is approved.",
+            409,
+            undefined,
+            "crop_program_policy_blocked",
+          );
+        }
+        if (programStatus !== "released") {
+          exclusiveFpcId = text(enrollment.fpc_id);
+          const { data: evaluationData, error: evaluationError } =
+            await supabase
+              .from("fpc_compliance_evaluations")
+              .select("protected_floor_rate")
+              .eq("enrollment_id", cropProgramEnrollmentId)
+              .eq("status", "passed")
+              .order("attempt_no", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+          if (evaluationError) throw evaluationError;
+          protectedFloorRate = numberOrNull(
+            record(evaluationData).protected_floor_rate,
+          );
+        }
+      } else if (compliance.enrolled !== true) {
+        cropProgramEnrollmentId = "";
+      }
+
       const { data: existingLot, error: lotFindError } = await supabase
         .from("marketplace_harvest_lots")
         .select("id")
@@ -581,6 +640,8 @@ Deno.serve(async (req) => {
         quantity_kg: numberOrNull(item.quantity),
         moisture_percent: numberOrNull(item.moisture_percent),
         status: "listed",
+        crop_program_enrollment_id: cropProgramEnrollmentId || null,
+        exclusive_fpc_id: exclusiveFpcId,
         metadata: {
           inventory_id: text(item.inventory_id),
           source_flow: text(item.source_flow),
@@ -605,6 +666,12 @@ Deno.serve(async (req) => {
       if (findError) throw findError;
       const existingId = text(record(existing).id);
       const payload = listingPayload(item, userId, body, lotId);
+      payload.crop_program_enrollment_id = cropProgramEnrollmentId || null;
+      payload.exclusive_fpc_id = exclusiveFpcId;
+      payload.sale_channel = exclusiveFpcId
+        ? "fpc_exclusive"
+        : "open_market";
+      payload.protected_floor_rate = protectedFloorRate;
       const savedResult = existingId
         ? await supabase.from("marketplace_listings")
           .update(payload).eq("id", existingId).select("*").single()
@@ -972,6 +1039,7 @@ Deno.serve(async (req) => {
       if (currentError) throw currentError;
       const current = record(currentData);
       const arrivalQuantity = numberOrNull(current.arrival_quantity_kg);
+      const protectedFloorRate = numberOrNull(current.protected_floor_rate);
       if (
         !current.id ||
         arrivalQuantity == null ||
@@ -984,6 +1052,18 @@ Deno.serve(async (req) => {
           409,
           undefined,
           "marketplace_arrival_required",
+        );
+      }
+      if (
+        protectedFloorRate != null &&
+        finalRate != null &&
+        finalRate < protectedFloorRate
+      ) {
+        return errorResponse(
+          `Final rate cannot be below the protected floor of ₹${protectedFloorRate}/kg.`,
+          409,
+          undefined,
+          "crop_program_floor_rate_required",
         );
       }
       const { data, error } = await supabase.from("marketplace_orders")
@@ -1198,6 +1278,18 @@ Deno.serve(async (req) => {
             400,
             undefined,
             "own_listing_request",
+          );
+        }
+        const exclusiveFpcId = text(listing.exclusive_fpc_id);
+        if (
+          exclusiveFpcId.length > 0 &&
+          exclusiveFpcId !== access.fpcAdminId
+        ) {
+          return errorResponse(
+            "This harvest is exclusive to its sponsoring FPC.",
+            403,
+            undefined,
+            "crop_program_fpc_exclusive",
           );
         }
       } else if (!access.farmer || !productId) {

@@ -21,6 +21,7 @@ import '../controllers/language_controller.dart';
 import '../controllers/main_auth_controller.dart';
 import '../models/farmer_inventory_item.dart';
 import '../models/farmer_daily_task.dart';
+import '../models/farm_health_score.dart';
 import '../models/harvest_zone_plan.dart';
 import '../models/satellite/farm_model.dart';
 import '../models/satellite/farm_alert_model.dart';
@@ -36,6 +37,8 @@ import 'package:kalsubai_farms/core/widgets/app_logout_flow.dart';
 import 'package:kalsubai_farms/core/widgets/brand_text.dart';
 import '../widgets/farm_hills_background.dart';
 import '../widgets/farmer_floating_bottom_nav.dart';
+import '../widgets/farmer_delivery_page.dart';
+import '../widgets/farmer_seeds_page.dart';
 import '../widgets/satellite/satellite_map_view.dart';
 import 'package:kalsubai_farms/core/widgets/language_selector_button.dart';
 import '../services/location_service.dart';
@@ -43,6 +46,7 @@ import '../services/grain_grading_service.dart';
 import '../services/harvest_zone_plan_service.dart';
 import '../services/farm_status_notification_service.dart';
 import '../services/farmer_daily_task_service.dart';
+import '../services/fpc_crop_program_service.dart';
 import '../services/farmer_notification_realtime_service.dart';
 import '../services/local_notification_service.dart';
 import '../services/secure_app_storage.dart';
@@ -80,6 +84,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
   static const _farmTabIndex = 1;
   static const _inventoryTabIndex = 2;
   static const _aiChatTabIndex = 3;
+  static const _seedsTabIndex = 4;
+  static const _deliveryTabIndex = 5;
   static const _farmPageRefreshMinimumDuration = Duration(seconds: 2);
   static const _farmSummaryFreshFor = Duration(minutes: 2);
   static const _liveWeatherFreshFor = Duration(minutes: 2);
@@ -350,6 +356,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
         return _farmTabIndex;
       case 'inventory':
         return _inventoryTabIndex;
+      case 'seeds':
+        return _seedsTabIndex;
+      case 'delivery':
+        return _deliveryTabIndex;
       default:
         return null;
     }
@@ -1014,6 +1024,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     unawaited(_syncInventoryForCurrentFarmer());
   }
 
+  void _openSeedsTab() {
+    if (_guardFirstFarmSetup()) return;
+    setState(() => _index = _seedsTabIndex);
+  }
+
+  void _openDeliveryTab() {
+    if (_guardFirstFarmSetup()) return;
+    setState(() => _index = _deliveryTabIndex);
+  }
+
   void _openShellTabFromPushedPage(VoidCallback openTab) {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
@@ -1423,6 +1443,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     _farmTabIndex: FarmerBottomNavItem.farm,
     _aiChatTabIndex: FarmerBottomNavItem.aiChat,
     _inventoryTabIndex: FarmerBottomNavItem.farm,
+    _seedsTabIndex: FarmerBottomNavItem.farm,
+    _deliveryTabIndex: FarmerBottomNavItem.farm,
   };
 
   static int _pageIndexForMobile(FarmerBottomNavItem item) {
@@ -1567,7 +1589,37 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     } else {
       _inventorySaving = false;
     }
-    if (saved.syncStatus == 'synced') return;
+    if (saved.syncStatus == 'synced') {
+      if (saved.remoteId.isNotEmpty &&
+          saved.productCategory == FarmerInventoryProductCategory.cropLot &&
+          saved.harvestBatchId.isNotEmpty) {
+        try {
+          final result = await FpcCropProgramService().evaluateHarvest(
+            saved.remoteId,
+          );
+          if (result['enrolled'] == true) {
+            final status = '${result['status'] ?? ''}';
+            final message = status == 'pending_fpc_review'
+                ? 'Harvest passed automatic checks and is awaiting FPC approval.'
+                : status == 'released'
+                ? 'The crop program is released for open-market selling.'
+                : 'Harvest policy result: ${status.replaceAll('_', ' ')}.';
+            Get.snackbar(
+              UiStrings.fromEnglish('FPC crop program'),
+              UiStrings.fromEnglish(message),
+              snackPosition: SnackPosition.BOTTOM,
+            );
+          }
+        } catch (error) {
+          Get.snackbar(
+            UiStrings.fromEnglish('Harvest saved'),
+            UiStrings.fromEnglish('FPC policy review could not start: $error'),
+            snackPosition: SnackPosition.BOTTOM,
+          );
+        }
+      }
+      return;
+    }
     Get.snackbar(
       UiStrings.t('inventory'),
       UiStrings.t('inventory_saved_sync_pending'),
@@ -6076,6 +6128,34 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
     }
   }
 
+  bool _isSeedBuyingEligible(_FarmerFarm farm) {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final sowingDate = farm.sowingDate;
+    if (sowingDate != null) {
+      final sowingOnly = DateTime(
+        sowingDate.year,
+        sowingDate.month,
+        sowingDate.day,
+      );
+      if (!sowingOnly.isAfter(todayOnly)) return false;
+    }
+    final stage = (farm.currentStatusStage ?? '').trim().toLowerCase();
+    if (const {
+      'sowing',
+      'germination',
+      'vegetative',
+      'flowering',
+      'grain filling',
+      'grain_filling',
+      'maturity',
+    }.contains(stage)) {
+      return false;
+    }
+    final status = (farm.currentStatus ?? '').trim().toLowerCase();
+    return !const {'seed sown', 'sown', 'growing'}.contains(status);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedFarmIndex = _safeSelectedFarmIndex;
@@ -6103,7 +6183,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
       _scheduleInitialFarmServiceSync(selectedFarmIndex);
     }
     final selectedStatusSnapshot = _statusSnapshotForFarm(selectedFarmIndex);
-    final pageIndex = _index.clamp(_dashboardTabIndex, _aiChatTabIndex).toInt();
+    final pageIndex = _index.clamp(_dashboardTabIndex, _seedsTabIndex).toInt();
 
     Widget buildCurrentPage() {
       switch (pageIndex) {
@@ -6207,6 +6287,28 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
             onUpdateFarmStatus: () => _openFarmStatusUpdate(selectedFarmIndex),
             bottomContentInset: 106,
           );
+        case _seedsTabIndex:
+          final seedBuyingFarms = <FarmerSeedFarmOption>[
+            for (var index = 0; index < _farms.length; index++)
+              if (_isSeedBuyingEligible(_farms[index]))
+                FarmerSeedFarmOption(
+                  sourceIndex: index,
+                  id: _farms[index].remoteFarmId,
+                  name: _farms[index].name,
+                  crop: _farms[index].crop,
+                  variety: _farms[index].variety,
+                ),
+          ];
+          return FarmerSeedsPage(
+            farms: seedBuyingFarms,
+            selectedIndex: selectedFarmIndex,
+            onFarmSelected: (sourceIndex) =>
+                _selectFarmIndex(sourceIndex, forceRefresh: false),
+            onAddFarm: () => unawaited(_openAddFarmSheet()),
+            hasOnlySownFarms: _farms.isNotEmpty && seedBuyingFarms.isEmpty,
+          );
+        case _deliveryTabIndex:
+          return const FarmerDeliveryPage();
         case _dashboardTabIndex:
         default:
           return _FarmerDashboard(
@@ -6386,6 +6488,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
               onOpenGrainGrading: _openGrainGradingPage,
               onOpenWeather: _openWeatherPage,
               onOpenMarketplace: _openMarketPage,
+              onOpenSeeds: _openSeedsTab,
+              onOpenDelivery: _openDeliveryTab,
               onOpenSchemes: _openSchemesPage,
               onOpenHistory: _openHistoryIndexPage,
               onOpenInventory: _openInventoryTab,
@@ -6572,7 +6676,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                _farm.name,
+                                UiStrings.label(_farm.name),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -6602,6 +6706,40 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen>
                     ),
                   ),
                   const SizedBox(height: 14),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.spa_rounded,
+                      color: AppTheme.green,
+                    ),
+                    title: Text(
+                      UiStrings.t('seeds'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(UiStrings.t('farmer_seeds_nav_desc')),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openSeedsTab();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.local_shipping_outlined,
+                      color: AppTheme.green,
+                    ),
+                    title: Text(
+                      UiStrings.fromEnglish('Delivery'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      UiStrings.fromEnglish(
+                        'Seed, procurement and payment timeline',
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _openDeliveryTab();
+                    },
+                  ),
                   ListTile(
                     leading: const Icon(
                       Icons.wb_cloudy_rounded,
@@ -7123,6 +7261,9 @@ class _InventoryPageState extends State<_InventoryPage> {
   late String _searchText;
   late String _selectedFarm;
   late String _sortBy;
+  List<_FarmerSeedInventoryItem> _seedInventory = const [];
+  bool _seedInventoryLoading = true;
+  String _seedInventoryError = '';
 
   @override
   void initState() {
@@ -7133,6 +7274,7 @@ class _InventoryPageState extends State<_InventoryPage> {
         ? widget.initialSortBy
         : _sortOptions.first;
     _searchController = TextEditingController(text: _searchText);
+    unawaited(_loadSeedInventory());
   }
 
   @override
@@ -7149,6 +7291,37 @@ class _InventoryPageState extends State<_InventoryPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSeedInventory() async {
+    if (mounted) {
+      setState(() {
+        _seedInventoryLoading = true;
+        _seedInventoryError = '';
+      });
+    }
+    try {
+      final rows = await Supabase.instance.client
+          .from('farmer_seed_inventory')
+          .select('*,farm:farms(name),fpc:fpcs(name)')
+          .order('received_at', ascending: false)
+          .limit(100);
+      if (!mounted) return;
+      setState(() {
+        _seedInventory = (rows as List)
+            .whereType<Map>()
+            .map(
+              (row) => _FarmerSeedInventoryItem.fromJson(
+                Map<String, dynamic>.from(row),
+              ),
+            )
+            .toList(growable: false);
+      });
+    } catch (error) {
+      if (mounted) setState(() => _seedInventoryError = '$error');
+    } finally {
+      if (mounted) setState(() => _seedInventoryLoading = false);
+    }
   }
 
   List<String> get _farmOptions {
@@ -7592,6 +7765,59 @@ class _InventoryPageState extends State<_InventoryPage> {
             ),
           ),
           const SizedBox(height: 12),
+          _InventorySectionHeader(
+            icon: Icons.spa_rounded,
+            title: UiStrings.fromEnglish('Purchased seeds'),
+            count: _seedInventory.length,
+          ),
+          const SizedBox(height: 8),
+          if (_seedInventoryLoading)
+            const _Panel(
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            )
+          else if (_seedInventoryError.isNotEmpty)
+            _Panel(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Text(
+                      UiStrings.authError(_seedInventoryError),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppTheme.textMuted),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: _loadSeedInventory,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: Text(UiStrings.t('try_again')),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_seedInventory.isEmpty)
+            _Panel(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  UiStrings.fromEnglish(
+                    'Paid seed appears here after delivery is acknowledged.',
+                  ),
+                  style: const TextStyle(color: AppTheme.textMuted),
+                ),
+              ),
+            )
+          else
+            for (final seed in _seedInventory)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _FarmerSeedInventoryCard(seed: seed),
+              ),
+          const SizedBox(height: 16),
           if (lots.isEmpty)
             _Panel(
               child: Padding(
@@ -7645,6 +7871,167 @@ class _InventoryPageState extends State<_InventoryPage> {
     );
   }
 }
+
+class _FarmerSeedInventoryItem {
+  final String seedName;
+  final String batchCode;
+  final String crop;
+  final String variety;
+  final String farmName;
+  final String fpcName;
+  final double quantityKg;
+  final int unitPricePaise;
+  final int amountPaise;
+  final String status;
+  final DateTime receivedAt;
+  final DateTime? usedAt;
+
+  const _FarmerSeedInventoryItem({
+    required this.seedName,
+    required this.batchCode,
+    required this.crop,
+    required this.variety,
+    required this.farmName,
+    required this.fpcName,
+    required this.quantityKg,
+    required this.unitPricePaise,
+    required this.amountPaise,
+    required this.status,
+    required this.receivedAt,
+    required this.usedAt,
+  });
+
+  factory _FarmerSeedInventoryItem.fromJson(Map<String, dynamic> json) {
+    final farm = json['farm'] is Map
+        ? Map<String, dynamic>.from(json['farm'] as Map)
+        : const <String, dynamic>{};
+    final fpc = json['fpc'] is Map
+        ? Map<String, dynamic>.from(json['fpc'] as Map)
+        : const <String, dynamic>{};
+    return _FarmerSeedInventoryItem(
+      seedName: '${json['seed_name'] ?? 'Certified seed'}',
+      batchCode: '${json['batch_code'] ?? ''}',
+      crop: '${json['crop'] ?? ''}',
+      variety: '${json['variety'] ?? ''}',
+      farmName: '${farm['name'] ?? 'Farm'}',
+      fpcName: '${fpc['name'] ?? 'FPC'}',
+      quantityKg: _inventoryNumber(json['quantity_kg']),
+      unitPricePaise: _inventoryInteger(json['unit_price_paise']),
+      amountPaise: _inventoryInteger(json['amount_paise']),
+      status: '${json['status'] ?? 'available'}',
+      receivedAt:
+          DateTime.tryParse('${json['received_at'] ?? ''}') ?? DateTime.now(),
+      usedAt: DateTime.tryParse('${json['used_at'] ?? ''}'),
+    );
+  }
+}
+
+class _FarmerSeedInventoryCard extends StatelessWidget {
+  final _FarmerSeedInventoryItem seed;
+
+  const _FarmerSeedInventoryCard({required this.seed});
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = seed.status == 'used'
+        ? AppTheme.textMuted
+        : AppTheme.greenDark;
+    final received = LocaleText.date(seed.receivedAt, pattern: 'dd MMM yyyy');
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.spa_rounded, color: AppTheme.greenDark),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    UiStrings.label(seed.seedName),
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _InventoryChip(label: UiStrings.option(seed.status)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                _InventoryChip(label: UiStrings.label(seed.farmName)),
+                _InventoryChip(label: UiStrings.label(seed.fpcName)),
+                if (seed.batchCode.trim().isNotEmpty)
+                  _InventoryChip(label: seed.batchCode),
+                if (seed.crop.trim().isNotEmpty)
+                  _InventoryChip(label: UiStrings.option(seed.crop)),
+                if (seed.variety.trim().isNotEmpty)
+                  _InventoryChip(label: UiStrings.option(seed.variety)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _SummaryStat(
+                    title: UiStrings.t('quantity'),
+                    value:
+                        '${LocaleText.number(seed.quantityKg, fractionDigits: 3)} kg',
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _SummaryStat(
+                    title: UiStrings.fromEnglish('Paid'),
+                    value: _seedMoney(seed.amountPaise),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${_seedMoney(seed.unitPricePaise)}/kg · '
+              '${UiStrings.fromEnglish('Received')} $received',
+              style: TextStyle(color: statusColor, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              UiStrings.fromEnglish(
+                seed.status == 'used'
+                    ? 'Seed was used on this farm. Purchase history is retained.'
+                    : 'Not for marketplace sale · ready for this farm.',
+              ),
+              style: const TextStyle(
+                color: AppTheme.textMuted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+double _inventoryNumber(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse('$value') ?? 0;
+}
+
+int _inventoryInteger(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse('$value') ?? 0;
+}
+
+String _seedMoney(int paise) => '₹${(paise / 100).toStringAsFixed(2)}';
 
 class _InventoryChip extends StatelessWidget {
   final String label;
@@ -8385,7 +8772,9 @@ double? _homeWindKmh(Map<String, dynamic>? context) {
 String _formatRainMm(dynamic value) {
   final number = _homeDouble(value);
   if (number == null) return '--';
-  return '${LocaleText.number(number, fractionDigits: number % 1 == 0 ? 0 : 1)} mm';
+  return UiStrings.f('millimetres_value', {
+    'value': LocaleText.number(number, fractionDigits: number % 1 == 0 ? 0 : 1),
+  });
 }
 
 double? _homeEt0_7d(Map<String, dynamic>? context) {
@@ -8531,27 +8920,37 @@ class _FarmWeatherDecision {
 
   String get irrigationValue {
     if (!hasWeather && farmMoisture == null) return UiStrings.t('no_data');
-    if (rainBlocksIrrigation) return 'Skip today';
-    if (dryWaterNeed) return 'Irrigate today';
+    if (rainBlocksIrrigation) return UiStrings.t('irrigation_skip_today');
+    if (dryWaterNeed) return UiStrings.t('irrigate_today');
     final stress = waterStress;
-    if (stress != null && stress >= 0.38) return 'Prepare irrigation';
+    if (stress != null && stress >= 0.38) {
+      return UiStrings.t('prepare_irrigation');
+    }
     final moisture = farmMoisture;
-    if (moisture != null && moisture < 0.45) return 'Check soil';
+    if (moisture != null && moisture < 0.45) {
+      return UiStrings.t('check_soil');
+    }
     final rain = rain7d;
-    if (rain != null && rain >= 12) return 'Not needed';
-    return 'Observe today';
+    if (rain != null && rain >= 12) {
+      return UiStrings.t('irrigation_not_needed');
+    }
+    return UiStrings.t('observe_today');
   }
 
   String get irrigationDetail {
-    if (rainBlocksIrrigation) return 'Rain is enough for now';
-    if (dryWaterNeed) return 'Water stress is high';
+    if (rainBlocksIrrigation) return UiStrings.t('rain_enough_now');
+    if (dryWaterNeed) return UiStrings.t('water_stress_high');
     final stress = waterStress;
     if (stress != null) {
-      return 'Water stress ${LocaleText.number(stress * 100, fractionDigits: 0)}/100';
+      return UiStrings.f('water_stress_score', {
+        'value': LocaleText.number(stress * 100, fractionDigits: 0),
+      });
     }
     final moisture = farmMoisture;
     if (moisture != null) {
-      return 'Moisture ${LocaleText.number(moisture * 100, fractionDigits: 0)}%';
+      return UiStrings.f('moisture_percent', {
+        'value': LocaleText.number(moisture * 100, fractionDigits: 0),
+      });
     }
     return rainSummary;
   }
@@ -8559,15 +8958,21 @@ class _FarmWeatherDecision {
   String get rainValue {
     final today = rain24h;
     if (today != null && today > 0) {
-      return '${LocaleText.number(today, fractionDigits: today >= 10 ? 0 : 1)} mm today';
+      return UiStrings.f('rain_today_value', {
+        'value': LocaleText.number(today, fractionDigits: today >= 10 ? 0 : 1),
+      });
     }
     final probability = rainProbability;
     if (probability != null && probability >= 45) {
-      return '${LocaleText.number(probability, fractionDigits: 0)}% chance';
+      return UiStrings.f('rain_probability_value', {
+        'value': LocaleText.number(probability, fractionDigits: 0),
+      });
     }
     final week = rain7d;
     if (week != null) {
-      return '${LocaleText.number(week, fractionDigits: week >= 10 ? 0 : 1)} mm 7d';
+      return UiStrings.f('rain_seven_days_value', {
+        'value': LocaleText.number(week, fractionDigits: week >= 10 ? 0 : 1),
+      });
     }
     return UiStrings.t('no_data');
   }
@@ -8576,9 +8981,19 @@ class _FarmWeatherDecision {
     final parts = <String>[];
     final week = rain7d;
     final probability = rainProbability;
-    if (week != null) parts.add('${_formatRainMm(week)} in 7d');
+    if (week != null) {
+      parts.add(
+        UiStrings.f('rain_seven_days_value', {
+          'value': LocaleText.number(week, fractionDigits: week >= 10 ? 0 : 1),
+        }),
+      );
+    }
     if (probability != null) {
-      parts.add('${LocaleText.number(probability, fractionDigits: 0)}% chance');
+      parts.add(
+        UiStrings.f('rain_probability_value', {
+          'value': LocaleText.number(probability, fractionDigits: 0),
+        }),
+      );
     }
     if (parts.isEmpty) return UiStrings.t('no_data');
     return parts.take(2).join(' / ');
@@ -8604,11 +9019,15 @@ class _FarmWeatherDecision {
   String get waterNeedDetail {
     final stress = waterStress;
     if (stress != null) {
-      return '${LocaleText.number(stress * 100, fractionDigits: 0)}/100 stress';
+      return UiStrings.f('water_stress_score', {
+        'value': LocaleText.number(stress * 100, fractionDigits: 0),
+      });
     }
     final moisture = farmMoisture;
     if (moisture != null) {
-      return '${LocaleText.number(moisture * 100, fractionDigits: 0)}% moisture';
+      return UiStrings.f('moisture_percent', {
+        'value': LocaleText.number(moisture * 100, fractionDigits: 0),
+      });
     }
     return rainSummary;
   }
@@ -8624,12 +9043,16 @@ class _FarmWeatherDecision {
   String get weatherValue {
     if (!hasWeather) return UiStrings.t('no_data');
     final today = rain24h;
-    if (today != null && today >= 10) return 'Heavy rain';
-    if (today != null && today >= 5) return 'Rain today';
+    if (today != null && today >= 10) return UiStrings.t('heavy_rain');
+    if (today != null && today >= 5) return UiStrings.t('rain_today');
     final probability = rainProbability;
-    if (probability != null && probability >= 60) return 'Rain likely';
+    if (probability != null && probability >= 60) {
+      return UiStrings.t('rain_likely');
+    }
     final currentWind = wind;
-    if (currentWind != null && currentWind >= 30) return 'Windy';
+    if (currentWind != null && currentWind >= 30) {
+      return UiStrings.t('windy');
+    }
     final risk = weatherRisk;
     if (risk >= 0.66) return UiStrings.t('high');
     if (risk >= 0.40) return UiStrings.t('watch');
@@ -8639,41 +9062,57 @@ class _FarmWeatherDecision {
             currentCondition.toLowerCase().contains('cloud')) &&
         (probability == null || probability < 40) &&
         (currentWind == null || currentWind < 22)) {
-      return 'Good for spraying';
+      return UiStrings.t('good_for_spraying');
     }
     if (currentCondition != null) return UiStrings.option(currentCondition);
     final temp = temperature;
-    if (temp != null) return '${LocaleText.number(temp, fractionDigits: 0)} C';
+    if (temp != null) {
+      return UiStrings.f('temperature_celsius', {
+        'value': LocaleText.number(temp, fractionDigits: 0),
+      });
+    }
     return UiStrings.t('good');
   }
 
   String get weatherDetail {
     final today = rain24h;
-    if (today != null) return '${_formatRainMm(today)} today';
+    if (today != null) {
+      return UiStrings.f('rain_today_value', {
+        'value': LocaleText.number(
+          today,
+          fractionDigits: today % 1 == 0 ? 0 : 1,
+        ),
+      });
+    }
     final humid = humidity;
     if (humid != null) {
-      return '${LocaleText.number(humid, fractionDigits: 0)}% humidity';
+      return UiStrings.f('humidity_percent', {
+        'value': LocaleText.number(humid, fractionDigits: 0),
+      });
     }
     return rainSummary;
   }
 
   String get weatherTitle {
     final today = rain24h;
-    if (today != null && today >= 10) return 'Heavy rain';
-    if (rainBlocksIrrigation) return 'Rain likely';
-    if (dryWaterNeed) return 'Dry stress';
+    if (today != null && today >= 10) return UiStrings.t('heavy_rain');
+    if (rainBlocksIrrigation) return UiStrings.t('rain_likely');
+    if (dryWaterNeed) return UiStrings.t('dry_stress');
     final risk = weatherRisk;
-    if (risk >= 0.66) return 'Weather risk high';
-    if (risk >= 0.40) return 'Watch weather';
-    return 'Stable weather';
+    if (risk >= 0.66) return UiStrings.t('weather_risk_high');
+    if (risk >= 0.40) return UiStrings.t('watch_weather');
+    return UiStrings.t('stable_weather');
   }
 
   String get weatherAdvice {
-    if (rainBlocksIrrigation) return 'Advice: Skip irrigation today';
-    if (dryWaterNeed) return 'Advice: Irrigate in a cool window';
-    return waterStressRecommendation ??
-        agroNextAction ??
-        'Advice: Continue routine monitoring';
+    if (rainBlocksIrrigation) {
+      return UiStrings.t('advice_skip_irrigation_today');
+    }
+    if (dryWaterNeed) return UiStrings.t('advice_irrigate_cool_window');
+    final dynamicAdvice = waterStressRecommendation ?? agroNextAction;
+    return dynamicAdvice == null
+        ? UiStrings.t('advice_continue_monitoring')
+        : UiStrings.fromEnglish(dynamicAdvice);
   }
 }
 
@@ -15006,43 +15445,18 @@ class _FarmPage extends StatelessWidget {
   }) {
     final ndvi = _normalizedFarmSignal(farm.ndvi);
     final moisture = _normalizedFarmSignal(farm.moisture);
-    var score = 82.0;
-
-    if (ndvi != null) {
-      score = 42 + ndvi.clamp(0.0, 1.0).toDouble() * 56;
-    } else {
-      final health = farm.health.toLowerCase();
-      if (health.contains('critical') || health.contains('high')) {
-        score = 46;
-      } else if (health.contains('watch') ||
-          health.contains('medium') ||
-          health.contains('attention') ||
-          health.contains('fair')) {
-        score = 68;
-      } else if (health.contains('healthy') || health.contains('good')) {
-        score = 84;
-      }
-    }
-
-    if (moisture != null) {
-      if (moisture < 0.24) {
-        score -= 13;
-      } else if (moisture < 0.34) {
-        score -= 7;
-      } else if (moisture > 0.80) {
-        score -= 5;
-      }
-    }
-
-    final waterStress = _homeWaterStressScore(weather);
-    if (waterStress != null) score -= waterStress.clamp(0.0, 1.0) * 10;
-    if (weather != null && weather.isNotEmpty) {
-      score -= _homeWeatherRisk(weather).clamp(0.0, 1.0) * 7;
-    }
-    score -= maxRisk.clamp(0.0, 1.0) * 28;
-    score -= (diseaseScreen?.highRiskCells ?? 0).clamp(0, 6) * 2.5;
-
-    return score.clamp(30.0, 98.0).round();
+    return FarmHealthScore.calculate(
+          ndvi: ndvi,
+          moisture: moisture,
+          waterStress: _homeWaterStressScore(weather),
+          weatherRisk: weather != null && weather.isNotEmpty
+              ? _homeWeatherRisk(weather)
+              : null,
+          diseaseRisk: maxRisk,
+          highRiskCells: diseaseScreen?.highRiskCells ?? 0,
+          healthLabel: farm.health,
+        ) ??
+        82;
   }
 
   static double? _readCoordinate(dynamic value) {
@@ -16347,7 +16761,7 @@ class _FarmTodayActionCard extends StatelessWidget {
     }
     final mappedCells = diseaseScreen?.riskCellsCount ?? 0;
     if (mappedCells > 0) {
-      return '${LocaleText.number(mappedCells)} mapped spots';
+      return UiStrings.f('mapped_spots_count', {'count': mappedCells});
     }
     if (maxRisk >= 0.55) return UiStrings.t('watch');
     return UiStrings.t('no_data');
@@ -16411,7 +16825,7 @@ class _FarmTodayActionCard extends StatelessWidget {
                       child: _FarmTodayItem(
                         icon: Icons.water_drop_rounded,
                         color: const Color(0xFF1976D2),
-                        title: 'Irrigation',
+                        title: UiStrings.t('irrigation'),
                         value: _decision.irrigationValue,
                         detail: _decision.irrigationDetail,
                       ),
@@ -16421,7 +16835,7 @@ class _FarmTodayActionCard extends StatelessWidget {
                       child: _FarmTodayItem(
                         icon: Icons.cloudy_snowing,
                         color: const Color(0xFF1976D2),
-                        title: 'Rain',
+                        title: UiStrings.t('rain'),
                         value: _decision.rainValue,
                         detail: _decision.rainSummary,
                       ),
@@ -16431,7 +16845,7 @@ class _FarmTodayActionCard extends StatelessWidget {
                       child: _FarmTodayItem(
                         icon: Icons.eco_rounded,
                         color: AppTheme.green,
-                        title: 'Monitor',
+                        title: UiStrings.t('monitor'),
                         value: _advisorAction,
                       ),
                     ),
@@ -16784,7 +17198,7 @@ class _FarmWeatherAlertsPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle(title: 'Weather & Alerts'),
+        _SectionTitle(title: UiStrings.t('weather_and_alerts')),
         const SizedBox(height: 10),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -16905,7 +17319,9 @@ class _FarmWeatherSummaryCard extends StatelessWidget {
                 Text(
                   temp == null
                       ? UiStrings.option(currentStage)
-                      : '${LocaleText.number(temp, fractionDigits: 0)} C',
+                      : UiStrings.f('temperature_celsius', {
+                          'value': LocaleText.number(temp, fractionDigits: 0),
+                        }),
                   style: const TextStyle(
                     color: Colors.black,
                     fontWeight: FontWeight.w900,
@@ -16915,7 +17331,12 @@ class _FarmWeatherSummaryCard extends StatelessWidget {
                 Text(
                   humidity == null
                       ? _formatRainMm(rain7d)
-                      : '${LocaleText.number(humidity, fractionDigits: 0)}% Humidity',
+                      : UiStrings.f('humidity_percent', {
+                          'value': LocaleText.number(
+                            humidity,
+                            fractionDigits: 0,
+                          ),
+                        }),
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontWeight: FontWeight.w700,
@@ -16928,7 +17349,12 @@ class _FarmWeatherSummaryCard extends StatelessWidget {
                           'day': daysAfterSowing,
                           'stage': UiStrings.option(currentStage),
                         })
-                      : '${_formatRainMm(rain24h)} today',
+                      : UiStrings.f('rain_today_value', {
+                          'value': LocaleText.number(
+                            rain24h,
+                            fractionDigits: rain24h % 1 == 0 ? 0 : 1,
+                          ),
+                        }),
                   style: const TextStyle(
                     color: AppTheme.textMuted,
                     fontWeight: FontWeight.w700,
@@ -16984,17 +17410,17 @@ class _FarmMetadataFooter extends StatelessWidget {
             final children = [
               _FarmFooterMetaItem(
                 icon: Icons.calendar_month_rounded,
-                title: 'Last screen',
+                title: UiStrings.t('last_screen_label'),
                 value: lastScreen,
               ),
               _FarmFooterMetaItem(
                 icon: Icons.verified_user_outlined,
-                title: 'Confidence',
+                title: UiStrings.t('ai_chat_confidence'),
                 value: confidence,
               ),
               _FarmFooterMetaItem(
                 icon: Icons.image_outlined,
-                title: 'Images',
+                title: UiStrings.t('images'),
                 value: LocaleText.number(imagesAnalyzed),
               ),
             ];
@@ -21539,38 +21965,147 @@ class _NewsCategoryChip extends StatelessWidget {
   }
 }
 
-class SchemesPage extends StatelessWidget {
+class SchemesPage extends StatefulWidget {
   final String? farmName;
   final String? farmLocation;
 
   const SchemesPage({super.key, this.farmName, this.farmLocation});
 
-  static const List<Map<String, String>> _schemes = [
-    {
-      'title': 'scheme_pm_kisan_title',
-      'desc': 'scheme_pm_kisan_desc',
-      'status': 'apply',
-      'fit': 'scheme_pm_kisan_fit',
-    },
-    {
-      'title': 'scheme_processing_title',
-      'desc': 'scheme_processing_desc',
-      'status': 'open',
-      'fit': 'scheme_processing_fit',
-    },
-    {
-      'title': 'scheme_soil_title',
-      'desc': 'scheme_soil_desc',
-      'status': 'by_district_office',
-      'fit': 'scheme_soil_fit',
-    },
-  ];
+  @override
+  State<SchemesPage> createState() => _SchemesPageState();
+}
+
+class _SchemesPageState extends State<SchemesPage> {
+  List<_FarmerScheme> _schemes = const [];
+  bool _loading = true;
+  bool _usingFallback = false;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _schemes = _fallbackSchemes();
+    _loadSchemes();
+  }
+
+  List<_FarmerScheme> _fallbackSchemes() {
+    return [
+      _FarmerScheme(
+        slug: 'pm-kisan',
+        title: UiStrings.t('scheme_pm_kisan_title'),
+        summary: UiStrings.t('scheme_pm_kisan_desc'),
+        fitLabel: UiStrings.t('scheme_pm_kisan_fit'),
+        levelLabel: 'PM-KISAN',
+        statusLabel: UiStrings.t('apply'),
+        benefit: UiStrings.t('scheme_pm_kisan_desc'),
+        eligibility: UiStrings.t('scheme_pm_kisan_fit'),
+        documents: [
+          UiStrings.t('farmer_identity_document'),
+          UiStrings.t('farm_documents'),
+        ],
+        applicationSteps: [UiStrings.t('scheme_apply_redirect_note')],
+        applicationUrl:
+            'https://www.pmkisan.gov.in/RegistrationFormupdated.aspx',
+        sourceUrl: 'https://www.myscheme.gov.in/schemes/pm-kisan',
+      ),
+      _FarmerScheme(
+        slug: 'mahadbt-processing',
+        title: UiStrings.t('scheme_processing_title'),
+        summary: UiStrings.t('scheme_processing_desc'),
+        fitLabel: UiStrings.t('scheme_processing_fit'),
+        levelLabel: 'MahaDBT',
+        statusLabel: UiStrings.t('open'),
+        benefit: UiStrings.t('scheme_processing_desc'),
+        eligibility: UiStrings.t('scheme_processing_fit'),
+        documents: [UiStrings.t('farm_documents')],
+        applicationSteps: [UiStrings.t('scheme_apply_redirect_note')],
+        applicationUrl:
+            'https://mahadbt.maharashtra.gov.in/Farmer/AgriLogin/AgriLogin',
+        sourceUrl: 'https://mahadbt.maharashtra.gov.in/Home/LandingPage',
+      ),
+      _FarmerScheme(
+        slug: 'mahadbt-soil-water',
+        title: UiStrings.t('scheme_soil_title'),
+        summary: UiStrings.t('scheme_soil_desc'),
+        fitLabel: UiStrings.t('scheme_soil_fit'),
+        levelLabel: 'MahaDBT',
+        statusLabel: UiStrings.t('by_district_office'),
+        benefit: UiStrings.t('scheme_soil_desc'),
+        eligibility: UiStrings.t('scheme_soil_fit'),
+        documents: [UiStrings.t('farm_documents')],
+        applicationSteps: [UiStrings.t('scheme_apply_redirect_note')],
+        applicationUrl:
+            'https://mahadbt.maharashtra.gov.in/Farmer/AgriLogin/AgriLogin',
+        sourceUrl: 'https://mahadbt.maharashtra.gov.in/Home/LandingPage',
+      ),
+    ];
+  }
+
+  Future<void> _loadSchemes() async {
+    if (mounted) {
+      setState(() => _loading = true);
+    }
+    try {
+      final rows = await Supabase.instance.client
+          .from('government_schemes')
+          .select()
+          .eq('is_active', true)
+          .order('priority')
+          .order('updated_at', ascending: false);
+      final loaded = rows
+          .map((row) => _FarmerScheme.fromJson(Map<String, dynamic>.from(row)))
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _schemes = loaded;
+        _usingFallback = false;
+        _loading = false;
+      });
+    } catch (error) {
+      Get.log('Government schemes refresh failed: $error');
+      if (!mounted) return;
+      setState(() {
+        _schemes = _fallbackSchemes();
+        _usingFallback = true;
+        _loading = false;
+      });
+    }
+  }
+
+  List<_FarmerScheme> get _visibleSchemes {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return _schemes;
+    return _schemes
+        .where((scheme) {
+          return scheme.title.toLowerCase().contains(query) ||
+              scheme.summary.toLowerCase().contains(query) ||
+              scheme.fitLabel.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  DateTime? get _latestUpdatedAt {
+    DateTime? latest;
+    for (final scheme in _schemes) {
+      final updatedAt = scheme.updatedAt;
+      if (updatedAt != null && (latest == null || updatedAt.isAfter(latest))) {
+        latest = updatedAt;
+      }
+    }
+    return latest;
+  }
+
+  void _openScheme(_FarmerScheme scheme) {
+    Get.to(() => _SchemeDetailPage(scheme: scheme, farmName: widget.farmName));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final contextTitle = farmName == null
+    final contextTitle = widget.farmName == null
         ? UiStrings.t('government_schemes')
-        : UiStrings.f('schemes_farm_title', {'farm': farmName!});
+        : UiStrings.f('schemes_farm_title', {'farm': widget.farmName!});
+    final latestUpdatedAt = _latestUpdatedAt;
+    final visibleSchemes = _visibleSchemes;
     return Scaffold(
       backgroundColor: AppTheme.surface,
       appBar: AppBar(
@@ -21588,144 +22123,608 @@ class SchemesPage extends StatelessWidget {
         leading: appBackButtonLeading(context),
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(18, 12, 18, 40),
-          children: [
-            TextField(
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search_rounded),
-                hintText: UiStrings.t('search_schemes_hint'),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-            if (farmName != null || farmLocation != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _Panel(
-                  tint: const Color(0xFFECF6E8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.assignment_turned_in_outlined,
-                          color: AppTheme.greenDark,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            farmName == null
-                                ? (farmLocation ??
-                                      UiStrings.t('local_scheme_center'))
-                                : (farmLocation == null ||
-                                          farmLocation!.trim().isEmpty
-                                      ? UiStrings.f(
-                                          'local_scheme_center_farm',
-                                          {'farm': farmName!},
-                                        )
-                                      : '${farmName!} • ${farmLocation!}'),
-                            style: const TextStyle(
-                              color: AppTheme.greenDark,
-                              height: 1.35,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+        child: RefreshIndicator(
+          onRefresh: _loadSchemes,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 40),
+            children: [
+              TextField(
+                onChanged: (value) => setState(() => _query = value),
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintText: UiStrings.t('search_schemes_hint'),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                   ),
                 ),
               ),
-            ..._schemes.map((scheme) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _Panel(
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(
-                          Icons.assignment_rounded,
-                          color: AppTheme.green,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+              const SizedBox(height: 14),
+              _Panel(
+                tint: _usingFallback
+                    ? const Color(0xFFFFF7E5)
+                    : const Color(0xFFECF6E8),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        _usingFallback
+                            ? Icons.cloud_off_rounded
+                            : Icons.cloud_done_rounded,
+                        color: _usingFallback
+                            ? const Color(0xFF9A6700)
+                            : AppTheme.greenDark,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              UiStrings.t('schemes_live_feed'),
+                              style: const TextStyle(
+                                color: AppTheme.textDark,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _usingFallback
+                                  ? UiStrings.t('schemes_offline_fallback')
+                                  : UiStrings.t('schemes_live_feed_body'),
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                height: 1.35,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (!_usingFallback && latestUpdatedAt != null) ...[
+                              const SizedBox(height: 5),
                               Text(
-                                UiStrings.t(scheme['title']!),
+                                UiStrings.f('schemes_updated_value', {
+                                  'value': LocaleText.date(
+                                    latestUpdatedAt.toLocal(),
+                                    pattern: 'dd MMM yyyy',
+                                  ),
+                                }),
                                 style: const TextStyle(
+                                  color: AppTheme.greenDark,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w900,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                UiStrings.t(scheme['desc']!),
-                                style: const TextStyle(
-                                  color: AppTheme.textDark,
-                                  height: 1.35,
-                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (_loading)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 8, top: 2),
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (widget.farmName != null || widget.farmLocation != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _Panel(
+                    tint: const Color(0xFFECF6E8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.assignment_turned_in_outlined,
+                            color: AppTheme.greenDark,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              widget.farmName == null
+                                  ? (widget.farmLocation ??
+                                        UiStrings.t('local_scheme_center'))
+                                  : (widget.farmLocation == null ||
+                                            widget.farmLocation!.trim().isEmpty
+                                        ? UiStrings.f(
+                                            'local_scheme_center_farm',
+                                            {'farm': widget.farmName!},
+                                          )
+                                        : '${widget.farmName!} • ${widget.farmLocation!}'),
+                              style: const TextStyle(
+                                color: AppTheme.greenDark,
+                                height: 1.35,
+                                fontWeight: FontWeight.w800,
                               ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  _InventoryChip(
-                                    label: UiStrings.t(scheme['fit']!),
-                                  ),
-                                  _InventoryChip(
-                                    label: UiStrings.t('farm_documents'),
-                                  ),
-                                ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              if (visibleSchemes.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      UiStrings.t('no_matching_schemes'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.textMuted,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ...visibleSchemes.map((scheme) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _Panel(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => _openScheme(scheme),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.assignment_rounded,
+                                color: AppTheme.green,
                               ),
-                              const SizedBox(height: 8),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    UiStrings.t(scheme['status']!),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.greenDark,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      scheme.title,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                      ),
                                     ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Get.snackbar(
-                                        UiStrings.t('schemes'),
-                                        UiStrings.f('opening_application_for', {
-                                          'scheme': UiStrings.t(
-                                            scheme['title']!,
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      scheme.summary,
+                                      style: const TextStyle(
+                                        color: AppTheme.textDark,
+                                        height: 1.35,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        if (scheme.fitLabel.isNotEmpty)
+                                          _InventoryChip(
+                                            label: scheme.fitLabel,
                                           ),
-                                        }),
-                                        snackPosition: SnackPosition.BOTTOM,
-                                      );
-                                    },
-                                    child: Text(UiStrings.t('apply_now')),
-                                  ),
-                                ],
+                                        if (scheme.levelLabel.isNotEmpty)
+                                          _InventoryChip(
+                                            label: scheme.levelLabel,
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            scheme.statusLabel,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              color: AppTheme.greenDark,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          UiStrings.t('view_scheme_details'),
+                                          style: const TextStyle(
+                                            color: AppTheme.greenDark,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.arrow_forward_rounded,
+                                          color: AppTheme.greenDark,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
                         ),
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FarmerScheme {
+  final String slug;
+  final String title;
+  final String summary;
+  final String fitLabel;
+  final String levelLabel;
+  final String statusLabel;
+  final String benefit;
+  final String eligibility;
+  final List<String> documents;
+  final List<String> applicationSteps;
+  final String applicationUrl;
+  final String sourceUrl;
+  final DateTime? updatedAt;
+
+  const _FarmerScheme({
+    required this.slug,
+    required this.title,
+    required this.summary,
+    required this.fitLabel,
+    required this.levelLabel,
+    required this.statusLabel,
+    required this.benefit,
+    required this.eligibility,
+    required this.documents,
+    required this.applicationSteps,
+    required this.applicationUrl,
+    required this.sourceUrl,
+    this.updatedAt,
+  });
+
+  factory _FarmerScheme.fromJson(Map<String, dynamic> json) {
+    final language = LocaleText.languageCode();
+    return _FarmerScheme(
+      slug: '${json['slug'] ?? ''}'.trim(),
+      title: _localizedText(json['title'], language),
+      summary: _localizedText(json['summary'], language),
+      fitLabel: _localizedText(json['fit_label'], language),
+      levelLabel: _localizedText(json['level_label'], language),
+      statusLabel: _localizedText(json['status_label'], language),
+      benefit: _localizedText(json['benefit'], language),
+      eligibility: _localizedText(json['eligibility'], language),
+      documents: _localizedList(json['documents'], language),
+      applicationSteps: _localizedList(json['application_steps'], language),
+      applicationUrl: '${json['application_url'] ?? ''}'.trim(),
+      sourceUrl: '${json['source_url'] ?? ''}'.trim(),
+      updatedAt: DateTime.tryParse('${json['updated_at'] ?? ''}'),
+    );
+  }
+
+  static String _localizedText(dynamic value, String language) {
+    if (value is! Map) return '${value ?? ''}'.trim();
+    final localized = value[language] ?? value['en'] ?? '';
+    return '$localized'.trim();
+  }
+
+  static List<String> _localizedList(dynamic value, String language) {
+    if (value is! Map) return const [];
+    final localized = value[language] ?? value['en'];
+    if (localized is! List) return const [];
+    return localized
+        .map((item) => '$item'.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+}
+
+class _SchemeDetailPage extends StatelessWidget {
+  final _FarmerScheme scheme;
+  final String? farmName;
+
+  const _SchemeDetailPage({required this.scheme, this.farmName});
+
+  Future<void> _openUrl(String title, String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme) {
+      Get.snackbar(
+        title,
+        UiStrings.f('open_link_failed', {'url': url}),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (opened) return;
+    } catch (error) {
+      Get.log('Scheme link failed: $error');
+    }
+    Get.snackbar(
+      title,
+      UiStrings.f('open_link_failed', {'url': url}),
+      snackPosition: SnackPosition.BOTTOM,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.surface,
+      appBar: AppBar(
+        title: Text(
+          UiStrings.t('scheme_details'),
+          style: const TextStyle(
+            color: AppTheme.greenDark,
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leadingWidth: appBackButtonLeadingWidth,
+        leading: appBackButtonLeading(context),
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 120),
+          children: [
+            _Panel(
+              tint: const Color(0xFFECF6E8),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      scheme.title,
+                      style: const TextStyle(
+                        color: AppTheme.greenDark,
+                        fontSize: 20,
+                        height: 1.2,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      scheme.summary,
+                      style: const TextStyle(
+                        color: AppTheme.textDark,
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (scheme.statusLabel.isNotEmpty)
+                          _InventoryChip(label: scheme.statusLabel),
+                        if (scheme.levelLabel.isNotEmpty)
+                          _InventoryChip(label: scheme.levelLabel),
+                        if (farmName != null && farmName!.trim().isNotEmpty)
+                          _InventoryChip(label: farmName!),
                       ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _SchemeDetailSection(
+              icon: Icons.redeem_rounded,
+              title: UiStrings.t('scheme_benefit'),
+              body: scheme.benefit,
+            ),
+            const SizedBox(height: 12),
+            _SchemeDetailSection(
+              icon: Icons.fact_check_outlined,
+              title: UiStrings.t('scheme_eligibility'),
+              body: scheme.eligibility,
+            ),
+            if (scheme.documents.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SchemeListSection(
+                icon: Icons.folder_copy_outlined,
+                title: UiStrings.t('scheme_required_documents'),
+                items: scheme.documents,
+              ),
+            ],
+            if (scheme.applicationSteps.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SchemeListSection(
+                icon: Icons.format_list_numbered_rounded,
+                title: UiStrings.t('scheme_application_steps'),
+                items: scheme.applicationSteps,
+                numbered: true,
+              ),
+            ],
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _openUrl(
+                UiStrings.t('scheme_official_source'),
+                scheme.sourceUrl,
+              ),
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: Text(UiStrings.t('scheme_official_source')),
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 16,
+                offset: Offset(0, -4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                UiStrings.t('scheme_apply_redirect_note'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  height: 1.3,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      _openUrl(scheme.title, scheme.applicationUrl),
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  label: Text(UiStrings.t('scheme_apply_now')),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SchemeDetailSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+
+  const _SchemeDetailSection({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: AppTheme.greenDark, size: 21),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ),
-              );
-            }),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              body,
+              style: const TextStyle(color: AppTheme.textDark, height: 1.45),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SchemeListSection extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final List<String> items;
+  final bool numbered;
+
+  const _SchemeListSection({
+    required this.icon,
+    required this.title,
+    required this.items,
+    this.numbered = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: AppTheme.greenDark, size: 21),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      color: AppTheme.greenDark,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var index = 0; index < items.length; index++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 7),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        numbered ? '${LocaleText.number(index + 1)}.' : '•',
+                        style: const TextStyle(
+                          color: AppTheme.greenDark,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        items[index],
+                        style: const TextStyle(
+                          color: AppTheme.textDark,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -21864,11 +22863,7 @@ class _SettingsPageState extends State<_SettingsPage> {
         children: [
           _SettingsHeader(profile: widget.profile, farmCtrl: farmCtrl),
           const SizedBox(height: 18),
-          _FarmerSessionPassport(
-            profile: widget.profile,
-            farmCtrl: farmCtrl,
-            authCtrl: authCtrl,
-          ),
+          _FarmerSessionPassport(profile: widget.profile, farmCtrl: farmCtrl),
           _FarmerStakeholderShareCard(authCtrl: authCtrl),
           const SizedBox(height: 18),
           _SettingsSectionLabel(UiStrings.t('account')),
@@ -21929,15 +22924,13 @@ class _SettingsPageState extends State<_SettingsPage> {
                   )
                 else
                   Obx(() {
-                    final farmCount = farmCtrl.farms.length;
                     final loading = farmCtrl.isLoading.value;
                     return _SettingsActionRow(
                       icon: loading
                           ? Icons.cloud_sync_rounded
                           : Icons.cloud_done_rounded,
                       title: UiStrings.t('farm_data_sync'),
-                      subtitle:
-                          '${LocaleText.number(farmCount)} ${UiStrings.t(farmCount == 1 ? 'synced_farm' : 'synced_farms')}',
+                      subtitle: UiStrings.t('tap_to_refresh_farm_data'),
                       trailing: loading
                           ? const SizedBox(
                               width: 20,
@@ -22457,7 +23450,7 @@ class _SettingsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget content(int farmCount, String activeFarmName) {
+    Widget content(String activeFarmName) {
       return _Panel(
         tint: const Color(0xFFF7FBF2),
         child: Padding(
@@ -22522,11 +23515,6 @@ class _SettingsHeader extends StatelessWidget {
                     label: UiStrings.t('verified_farmer_short'),
                   ),
                   _SettingsPill(
-                    icon: Icons.cloud_done_rounded,
-                    label:
-                        '${LocaleText.number(farmCount)} ${UiStrings.t(farmCount == 1 ? 'synced_farm' : 'synced_farms')}',
-                  ),
-                  _SettingsPill(
                     icon: Icons.grass_rounded,
                     label: activeFarmName,
                   ),
@@ -22539,13 +23527,12 @@ class _SettingsHeader extends StatelessWidget {
     }
 
     if (farmCtrl == null) {
-      return content(0, UiStrings.t('no_active_farm'));
+      return content(UiStrings.t('no_active_farm'));
     }
     return Obx(() {
       final farms = farmCtrl!.farms;
       final selected = farmCtrl!.selectedFarm.value;
       return content(
-        farms.length,
         selected?.name ??
             (farms.isEmpty ? UiStrings.t('no_active_farm') : farms.first.name),
       );
@@ -22556,32 +23543,12 @@ class _SettingsHeader extends StatelessWidget {
 class _FarmerSessionPassport extends StatelessWidget {
   final _FarmerProfile profile;
   final FarmController? farmCtrl;
-  final MainAuthController authCtrl;
 
-  const _FarmerSessionPassport({
-    required this.profile,
-    required this.farmCtrl,
-    required this.authCtrl,
-  });
+  const _FarmerSessionPassport({required this.profile, required this.farmCtrl});
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      final farmCount =
-          farmCtrl?.farms.length ??
-          authCtrl.lastFarmerLoginFarmCount.value ??
-          authCtrl.farmerLoginSyncedFarmCount.value ??
-          0;
-      final selectedFarm = farmCtrl?.selectedFarm.value;
-      final lastSync =
-          authCtrl.lastFarmerLoginSyncAt.value ??
-          authCtrl.farmerLoginLastSyncAt.value;
-      final lastSyncLabel = lastSync == null
-          ? UiStrings.t('last_sync_not_available')
-          : UiStrings.f('last_sync_value', {
-              'value':
-                  '${LocaleText.date(lastSync, pattern: 'dd/MM/yyyy')} ${LocaleText.time(lastSync)}',
-            });
+    Widget content(String activeFarmName) {
       return _Panel(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -22641,23 +23608,25 @@ class _FarmerSessionPassport extends StatelessWidget {
                 value: profile.phone,
               ),
               _InfoStrip(
-                icon: Icons.grass_rounded,
-                label: UiStrings.t('synced_farms_count'),
-                value: UiStrings.f('farm_count_value', {'count': farmCount}),
-              ),
-              _InfoStrip(
-                icon: Icons.schedule_rounded,
-                label: UiStrings.t('last_sync'),
-                value: lastSyncLabel,
-              ),
-              _InfoStrip(
                 icon: Icons.map_rounded,
                 label: UiStrings.t('active_farm'),
-                value: selectedFarm?.name ?? UiStrings.t('no_active_farm'),
+                value: activeFarmName,
               ),
             ],
           ),
         ),
+      );
+    }
+
+    if (farmCtrl == null) {
+      return content(UiStrings.t('no_active_farm'));
+    }
+    return Obx(() {
+      final farms = farmCtrl!.farms;
+      final selectedFarm = farmCtrl!.selectedFarm.value;
+      return content(
+        selectedFarm?.name ??
+            (farms.isEmpty ? UiStrings.t('no_active_farm') : farms.first.name),
       );
     });
   }
@@ -23167,6 +24136,8 @@ class _SideNavGroupedLinks extends StatelessWidget {
   final VoidCallback onOpenGrainGrading;
   final VoidCallback onOpenWeather;
   final VoidCallback onOpenMarketplace;
+  final VoidCallback onOpenSeeds;
+  final VoidCallback onOpenDelivery;
   final VoidCallback onOpenSchemes;
   final VoidCallback onOpenHistory;
   final VoidCallback onOpenInventory;
@@ -23180,6 +24151,8 @@ class _SideNavGroupedLinks extends StatelessWidget {
     required this.onOpenGrainGrading,
     required this.onOpenWeather,
     required this.onOpenMarketplace,
+    required this.onOpenSeeds,
+    required this.onOpenDelivery,
     required this.onOpenSchemes,
     required this.onOpenHistory,
     required this.onOpenInventory,
@@ -23191,6 +24164,16 @@ class _SideNavGroupedLinks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = [
+      _SideUtilityItemData(
+        icon: Icons.spa_rounded,
+        label: UiStrings.t('seeds'),
+        onTap: onOpenSeeds,
+      ),
+      _SideUtilityItemData(
+        icon: Icons.local_shipping_outlined,
+        label: UiStrings.fromEnglish('Delivery'),
+        onTap: onOpenDelivery,
+      ),
       _SideUtilityItemData(
         icon: Icons.wb_cloudy_rounded,
         label: UiStrings.t('weather'),
