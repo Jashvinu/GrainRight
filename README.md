@@ -18,7 +18,7 @@ samples, guidance on mobile development, and a full API reference.
 ## Render web host
 
 `render.yaml` defines the `grainright-web` Docker service. It builds the Flutter
-web app with `Dockerfile.render` and serves deep links, including
+web app with the root `Dockerfile` and serves deep links, including
 `/whatsapp-farm-boundary?token=...`.
 
 After the service is deployed, copy its public HTTPS `onrender.com` URL into
