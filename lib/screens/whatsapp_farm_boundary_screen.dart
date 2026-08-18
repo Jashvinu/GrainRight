@@ -17,21 +17,36 @@ class WhatsappFarmBoundaryScreen extends StatefulWidget {
 class _WhatsappFarmBoundaryScreenState
     extends State<WhatsappFarmBoundaryScreen> {
   bool _saving = false;
+  bool _openingMap = false;
   bool _saved = false;
   String? _error;
 
   String get _token => Get.parameters['token']?.trim() ?? '';
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _drawAndSave();
+    });
+  }
+
   Future<void> _drawAndSave() async {
-    if (_saving) return;
+    if (_saving || _openingMap || _saved) return;
     if (_token.length < 32) {
       setState(() => _error = 'This WhatsApp boundary link is invalid.');
       return;
     }
+    setState(() {
+      _openingMap = true;
+      _error = null;
+    });
     final polygon = await Get.to<List<List<double>>>(
       () => const BoundaryPolygonScreen(),
     );
-    if (!mounted || polygon == null || polygon.length < 4) return;
+    if (!mounted) return;
+    setState(() => _openingMap = false);
+    if (polygon == null || polygon.length < 4) return;
 
     setState(() {
       _saving = true;
@@ -96,7 +111,7 @@ class _WhatsappFarmBoundaryScreenState
         ),
         const SizedBox(height: 10),
         const Text(
-          'Tap at least three corners on the map, close the boundary, and save it. Your WhatsApp onboarding will continue after this step.',
+          'The boundary map is opening. Mark at least three corners, save the polygon, then return to WhatsApp and send CONTINUE.',
           textAlign: TextAlign.center,
         ),
         if (_error != null) ...[
@@ -113,7 +128,13 @@ class _WhatsappFarmBoundaryScreenState
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.edit_location_alt_outlined),
-          label: Text(_saving ? 'Saving boundary...' : 'Draw boundary'),
+          label: Text(
+            _saving
+                ? 'Saving boundary...'
+                : _openingMap
+                ? 'Opening boundary map...'
+                : 'Open boundary map',
+          ),
         ),
       ],
     );

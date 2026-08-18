@@ -33,9 +33,28 @@ function language(raw: unknown): "en" | "hi" | "mr" {
 
 function bridgeAuthorized(req: Request): boolean {
   const expected = Deno.env.get("GRAINRIGHT_WHATSAPP_API_TOKEN")?.trim() ?? "";
-  const received = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+  const received = (req.headers.get("x-grainright-whatsapp-bridge") ?? "").trim() ||
+    (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
   return expected.length >= 24 && received.length === expected.length &&
     received === expected;
+}
+
+function configuredAppUrl(required = true): string | null {
+  const raw = Deno.env.get("GRAINRIGHT_APP_URL")?.trim() ?? "";
+  if (!raw) {
+    if (required) throw new HttpError("GrainRight farm boundary link is not configured.", 503);
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch (_) {
+    throw new HttpError("GrainRight app URL is invalid.", 503);
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname.endsWith(".supabase.co")) {
+    throw new HttpError("GrainRight app URL must be a public HTTPS app host.", 503);
+  }
+  return raw.replace(/\/$/, "");
 }
 
 async function farmerIdentity(supabase: ReturnType<typeof serviceClient>, phone: string, preferredLanguage: "en" | "hi" | "mr") {
@@ -132,6 +151,388 @@ async function saveSession(supabase: ReturnType<typeof serviceClient>, phone: st
   return row;
 }
 
+function safeOnboardingDraft(raw: unknown): Row {
+  const draft = object(raw);
+  const safe = { ...draft };
+  delete safe.aadhaarNumber;
+  delete safe.aadhaar_number;
+  if (draft.aadhaarNumber || draft.aadhaar_number) safe.aadhaarCollected = true;
+  return safe;
+}
+
+function mergeOnboardingDraft(left: unknown, right: unknown): Row {
+  const current = object(left);
+  const incoming = object(right);
+  return {
+    ...current,
+    ...incoming,
+    farm: { ...object(current.farm), ...object(incoming.farm) },
+  };
+}
+
+async function activeOnboarding(
+  supabase: ReturnType<typeof serviceClient>,
+  phone: string,
+  flowType: "new_farmer" | "existing_farmer_farm" = "new_farmer",
+) {
+  const { data, error } = await supabase.from("whatsapp_farmer_onboardings")
+    .select("*")
+    .eq("whatsapp_phone", phone)
+    .eq("flow_type", flowType)
+    .eq("status", "active")
+    .gt("expires_at", new Date().toISOString())
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data as Row | null;
+}
+
+async function ensureOnboarding(
+  supabase: ReturnType<typeof serviceClient>,
+  phone: string,
+  preferredLanguage: "en" | "hi" | "mr",
+) {
+  const existing = await activeOnboarding(supabase, phone, "new_farmer");
+  if (existing) return existing;
+  const { data, error } = await supabase.from("whatsapp_farmer_onboardings")
+    .insert({
+      onboarding_key: crypto.randomUUID(),
+      whatsapp_phone: phone,
+      language: preferredLanguage,
+      status: "active",
+      step: "farmer_name",
+      draft: {},
+      flow_type: "new_farmer",
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Row;
+}
+
+async function ensureFarmSetup(
+  supabase: ReturnType<typeof serviceClient>,
+  phone: string,
+  preferredLanguage: "en" | "hi" | "mr",
+) {
+  const identity = await requireFarmer(supabase, phone, preferredLanguage);
+  const existing = await activeOnboarding(supabase, phone, "existing_farmer_farm");
+  if (existing) return existing;
+  const { data, error } = await supabase.from("whatsapp_farmer_onboardings")
+    .insert({
+      onboarding_key: crypto.randomUUID(),
+      whatsapp_phone: phone,
+      language: preferredLanguage,
+      status: "active",
+      step: "farm_name",
+      draft: {},
+      flow_type: "existing_farmer_farm",
+      user_id: identity.user_id,
+      farmer_id: identity.farmer_id,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Row;
+}
+
+async function hashToken(value: string) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest)).map((byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+function onboardingResponse(row: Row | null) {
+  if (!row) return { onboarding: null };
+  return {
+    onboarding: {
+      id: row.id,
+      step: row.step,
+      status: row.status,
+      flowType: text(row.flow_type) || "new_farmer",
+      language: language(row.language),
+      draft: safeOnboardingDraft(row.draft),
+      mapReady: Boolean(object(row.draft).farm &&
+        object(object(row.draft).farm).geometry),
+      expiresAt: row.expires_at,
+      farmerId: row.farmer_id,
+      farmId: row.farm_id,
+    },
+  };
+}
+
+function farmSetupStepToFlow(step: string): string {
+  const map: Record<string, string> = {
+    farm_name: "farm_setup_farm_name",
+    crop: "farm_setup_crop",
+    variety: "farm_setup_variety",
+    previous_crop: "farm_setup_previous_crop",
+    season: "farm_setup_season",
+    irrigation: "farm_setup_irrigation",
+    soil_type: "farm_setup_soil_type",
+    ownership_type: "farm_setup_ownership_type",
+    seed_source: "farm_setup_seed_source",
+    harvest_intent: "farm_setup_harvest_intent",
+    sowing_date: "farm_setup_sowing_date",
+    boundary: "farm_setup_boundary",
+    boundary_saved: "farm_setup_boundary",
+  };
+  return map[step] || "farm_setup_farm_name";
+}
+
+function onboardingStepToFlow(step: string): string {
+  const map: Record<string, string> = {
+    farmer_name: "onboarding_farmer_name",
+    default_location: "onboarding_default_location",
+    agri_record_id: "onboarding_agri_record_id",
+    aadhaar: "onboarding_aadhaar",
+    farm_name: "onboarding_farm_name",
+    farm_location: "onboarding_farm_location",
+    boundary: "onboarding_boundary",
+    crop: "onboarding_crop",
+    variety: "onboarding_variety",
+    previous_crop: "onboarding_previous_crop",
+    season: "onboarding_season",
+    irrigation: "onboarding_irrigation",
+    soil_type: "onboarding_soil_type",
+    ownership_type: "onboarding_ownership_type",
+    seed_source: "onboarding_seed_source",
+    harvest_intent: "onboarding_harvest_intent",
+    sowing_date: "onboarding_sowing_date",
+    review: "onboarding_review",
+  };
+  return map[step] || "onboarding_farmer_name";
+}
+
+function finitePositive(raw: unknown): number | null {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function polygonGeometry(raw: unknown): Row {
+  const geometry = object(raw);
+  const coordinates = geometry.coordinates;
+  const ring = Array.isArray(coordinates) && Array.isArray(coordinates[0])
+    ? coordinates[0]
+    : [];
+  if (text(geometry.type).toLowerCase() !== "polygon" || ring.length < 4) {
+    throw new HttpError("A valid farm boundary is required.", 400, {
+      code: "farm_geometry_required",
+    });
+  }
+  const valid = ring.every((point) => Array.isArray(point) && point.length >= 2 &&
+    Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])) &&
+    Math.abs(Number(point[0])) <= 180 && Math.abs(Number(point[1])) <= 90);
+  const first = ring[0] as unknown[];
+  const last = ring[ring.length - 1] as unknown[];
+  const closed = Array.isArray(first) && Array.isArray(last) &&
+    Number(first[0]) === Number(last[0]) && Number(first[1]) === Number(last[1]);
+  if (!valid || !closed) {
+    throw new HttpError("A closed farm boundary with valid coordinates is required.", 400, {
+      code: "farm_geometry_invalid",
+    });
+  }
+  return geometry;
+}
+
+function createFarmerId(): string {
+  return `FMR-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+}
+
+async function completeOnboarding(
+  supabase: ReturnType<typeof serviceClient>,
+  phone: string,
+  row: Row,
+) {
+  if (text(row.status) === "completed" && text(row.farm_id)) {
+    const { data: farm, error } = await supabase.from("farms").select("*")
+      .eq("id", row.farm_id).maybeSingle();
+    if (error) throw error;
+    return { farmerId: row.farmer_id, farm, farmId: row.farm_id, idempotent: true };
+  }
+  const draft = object(row.draft);
+  const farmDraft = object(draft.farm);
+  const farmerName = text(draft.farmerName);
+  const aadhaar = text(draft.aadhaarNumber).replace(/\D/g, "");
+  if (!farmerName || aadhaar.length !== 12) {
+    throw new HttpError("Farmer identity details are incomplete.", 400);
+  }
+  const geometry = polygonGeometry(farmDraft.geometry);
+  const areaHectares = finitePositive(farmDraft.area_hectares);
+  if (!areaHectares) throw new HttpError("Farm boundary area is required.", 400);
+
+  const existing = await farmerIdentity(supabase, phone, language(row.language));
+  if (existing) {
+    throw new HttpError("This WhatsApp number is already registered. Send MENU to continue.", 409, {
+      code: "farmer_already_exists",
+    });
+  }
+
+  const email = `whatsapp-${phone}-${String(row.id).replaceAll("-", "")}@grainright.invalid`;
+  const { data: createdUser, error: userError } = await supabase.auth.admin.createUser({
+    email,
+    email_confirm: true,
+  });
+  if (userError || !createdUser.user) throw userError || new Error("Could not create farmer account");
+
+  const userId = createdUser.user.id;
+  const farmerId = createFarmerId();
+  const now = new Date().toISOString();
+  const aadhaarLast4 = aadhaar.slice(-4);
+  const profile = {
+    phone,
+    farmer_id: farmerId,
+    farmer_name: farmerName,
+    default_location: text(draft.defaultLocation) || "Kalsubai Farms",
+    preferred_language: language(row.language),
+    status: "active",
+    profile_completed_at: now,
+    source: "whatsapp_onboarding",
+    agri_record_id: text(draft.agriRecordId),
+    aadhaar_number: aadhaar,
+    aadhaar_masked: `XXXX XXXX ${aadhaarLast4}`,
+    aadhaar_last4: aadhaarLast4,
+    identity_document_bucket: "farmer-identity-documents",
+    identity_document_path: "",
+    identity_ocr_confidence: null,
+    identity_source: "manual_entry",
+    identity_verified_at: now,
+  };
+  let createdFarmId = "";
+  try {
+    const registry = await supabase.from("farmer_phone_registry").insert(profile)
+      .select("farmer_id").single();
+    if (registry.error) throw registry.error;
+    const linked = await supabase.from("farmer_phone_profiles").insert({
+      user_id: userId,
+      ...profile,
+      auth_method: "anonymous_link",
+      phone_verified_at: now,
+    });
+    if (linked.error) throw linked.error;
+
+    const farmRow = {
+      name: text(farmDraft.name),
+      location_label: text(farmDraft.location_label) || null,
+      geometry,
+      bounds: object(farmDraft.bounds),
+      area_hectares: areaHectares,
+      area_acres: finitePositive(farmDraft.area_acres) || areaHectares * 2.47105,
+      user_id: userId,
+      crop: text(farmDraft.crop) || null,
+      variety: text(farmDraft.variety) || null,
+      previous_crop: text(farmDraft.previous_crop) || null,
+      season: text(farmDraft.season) || null,
+      irrigation: text(farmDraft.irrigation) || null,
+      soil_type: text(farmDraft.soil_type) || null,
+      ownership_type: text(farmDraft.ownership_type) || null,
+      seed_source: text(farmDraft.seed_source) || null,
+      harvest_intent: text(farmDraft.harvest_intent) || null,
+      sowing_date: text(farmDraft.sowing_date) || null,
+    };
+    if (!farmRow.name) throw new HttpError("Farm name is required.", 400);
+    const farm = await supabase.rpc("whatsapp_create_farmer_farm", {
+      p_user_id: userId,
+      p_farm: farmRow,
+    });
+    if (farm.error) throw farm.error;
+    const savedFarm = (Array.isArray(farm.data) ? farm.data[0] : farm.data) as Row;
+    if (!savedFarm?.id) throw new Error("Farm was created without an id.");
+    createdFarmId = text(savedFarm.id);
+    const updated = await supabase.from("whatsapp_farmer_onboardings").update({
+      status: "completed",
+      step: "completed",
+      user_id: userId,
+      farmer_id: farmerId,
+      farm_id: savedFarm.id,
+      completed_at: now,
+      updated_at: now,
+    }).eq("id", row.id).eq("status", "active").select("*").single();
+    if (updated.error) throw updated.error;
+    return { farmerId, farm: savedFarm, farmId: savedFarm.id, idempotent: false };
+  } catch (error) {
+    if (createdFarmId) {
+      await supabase.from("farms").delete().eq("id", createdFarmId);
+    }
+    await supabase.from("farmer_phone_profiles").delete().eq("user_id", userId);
+    await supabase.from("farmer_phone_registry").delete().eq("phone", phone).eq("farmer_id", farmerId);
+    await supabase.auth.admin.deleteUser(userId);
+    throw error;
+  }
+}
+
+async function completeExistingFarmSetup(
+  supabase: ReturnType<typeof serviceClient>,
+  phone: string,
+  row: Row,
+  preferredLanguage: "en" | "hi" | "mr",
+) {
+  const identity = await requireFarmer(supabase, phone, preferredLanguage);
+  if (text(row.status) === "completed" && text(row.farm_id)) {
+    const { data: farm, error } = await supabase.from("farms").select("*")
+      .eq("id", row.farm_id).maybeSingle();
+    if (error) throw error;
+    if (!farm) throw new HttpError("The completed farm could not be loaded.", 500);
+    return {
+      farmerId: identity.farmer_id,
+      farm,
+      farmId: row.farm_id,
+      idempotent: true,
+    };
+  }
+
+  if (text(row.status) !== "active") {
+    throw new HttpError("This farm setup is no longer active.", 409);
+  }
+
+  const draft = object(row.draft);
+  const farmDraft = object(draft.farm);
+  const geometry = polygonGeometry(farmDraft.geometry);
+  const areaHectares = finitePositive(farmDraft.area_hectares);
+  const farmName = text(farmDraft.name);
+  if (!farmName) throw new HttpError("Farm name is required.", 400);
+  if (!areaHectares) throw new HttpError("Farm boundary area is required.", 400);
+
+  const farmRow = {
+    name: farmName,
+    location_label: text(farmDraft.location_label) || null,
+    geometry,
+    bounds: object(farmDraft.bounds),
+    area_hectares: areaHectares,
+    area_acres: finitePositive(farmDraft.area_acres) || areaHectares * 2.47105,
+    user_id: identity.user_id,
+    crop: text(farmDraft.crop) || null,
+    variety: text(farmDraft.variety) || null,
+    previous_crop: text(farmDraft.previous_crop) || null,
+    season: text(farmDraft.season) || null,
+    irrigation: text(farmDraft.irrigation) || null,
+    soil_type: text(farmDraft.soil_type) || null,
+    ownership_type: text(farmDraft.ownership_type) || null,
+    seed_source: text(farmDraft.seed_source) || null,
+    harvest_intent: text(farmDraft.harvest_intent) || null,
+    sowing_date: text(farmDraft.sowing_date) || null,
+  };
+  const { data, error } = await supabase.rpc("whatsapp_complete_existing_farm_setup", {
+    p_setup_id: row.id,
+    p_user_id: identity.user_id,
+    p_farm: farmRow,
+  });
+  if (error) throw error;
+  const farm = (Array.isArray(data) ? data[0] : data) as Row;
+  if (!farm?.id) throw new HttpError("Farm was saved without an id.", 500);
+  return {
+    farmerId: identity.farmer_id,
+    farm,
+    farmId: farm.id,
+    idempotent: false,
+  };
+}
+
 async function importWhatsAppMedia(supabase: ReturnType<typeof serviceClient>, identity: Identity, body: Row) {
   const mediaId = text(body.mediaId ?? body.media_id);
   const kind = text(body.kind) === "moisture" ? "moisture" : "grain";
@@ -214,19 +615,47 @@ Deno.serve(async (req) => {
 
     if (action === "session_load") {
       const { data, error } = await supabase.from("whatsapp_chat_sessions")
-        .select("language,role,flow,draft,bot_state,verified,updated_at")
+        .select("language,role,flow,draft,bot_state,verified,selected_farm_id,updated_at")
         .eq("whatsapp_phone", phone)
         .maybeSingle();
       if (error) throw error;
-      const identity = await activeIdentity(supabase, phone);
-      const fallback = data ? { language: data.language, role: data.role, flow: data.flow, draft: data.draft, verified: data.verified } : null;
-      const persisted = object(data?.bot_state);
-      const session = data ? {
-        ...(Object.keys(persisted).length > 0 ? persisted : fallback),
-        verified: Boolean(identity) || Boolean(data.verified),
-        role: identity?.role ?? data.role,
+      const active = await activeIdentity(supabase, phone);
+      let identity = active;
+      if (!identity) identity = await farmerIdentity(supabase, phone, preferredLanguage);
+      const onboarding = await activeOnboarding(
+        supabase,
+        phone,
+        identity ? "existing_farmer_farm" : "new_farmer",
+      );
+      const fallback = data ? {
+        language: data.language,
+        role: data.role,
+        flow: data.flow,
+        draft: data.draft,
+        verified: data.verified,
+        selectedFarmId: data.selected_farm_id,
       } : null;
-      return successResponse({ session }, 200, "whatsapp_session_loaded");
+      const persisted = object(data?.bot_state);
+      const session = data || onboarding || identity ? {
+        ...(Object.keys(persisted).length > 0 ? persisted : fallback),
+        verified: Boolean(identity) || Boolean(data?.verified),
+        role: identity?.role ?? data?.role ?? null,
+        registrationStatus: identity ? "existing" : "new",
+        onboardingId: onboarding?.id ?? persisted.onboardingId ?? null,
+        flow: data?.flow || (onboarding
+          ? text(onboarding.flow_type) === "existing_farmer_farm"
+            ? farmSetupStepToFlow(text(onboarding.step))
+            : onboardingStepToFlow(text(onboarding.step))
+          : persisted.flow || ""),
+        draft: onboarding ? safeOnboardingDraft(onboarding.draft) : (persisted.draft || data?.draft || {}),
+        language: data?.language || (onboarding ? language(onboarding.language) : ""),
+        selectedFarmId: data?.selected_farm_id || persisted.selectedFarmId || null,
+      } : { language: "", verified: false, registrationStatus: "new", flow: "", draft: {} };
+      return successResponse({
+        session,
+        identity: identity ? { farmerId: identity.farmer_id, role: identity.role } : null,
+        onboarding: onboardingResponse(onboarding).onboarding,
+      }, 200, "whatsapp_session_loaded");
     }
 
     if (action === "session_save") {
@@ -237,6 +666,9 @@ Deno.serve(async (req) => {
         language: language(snapshot.language ?? identity?.language),
         role: identity?.role ?? (text(snapshot.role) || null),
         verified: Boolean(identity) || snapshot.verified === true,
+        selected_farm_id: text(snapshot.selectedFarmId ?? snapshot.selected_farm_id) || null,
+        flow: text(snapshot.flow),
+        draft: object(snapshot.draft),
         bot_state: snapshot,
         updated_at: new Date().toISOString(),
       };
@@ -332,6 +764,178 @@ Deno.serve(async (req) => {
       const session = await saveSession(supabase, phone, body, identity);
       if (identity) await supabase.from("whatsapp_identities").update({ language: preferredLanguage, last_seen_at: new Date().toISOString() }).eq("whatsapp_phone", phone).eq("role", identity.role);
       return successResponse({ session }, 200, "whatsapp_language_saved");
+    }
+
+    if (action === "onboarding_save") {
+      const row = await ensureOnboarding(supabase, phone, preferredLanguage);
+      if (text(row.status) !== "active") throw new HttpError("This onboarding is no longer active.", 409);
+      const mergedDraft = mergeOnboardingDraft(row.draft, body.draft);
+      const step = text(body.step) || text(row.step) || "farmer_name";
+      const { data: updated, error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({
+          language: preferredLanguage,
+          step,
+          draft: mergedDraft,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("status", "active")
+        .select("*")
+        .single();
+      if (error) throw error;
+      return successResponse({ onboardingId: updated.id, ...onboardingResponse(updated) }, 200, "whatsapp_onboarding_saved");
+    }
+
+    if (action === "farm_setup_save") {
+      const row = await ensureFarmSetup(supabase, phone, preferredLanguage);
+      if (text(row.status) !== "active") throw new HttpError("This farm setup is no longer active.", 409);
+      const mergedDraft = mergeOnboardingDraft(row.draft, body.draft);
+      const step = text(body.step) || text(row.step) || "farm_name";
+      const { data: updated, error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({
+          language: preferredLanguage,
+          step,
+          draft: mergedDraft,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("flow_type", "existing_farmer_farm")
+        .eq("status", "active")
+        .select("*")
+        .single();
+      if (error) throw error;
+      return successResponse({ onboardingId: updated.id, ...onboardingResponse(updated) }, 200, "whatsapp_farm_setup_saved");
+    }
+
+    if (action === "onboarding_state") {
+      const row = await activeOnboarding(supabase, phone, "new_farmer");
+      return successResponse(onboardingResponse(row), 200, "whatsapp_onboarding_loaded");
+    }
+
+    if (action === "farm_setup_state") {
+      const row = await activeOnboarding(supabase, phone, "existing_farmer_farm");
+      return successResponse(onboardingResponse(row), 200, "whatsapp_farm_setup_loaded");
+    }
+
+    if (action === "onboarding_map_link") {
+      const row = await ensureOnboarding(supabase, phone, preferredLanguage);
+      const token = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+      const tokenHash = await hashToken(token);
+      const { data: updated, error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({
+          token_hash: tokenHash,
+          step: "boundary",
+          language: preferredLanguage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("status", "active")
+        .select("*")
+        .single();
+      if (error) throw error;
+      const appUrl = configuredAppUrl(true)!;
+      return successResponse({
+        url: `${appUrl}/whatsapp-farm-boundary?token=${encodeURIComponent(token)}`,
+        onboardingId: updated.id,
+      }, 200, "whatsapp_onboarding_map_link");
+    }
+
+    if (action === "farm_setup_map_link") {
+      const row = await ensureFarmSetup(supabase, phone, preferredLanguage);
+      const token = crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+      const tokenHash = await hashToken(token);
+      const { data: updated, error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({
+          token_hash: tokenHash,
+          step: "boundary",
+          language: preferredLanguage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("flow_type", "existing_farmer_farm")
+        .eq("status", "active")
+        .select("*")
+        .single();
+      if (error) throw error;
+      const appUrl = configuredAppUrl(true)!;
+      return successResponse({
+        url: `${appUrl}/whatsapp-farm-boundary?token=${encodeURIComponent(token)}`,
+        onboardingId: updated.id,
+      }, 200, "whatsapp_farm_setup_map_link");
+    }
+
+    if (action === "onboarding_complete") {
+      const row = await supabase.from("whatsapp_farmer_onboardings").select("*")
+        .eq("id", text(body.onboardingId))
+        .eq("whatsapp_phone", phone)
+        .maybeSingle();
+      if (row.error) throw row.error;
+      if (!row.data) throw new HttpError("Farmer onboarding was not found.", 404);
+      const completed = await completeOnboarding(supabase, phone, row.data as Row);
+      const identity = await farmerIdentity(supabase, phone, preferredLanguage);
+      if (!identity) throw new HttpError("Farmer was created but could not be verified.", 500);
+      await supabase.from("whatsapp_identities").upsert({
+        whatsapp_phone: phone,
+        user_id: identity.user_id,
+        role: "farmer",
+        farmer_id: identity.farmer_id,
+        language: preferredLanguage,
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "whatsapp_phone,role" });
+      return successResponse({
+        ...completed,
+        verified: true,
+        role: "farmer",
+      }, 200, "whatsapp_onboarding_completed");
+    }
+
+    if (action === "farm_setup_complete") {
+      const { data: row, error: lookupError } = await supabase.from("whatsapp_farmer_onboardings")
+        .select("*")
+        .eq("id", text(body.onboardingId))
+        .eq("whatsapp_phone", phone)
+        .eq("flow_type", "existing_farmer_farm")
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!row) throw new HttpError("Farm setup was not found.", 404);
+      const completed = await completeExistingFarmSetup(supabase, phone, row as Row, preferredLanguage);
+      const identity = await requireFarmer(supabase, phone, preferredLanguage);
+      await saveSession(supabase, phone, {
+        language: preferredLanguage,
+        role: "farmer",
+        verified: true,
+        selectedFarmId: completed.farmId,
+        flow: "",
+        draft: {},
+      }, identity);
+      return successResponse({
+        ...completed,
+        selectedFarmId: completed.farmId,
+        synced: true,
+        verified: true,
+        role: "farmer",
+      }, 200, "whatsapp_farm_setup_completed");
+    }
+
+    if (action === "onboarding_cancel") {
+      const { error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("whatsapp_phone", phone)
+        .eq("flow_type", "new_farmer")
+        .eq("status", "active");
+      if (error) throw error;
+      return successResponse({ cancelled: true }, 200, "whatsapp_onboarding_cancelled");
+    }
+
+    if (action === "farm_setup_cancel") {
+      const { error } = await supabase.from("whatsapp_farmer_onboardings")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("whatsapp_phone", phone)
+        .eq("flow_type", "existing_farmer_farm")
+        .eq("status", "active");
+      if (error) throw error;
+      return successResponse({ cancelled: true }, 200, "whatsapp_farm_setup_cancelled");
     }
 
     if (action === "request_otp" || action === "verify_otp") {
@@ -532,17 +1136,12 @@ Deno.serve(async (req) => {
     }
 
     if (action === "farm_setup_link") {
-      const appUrl = Deno.env.get("GRAINRIGHT_APP_URL")?.trim();
-      if (appUrl) {
-        return successResponse({
-          url: `${appUrl.replace(/\/$/, "")}/farmer/farm-setup?whatsapp=${encodeURIComponent(phone)}`,
-          route: "/farmer/farm-setup",
-        }, 200, "whatsapp_farm_setup_link");
-      }
+      const setup = await ensureFarmSetup(supabase, phone, preferredLanguage);
       return successResponse({
-        route: "/farmer/farm-setup",
-        instruction: "Open GrainRight, choose Farms, then Add farm to draw the field boundary.",
-      }, 200, "whatsapp_farm_setup_route");
+        onboardingId: setup.id,
+        step: setup.step,
+        instruction: "Farm details must be collected in WhatsApp before the boundary-only link is issued.",
+      }, 200, "whatsapp_farm_setup_started");
     }
 
     if (action === "daily_tasks") {
