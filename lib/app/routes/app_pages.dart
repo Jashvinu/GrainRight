@@ -40,6 +40,7 @@ import '../../screens/splash_screen.dart';
 import '../../screens/stakeholder_home_screen.dart';
 import '../../screens/stakeholder_login_screen.dart';
 import '../../screens/survey_form_screen.dart';
+import '../../screens/whatsapp_farm_boundary_screen.dart';
 import '../bindings/app_bindings.dart';
 import 'role_route_middleware.dart';
 
@@ -120,6 +121,10 @@ class AppPages {
       binding: BindingsBuilder(AppBindings.bindStakeholder),
     ),
     GetPage(name: '/farmer/signup', page: () => const FarmerSignupScreen()),
+    GetPage(
+      name: '/whatsapp-farm-boundary',
+      page: () => const WhatsappFarmBoundaryScreen(),
+    ),
     GetPage(name: '/fpc/login', page: () => const FpcLoginScreen()),
     GetPage(name: '/fpc/signup', page: () => const FpcSignupScreen()),
     GetPage(

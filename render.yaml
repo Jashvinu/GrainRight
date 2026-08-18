@@ -1,5 +1,15 @@
 services:
   - type: web
+    runtime: docker
+    name: grainright-web
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    plan: free
+    autoDeployTrigger: commit
+    renderSubdomainPolicy: enabled
+    healthCheckPath: /health
+
+  - type: web
     runtime: static
     name: grainright-admin-export
     rootDir: Admin Spreadsheet downloading website
