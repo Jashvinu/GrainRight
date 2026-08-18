@@ -337,7 +337,67 @@ function polygonGeometry(raw: unknown): Row {
       code: "farm_geometry_invalid",
     });
   }
+  const openRing = ring.slice(0, -1).map((point) => [
+    Number(point[0]),
+    Number(point[1]),
+  ] as [number, number]);
+  if (new Set(openRing.map((point) => `${point[0]}:${point[1]}`)).size < 3) {
+    throw new HttpError("A farm boundary needs at least three different corners.", 400, {
+      code: "farm_geometry_degenerate",
+    });
+  }
+  if (hasSelfIntersection(openRing)) {
+    throw new HttpError("The farm boundary cannot cross itself.", 400, {
+      code: "farm_geometry_self_intersection",
+    });
+  }
   return geometry;
+}
+
+function orientation(a: [number, number], b: [number, number], c: [number, number]): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) -
+    (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function onSegment(a: [number, number], b: [number, number], p: [number, number]): boolean {
+  const epsilon = 1e-12;
+  return p[0] >= Math.min(a[0], b[0]) - epsilon &&
+    p[0] <= Math.max(a[0], b[0]) + epsilon &&
+    p[1] >= Math.min(a[1], b[1]) - epsilon &&
+    p[1] <= Math.max(a[1], b[1]) + epsilon;
+}
+
+function segmentsIntersect(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  d: [number, number],
+): boolean {
+  const epsilon = 1e-12;
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if ((abC > epsilon && abD < -epsilon || abC < -epsilon && abD > epsilon) &&
+    (cdA > epsilon && cdB < -epsilon || cdA < -epsilon && cdB > epsilon)) {
+    return true;
+  }
+  return Math.abs(abC) <= epsilon && onSegment(a, b, c) ||
+    Math.abs(abD) <= epsilon && onSegment(a, b, d) ||
+    Math.abs(cdA) <= epsilon && onSegment(c, d, a) ||
+    Math.abs(cdB) <= epsilon && onSegment(c, d, b);
+}
+
+function hasSelfIntersection(ring: [number, number][]): boolean {
+  for (let first = 0; first < ring.length; first += 1) {
+    const firstEnd = (first + 1) % ring.length;
+    for (let second = first + 1; second < ring.length; second += 1) {
+      const secondEnd = (second + 1) % ring.length;
+      if (first === second || firstEnd === second || secondEnd === first) continue;
+      if (segmentsIntersect(ring[first], ring[firstEnd], ring[second], ring[secondEnd])) return true;
+    }
+  }
+  return false;
 }
 
 function createFarmerId(): string {
@@ -636,19 +696,24 @@ Deno.serve(async (req) => {
         selectedFarmId: data.selected_farm_id,
       } : null;
       const persisted = object(data?.bot_state);
+      const persistedFlow = text(data?.flow ?? persisted.flow);
+      const persistedManagedFlow = /^(onboarding|farm_setup)_/.test(persistedFlow);
+      const activeFlow = onboarding
+        ? text(onboarding.flow_type) === "existing_farmer_farm"
+          ? farmSetupStepToFlow(text(onboarding.step))
+          : onboardingStepToFlow(text(onboarding.step))
+        : "";
       const session = data || onboarding || identity ? {
         ...(Object.keys(persisted).length > 0 ? persisted : fallback),
         verified: Boolean(identity) || Boolean(data?.verified),
         role: identity?.role ?? data?.role ?? null,
         registrationStatus: identity ? "existing" : "new",
-        onboardingId: onboarding?.id ?? persisted.onboardingId ?? null,
-        flow: data?.flow || (onboarding
-          ? text(onboarding.flow_type) === "existing_farmer_farm"
-            ? farmSetupStepToFlow(text(onboarding.step))
-            : onboardingStepToFlow(text(onboarding.step))
-          : persisted.flow || ""),
-        draft: onboarding ? safeOnboardingDraft(onboarding.draft) : (persisted.draft || data?.draft || {}),
-        language: data?.language || (onboarding ? language(onboarding.language) : ""),
+        onboardingId: onboarding?.id ?? (persistedManagedFlow ? persisted.onboardingId : null) ?? null,
+        flow: activeFlow || (persistedManagedFlow ? "" : persistedFlow),
+        draft: onboarding
+          ? safeOnboardingDraft(onboarding.draft)
+          : (persistedManagedFlow ? {} : (persisted.draft || data?.draft || {})),
+        language: onboarding ? language(onboarding.language) : (data?.language || persisted.language || ""),
         selectedFarmId: data?.selected_farm_id || persisted.selectedFarmId || null,
       } : { language: "", verified: false, registrationStatus: "new", flow: "", draft: {} };
       return successResponse({

@@ -41,14 +41,71 @@ function validateGeometry(raw: unknown): Row {
     throw new Error("A farm boundary with at least three corners is required.");
   }
   const valid = ring.every((point) => Array.isArray(point) && point.length >= 2 &&
-    Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])));
+    Number.isFinite(Number(point[0])) && Number.isFinite(Number(point[1])) &&
+    Math.abs(Number(point[0])) <= 180 && Math.abs(Number(point[1])) <= 90);
   if (!valid) throw new Error("The farm boundary coordinates are invalid.");
   const first = ring[0] as unknown[];
   const last = ring[ring.length - 1] as unknown[];
   const closed = Array.isArray(first) && Array.isArray(last) &&
     Number(first[0]) === Number(last[0]) && Number(first[1]) === Number(last[1]);
   if (!closed) throw new Error("Close the farm boundary before saving it.");
+  const openRing = ring.slice(0, -1).map((point) => [
+    Number(point[0]),
+    Number(point[1]),
+  ] as [number, number]);
+  if (new Set(openRing.map((point) => `${point[0]}:${point[1]}`)).size < 3) {
+    throw new Error("A farm boundary needs at least three different corners.");
+  }
+  if (hasSelfIntersection(openRing)) {
+    throw new Error("The farm boundary cannot cross itself.");
+  }
   return geometry;
+}
+
+function orientation(a: [number, number], b: [number, number], c: [number, number]): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) -
+    (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function onSegment(a: [number, number], b: [number, number], p: [number, number]): boolean {
+  const epsilon = 1e-12;
+  return p[0] >= Math.min(a[0], b[0]) - epsilon &&
+    p[0] <= Math.max(a[0], b[0]) + epsilon &&
+    p[1] >= Math.min(a[1], b[1]) - epsilon &&
+    p[1] <= Math.max(a[1], b[1]) + epsilon;
+}
+
+function segmentsIntersect(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  d: [number, number],
+): boolean {
+  const epsilon = 1e-12;
+  const abC = orientation(a, b, c);
+  const abD = orientation(a, b, d);
+  const cdA = orientation(c, d, a);
+  const cdB = orientation(c, d, b);
+  if ((abC > epsilon && abD < -epsilon || abC < -epsilon && abD > epsilon) &&
+    (cdA > epsilon && cdB < -epsilon || cdA < -epsilon && cdB > epsilon)) {
+    return true;
+  }
+  return Math.abs(abC) <= epsilon && onSegment(a, b, c) ||
+    Math.abs(abD) <= epsilon && onSegment(a, b, d) ||
+    Math.abs(cdA) <= epsilon && onSegment(c, d, a) ||
+    Math.abs(cdB) <= epsilon && onSegment(c, d, b);
+}
+
+function hasSelfIntersection(ring: [number, number][]): boolean {
+  for (let first = 0; first < ring.length; first += 1) {
+    const firstEnd = (first + 1) % ring.length;
+    for (let second = first + 1; second < ring.length; second += 1) {
+      const secondEnd = (second + 1) % ring.length;
+      if (first === second || firstEnd === second || secondEnd === first) continue;
+      if (segmentsIntersect(ring[first], ring[firstEnd], ring[second], ring[secondEnd])) return true;
+    }
+  }
+  return false;
 }
 
 function boundsFor(geometry: Row): Row {
