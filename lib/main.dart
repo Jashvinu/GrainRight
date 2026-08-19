@@ -30,9 +30,14 @@ void main() {
 
 Future<void> _completeProductionBootstrap() async {
   final bootstrap = await _bootstrapProductionApp();
-  final boundaryToken = _whatsappBoundaryTokenFromBrowser();
-  if (bootstrap.supabaseReady && boundaryToken != null) {
-    runApp(WhatsappBoundaryApp(token: boundaryToken));
+  final boundaryLaunch = _whatsappBoundaryLaunchFromBrowser();
+  if (bootstrap.supabaseReady && boundaryLaunch != null) {
+    runApp(
+      WhatsappBoundaryApp(
+        token: boundaryLaunch.token,
+        initialLocale: Locale(boundaryLaunch.languageCode),
+      ),
+    );
     _deferPlatformServicesBootstrap();
   } else if (bootstrap.supabaseReady) {
     runApp(KalsubaiFarmsApp(initialLocale: bootstrap.locale));
@@ -42,9 +47,9 @@ Future<void> _completeProductionBootstrap() async {
   }
 }
 
-String? _whatsappBoundaryTokenFromBrowser() {
+WhatsappBoundaryLaunch? _whatsappBoundaryLaunchFromBrowser() {
   if (!kIsWeb) return null;
-  return whatsappBoundaryTokenFromUri(Uri.base);
+  return whatsappBoundaryLaunchFromUri(Uri.base);
 }
 
 void _installGlobalErrorHandlers() {

@@ -142,6 +142,42 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('uses the confirmation callback instead of leaving the map', (
+    tester,
+  ) async {
+    final service = OfflineMapService(mapTilerApiKeyProvider: () => 'test-key');
+    addTearDown(service.dispose);
+    List<List<double>>? savedPolygon;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: BoundaryPolygonScreen(
+          mapService: service,
+          loadMapTiles: false,
+          onBoundaryConfirmed: (polygon) async => savedPolygon = polygon,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('farm_boundary_draw_mode')));
+    await tester.pump();
+    const tapPosition = TapPosition(Offset.zero, Offset.zero);
+    final map = find.byKey(const Key('farm_boundary_map'));
+    final onTap = tester.widget<FlutterMap>(map).options.onTap!;
+    onTap(tapPosition, const LatLng(19.54, 74.01));
+    onTap(tapPosition, const LatLng(19.541, 74.012));
+    onTap(tapPosition, const LatLng(19.543, 74.011));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('farm_boundary_confirm_button')));
+    await tester.pump();
+
+    expect(savedPolygon, hasLength(4));
+    expect(find.byType(BoundaryPolygonScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('search result pins the place and enables boundary drawing', (
     tester,
   ) async {

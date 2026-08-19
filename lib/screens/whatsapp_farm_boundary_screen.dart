@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../core/localization/ui_strings.dart';
 import '../core/theme/app_theme.dart';
 import 'boundary_polygon_screen.dart';
 
@@ -19,42 +18,23 @@ class WhatsappFarmBoundaryScreen extends StatefulWidget {
 class _WhatsappFarmBoundaryScreenState
     extends State<WhatsappFarmBoundaryScreen> {
   bool _saving = false;
-  bool _openingMap = false;
   bool _saved = false;
-  String? _error;
 
   String get _token =>
       widget.token?.trim() ?? Get.parameters['token']?.trim() ?? '';
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _drawAndSave();
-    });
-  }
-
-  Future<void> _drawAndSave() async {
-    if (_saving || _openingMap || _saved) return;
+  Future<void> _saveBoundary(List<List<double>> polygon) async {
+    if (_saving || _saved) return;
     if (_token.length < 32) {
-      setState(() => _error = 'This WhatsApp boundary link is invalid.');
-      return;
+      throw StateError(
+        _text(
+          en: 'This WhatsApp boundary link is invalid.',
+          hi: 'यह WhatsApp सीमा लिंक मान्य नहीं है।',
+          mr: 'ही WhatsApp सीमा लिंक वैध नाही.',
+        ),
+      );
     }
-    setState(() {
-      _openingMap = true;
-      _error = null;
-    });
-    final polygon = await Get.to<List<List<double>>>(
-      () => const BoundaryPolygonScreen(),
-    );
-    if (!mounted) return;
-    setState(() => _openingMap = false);
-    if (polygon == null || polygon.length < 4) return;
-
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
+    setState(() => _saving = true);
     try {
       final geometry = {
         'type': 'Polygon',
@@ -72,10 +52,15 @@ class _WhatsappFarmBoundaryScreenState
       }
       if (!mounted) return;
       setState(() => _saved = true);
-    } catch (error) {
-      if (!mounted) return;
-      setState(
-        () => _error = error.toString().replaceFirst('StateError: ', ''),
+    } catch (error, stack) {
+      debugPrint('[WhatsappFarmBoundaryScreen._saveBoundary] $error');
+      debugPrintStack(stackTrace: stack);
+      throw StateError(
+        _text(
+          en: 'Boundary could not be saved. Check your internet and try again.',
+          hi: 'सीमा सेव नहीं हो सकी। इंटरनेट जांचें और फिर कोशिश करें।',
+          mr: 'सीमा सेव होऊ शकली नाही. इंटरनेट तपासा आणि पुन्हा प्रयत्न करा.',
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -84,15 +69,33 @@ class _WhatsappFarmBoundaryScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_saved) return _success();
+    if (_token.length < 32) return _invalidLink();
+    return BoundaryPolygonScreen(onBoundaryConfirmed: _saveBoundary);
+  }
+
+  Widget _invalidLink() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mark your farm boundary')),
+      appBar: AppBar(
+        title: Text(
+          _text(
+            en: 'Mark your farm boundary',
+            hi: 'खेत की सीमा बनाएं',
+            mr: 'शेताची सीमा काढा',
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: _saved ? _success() : _form(),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              _text(
+                en: 'This WhatsApp boundary link is invalid or incomplete. Return to WhatsApp and request a new link.',
+                hi: 'यह WhatsApp सीमा लिंक मान्य नहीं है। WhatsApp पर वापस जाकर नया लिंक लें।',
+                mr: 'ही WhatsApp सीमा लिंक वैध नाही. WhatsApp वर परत जाऊन नवीन लिंक घ्या.',
+              ),
+              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -100,70 +103,66 @@ class _WhatsappFarmBoundaryScreenState
     );
   }
 
-  Widget _form() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Icon(Icons.landscape_outlined, size: 56, color: AppTheme.green),
-        const SizedBox(height: 18),
-        const Text(
-          'Draw the same farm boundary used by GrainRight.',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'The boundary map is opening. Mark at least three corners, save the polygon, then return to WhatsApp and send CONTINUE.',
-          textAlign: TextAlign.center,
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 18),
-          Text(_error!, style: const TextStyle(color: AppTheme.error)),
-        ],
-        const SizedBox(height: 24),
-        ElevatedButton.icon(
-          onPressed: _saving ? null : _drawAndSave,
-          icon: _saving
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.edit_location_alt_outlined),
-          label: Text(
-            _saving
-                ? 'Saving boundary...'
-                : _openingMap
-                ? 'Opening boundary map...'
-                : 'Open boundary map',
+  Widget _success() {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          _text(
+            en: 'Boundary saved',
+            hi: 'सीमा सेव हो गई',
+            mr: 'सीमा सेव झाली',
           ),
         ),
-      ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle_outline,
+                    size: 64,
+                    color: AppTheme.green,
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    _text(
+                      en: 'Boundary saved',
+                      hi: 'सीमा सेव हो गई',
+                      mr: 'सीमा सेव झाली',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _text(
+                      en: 'Return to WhatsApp and send CONTINUE. GrainRight will ask the next farm question there.',
+                      hi: 'WhatsApp पर वापस जाकर CONTINUE भेजें। GrainRight अगला खेत प्रश्न वहीं पूछेगा।',
+                      mr: 'WhatsApp वर परत जाऊन CONTINUE पाठवा. GrainRight पुढील शेताचा प्रश्न तिथेच विचारेल.',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _success() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(Icons.check_circle_outline, size: 64, color: AppTheme.green),
-        const SizedBox(height: 18),
-        const Text(
-          'Boundary saved',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'Return to WhatsApp and send CONTINUE. GrainRight will ask the remaining farm questions there.',
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 22),
-        OutlinedButton(
-          onPressed: () => Get.back(),
-          child: Text(UiStrings.t('close')),
-        ),
-      ],
-    );
+  String _text({required String en, required String hi, required String mr}) {
+    return switch (Localizations.localeOf(context).languageCode) {
+      'hi' => hi,
+      'mr' => mr,
+      _ => en,
+    };
   }
 }

@@ -13,6 +13,18 @@ server {
 
     location / {
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        try_files $uri =404;
+    }
+
+    location ~ ^/(?:flutter_bootstrap\.js|flutter\.js|main\.dart\.js|flutter_service_worker\.js|version\.json|manifest\.json)$ {
+        expires -1;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        try_files $uri =404;
     }
 
     location ~* \.(?:css|js|json|png|jpg|jpeg|gif|svg|ico|woff2?)$ {

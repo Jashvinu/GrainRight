@@ -46,15 +46,20 @@ class KalsubaiFarmsApp extends StatelessWidget {
 
 class WhatsappBoundaryApp extends StatelessWidget {
   final String token;
+  final Locale initialLocale;
 
-  const WhatsappBoundaryApp({super.key, required this.token});
+  const WhatsappBoundaryApp({
+    super.key,
+    required this.token,
+    this.initialLocale = const Locale('en'),
+  });
 
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
       title: 'GrainRight Farm Boundary',
       theme: AppTheme.theme,
-      locale: const Locale('en'),
+      locale: initialLocale,
       fallbackLocale: const Locale('en'),
       supportedLocales: const [Locale('en'), Locale('hi'), Locale('mr')],
       localizationsDelegates: const [

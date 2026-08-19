@@ -57,6 +57,18 @@ function configuredAppUrl(required = true): string | null {
   return raw.replace(/\/$/, "");
 }
 
+function boundaryMapUrl(
+  appUrl: string,
+  token: string,
+  preferredLanguage: "en" | "hi" | "mr",
+): string {
+  const parameters = new URLSearchParams({
+    token,
+    lang: preferredLanguage,
+  });
+  return `${appUrl}/whatsapp-farm-boundary?${parameters.toString()}`;
+}
+
 async function farmerIdentity(supabase: ReturnType<typeof serviceClient>, phone: string, preferredLanguage: "en" | "hi" | "mr") {
   const values = [phone, `91${phone}`, `+91${phone}`];
   const { data, error } = await supabase
@@ -900,7 +912,7 @@ Deno.serve(async (req) => {
       if (error) throw error;
       const appUrl = configuredAppUrl(true)!;
       return successResponse({
-        url: `${appUrl}/whatsapp-farm-boundary?token=${encodeURIComponent(token)}`,
+        url: boundaryMapUrl(appUrl, token, preferredLanguage),
         onboardingId: updated.id,
       }, 200, "whatsapp_onboarding_map_link");
     }
@@ -924,7 +936,7 @@ Deno.serve(async (req) => {
       if (error) throw error;
       const appUrl = configuredAppUrl(true)!;
       return successResponse({
-        url: `${appUrl}/whatsapp-farm-boundary?token=${encodeURIComponent(token)}`,
+        url: boundaryMapUrl(appUrl, token, preferredLanguage),
         onboardingId: updated.id,
       }, 200, "whatsapp_farm_setup_map_link");
     }

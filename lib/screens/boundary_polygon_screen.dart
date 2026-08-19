@@ -24,12 +24,14 @@ class BoundaryPolygonScreen extends StatefulWidget {
   final List<List<double>>? initialPolygon;
   final OfflineMapService? mapService;
   final bool loadMapTiles;
+  final Future<void> Function(List<List<double>> polygon)? onBoundaryConfirmed;
 
   const BoundaryPolygonScreen({
     super.key,
     this.initialPolygon,
     this.mapService,
     this.loadMapTiles = true,
+    this.onBoundaryConfirmed,
   });
 
   @override
@@ -57,6 +59,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   bool _mapReady = false;
   bool _loadingLocation = true;
   bool _loadingDownloadedMaps = false;
+  bool _confirming = false;
   bool _searching = false;
   String? _searchError;
   int _searchGeneration = 0;
@@ -441,7 +444,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
     }
   }
 
-  void _confirm() {
+  Future<void> _confirm() async {
     final issue = PolygonGeometry.boundaryIssue(_points);
     if (issue != null) {
       Get.snackbar(
@@ -453,7 +456,29 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       );
       return;
     }
-    Get.back(result: PolygonGeometry.toGeoJsonRing(_points));
+    final polygon = PolygonGeometry.toGeoJsonRing(_points);
+    final onBoundaryConfirmed = widget.onBoundaryConfirmed;
+    if (onBoundaryConfirmed == null) {
+      Get.back(result: polygon);
+      return;
+    }
+    if (_confirming) return;
+    setState(() => _confirming = true);
+    try {
+      await onBoundaryConfirmed(polygon);
+    } catch (error, stack) {
+      debugPrint('[BoundaryPolygonScreen._confirm] $error');
+      debugPrintStack(stackTrace: stack);
+      if (mounted) {
+        Get.snackbar(
+          UiStrings.t('save_farm_boundary'),
+          error.toString().replaceFirst('StateError: ', ''),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
   }
 
   String _boundaryIssueMessage(PolygonBoundaryIssue issue) {
@@ -1136,12 +1161,25 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                                       key: const Key(
                                         'farm_boundary_confirm_button',
                                       ),
-                                      onPressed: _confirm,
-                                      icon: const Icon(
-                                        Icons.check_circle_outline_rounded,
-                                        size: 19,
+                                      onPressed: _confirming ? null : _confirm,
+                                      icon: _confirming
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons
+                                                  .check_circle_outline_rounded,
+                                              size: 19,
+                                            ),
+                                      label: Text(
+                                        _confirming
+                                            ? '...'
+                                            : UiStrings.t('save_short'),
                                       ),
-                                      label: Text(UiStrings.t('save_short')),
                                     ),
                                   ),
                                 ),
