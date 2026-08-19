@@ -7,7 +7,9 @@ import '../core/theme/app_theme.dart';
 import 'boundary_polygon_screen.dart';
 
 class WhatsappFarmBoundaryScreen extends StatefulWidget {
-  const WhatsappFarmBoundaryScreen({super.key});
+  final String? token;
+
+  const WhatsappFarmBoundaryScreen({super.key, this.token});
 
   @override
   State<WhatsappFarmBoundaryScreen> createState() =>
@@ -21,7 +23,8 @@ class _WhatsappFarmBoundaryScreenState
   bool _saved = false;
   String? _error;
 
-  String get _token => Get.parameters['token']?.trim() ?? '';
+  String get _token =>
+      widget.token?.trim() ?? Get.parameters['token']?.trim() ?? '';
 
   @override
   void initState() {

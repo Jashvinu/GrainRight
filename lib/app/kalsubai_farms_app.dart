@@ -7,6 +7,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 
 import 'bindings/app_bindings.dart';
 import 'routes/app_pages.dart';
+import '../screens/whatsapp_farm_boundary_screen.dart';
 
 class KalsubaiFarmsApp extends StatelessWidget {
   final Locale initialLocale;
@@ -39,6 +40,30 @@ class KalsubaiFarmsApp extends StatelessWidget {
       ),
       initialRoute: AppPages.initial,
       getPages: AppPages.pages,
+    );
+  }
+}
+
+class WhatsappBoundaryApp extends StatelessWidget {
+  final String token;
+
+  const WhatsappBoundaryApp({super.key, required this.token});
+
+  @override
+  Widget build(BuildContext context) {
+    return GetMaterialApp(
+      title: 'GrainRight Farm Boundary',
+      theme: AppTheme.theme,
+      locale: const Locale('en'),
+      fallbackLocale: const Locale('en'),
+      supportedLocales: const [Locale('en'), Locale('hi'), Locale('mr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      debugShowCheckedModeBanner: false,
+      home: WhatsappFarmBoundaryScreen(token: token),
     );
   }
 }

@@ -14,6 +14,7 @@ import 'services/offline_map_download_manager.dart';
 import 'services/local_notification_service.dart';
 import 'services/push_notification_service.dart';
 import 'app.dart';
+import 'utils/whatsapp_boundary_launch.dart';
 
 void main() {
   runZonedGuarded(() {
@@ -29,12 +30,21 @@ void main() {
 
 Future<void> _completeProductionBootstrap() async {
   final bootstrap = await _bootstrapProductionApp();
-  if (bootstrap.supabaseReady) {
+  final boundaryToken = _whatsappBoundaryTokenFromBrowser();
+  if (bootstrap.supabaseReady && boundaryToken != null) {
+    runApp(WhatsappBoundaryApp(token: boundaryToken));
+    _deferPlatformServicesBootstrap();
+  } else if (bootstrap.supabaseReady) {
     runApp(KalsubaiFarmsApp(initialLocale: bootstrap.locale));
     _deferPlatformServicesBootstrap();
   } else {
     runApp(_StartupRecoveryApp(initialLocale: bootstrap.locale));
   }
+}
+
+String? _whatsappBoundaryTokenFromBrowser() {
+  if (!kIsWeb) return null;
+  return whatsappBoundaryTokenFromUri(Uri.base);
 }
 
 void _installGlobalErrorHandlers() {

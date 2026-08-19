@@ -49,6 +49,7 @@ void main() {
         '/satellite/signup',
         '/satellite/draw-polygon',
         '/satellite/shell',
+        '/whatsapp-farm-boundary',
       ]),
     );
   });
