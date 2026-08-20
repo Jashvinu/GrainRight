@@ -22,7 +22,7 @@ RUN flutter build web --release --no-wasm-dry-run \
 # separate bootstrap that references this build through a unique query string,
 # so the boundary capability link cannot launch the cached login application.
 RUN boundary_build_id=$(sha256sum build/web/main.dart.js | awk '{print substr($1, 1, 16)}') \
-    && sed "s|mainJsPath:\"main.dart.js\"|mainJsPath:\"main.dart.js?v=${boundary_build_id}\"|" \
+    && sed "s|main.dart.js|main.dart.js?v=${boundary_build_id}|g" \
       build/web/flutter_bootstrap.js > build/web/whatsapp-boundary-bootstrap.js \
     && sed "s|__WHATSAPP_BOUNDARY_BUILD_ID__|${boundary_build_id}|g" \
       render/whatsapp-boundary.html.template > build/web/whatsapp-boundary.html
