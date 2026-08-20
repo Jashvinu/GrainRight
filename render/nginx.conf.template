@@ -11,6 +11,26 @@ server {
         return 200 "ok\n";
     }
 
+    # This is intentionally a separate document from index.html. It is reached
+    # only through a short-lived WhatsApp boundary capability token and always
+    # receives a build-specific Flutter bootstrap.
+    location = /whatsapp-farm-boundary {
+        rewrite ^ /whatsapp-boundary.html last;
+    }
+
+    location = /whatsapp-boundary.html {
+        internal;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Clear-Site-Data "\"cache\"" always;
+        try_files $uri =404;
+    }
+
+    location = /whatsapp-boundary-bootstrap.js {
+        expires -1;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache, must-revalidate";

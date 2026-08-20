@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base href="/">
+    <meta charset="UTF-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="description" content="GrainRight farm boundary marking">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mark farm boundary</title>
+  </head>
+  <body>
+    <script>
+      // Clear only this origin's obsolete Flutter worker/cache before loading
+      // the versioned WhatsApp entry. A failed cleanup must never block map use.
+      (async function () {
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(function (registration) {
+              return registration.unregister();
+            }));
+          }
+          if ('caches' in window) {
+            const keys = await caches.keys();
+            await Promise.all(keys.map(function (key) { return caches.delete(key); }));
+          }
+        } catch (_) {}
+
+        const bootstrap = document.createElement('script');
+        bootstrap.src = '/whatsapp-boundary-bootstrap.js?v=__WHATSAPP_BOUNDARY_BUILD_ID__';
+        bootstrap.async = true;
+        document.body.appendChild(bootstrap);
+      })();
+    </script>
+  </body>
+</html>

@@ -14,6 +14,14 @@ function text(raw: unknown): string {
   return String(raw ?? "").trim();
 }
 
+function whatsappReturnUrl(): string | null {
+  const phone = text(Deno.env.get("WHATSAPP_BOT_PHONE")).replace(/\D/g, "");
+  if (!/^\d{10,15}$/.test(phone)) return null;
+  const url = new URL(`https://wa.me/${phone}`);
+  url.searchParams.set("text", "CONTINUE");
+  return url.toString();
+}
+
 function serviceClient() {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -313,6 +321,7 @@ Deno.serve(async (req) => {
       areaAcres: areaHectares * 2.47105,
       locationLabel: geocode.label,
       geocodeStatus: geocode.status,
+      returnToWhatsappUrl: whatsappReturnUrl(),
     }, 200, "whatsapp_boundary_saved");
   } catch (error) {
     return errorResponse(error instanceof Error ? error.message : "Could not save boundary", 400);

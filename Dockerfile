@@ -18,6 +18,15 @@ RUN flutter build web --release --no-wasm-dry-run \
     --dart-define=ONLINE_BASE_TILE_URL_TEMPLATE=${ONLINE_BASE_TILE_URL_TEMPLATE} \
     --dart-define=ONLINE_SATELLITE_TILE_URL_TEMPLATE=${ONLINE_SATELLITE_TILE_URL_TEMPLATE}
 
+# WhatsApp's in-app browser can keep an old main.dart.js for days.  Generate a
+# separate bootstrap that references this build through a unique query string,
+# so the boundary capability link cannot launch the cached login application.
+RUN boundary_build_id=$(sha256sum build/web/main.dart.js | awk '{print substr($1, 1, 16)}') \
+    && sed "s|mainJsPath:\\"main.dart.js\\"|mainJsPath:\\"main.dart.js?v=${boundary_build_id}\\"|" \
+      build/web/flutter_bootstrap.js > build/web/whatsapp-boundary-bootstrap.js \
+    && sed "s|__WHATSAPP_BOUNDARY_BUILD_ID__|${boundary_build_id}|g" \
+      render/whatsapp-boundary.html.template > build/web/whatsapp-boundary.html
+
 FROM nginx:1.27-alpine
 
 COPY --from=build /app/build/web /usr/share/nginx/html

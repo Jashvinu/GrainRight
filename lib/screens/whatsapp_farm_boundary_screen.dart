@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_theme.dart';
+import '../utils/whatsapp_boundary_handoff.dart';
 import 'boundary_polygon_screen.dart';
 
 class WhatsappFarmBoundaryScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _WhatsappFarmBoundaryScreenState
     extends State<WhatsappFarmBoundaryScreen> {
   bool _saving = false;
   bool _saved = false;
+  Uri? _returnToWhatsapp;
 
   String get _token =>
       widget.token?.trim() ?? Get.parameters['token']?.trim() ?? '';
@@ -51,7 +54,16 @@ class _WhatsappFarmBoundaryScreenState
         throw StateError('${data['error'] ?? 'Could not save boundary.'}');
       }
       if (!mounted) return;
-      setState(() => _saved = true);
+      final returnToWhatsapp = whatsappBoundaryHandoffUri(
+        data['returnToWhatsappUrl']?.toString(),
+      );
+      setState(() {
+        _saved = true;
+        _returnToWhatsapp = returnToWhatsapp;
+      });
+      if (returnToWhatsapp != null) {
+        await _openWhatsApp(returnToWhatsapp);
+      }
     } catch (error, stack) {
       debugPrint('[WhatsappFarmBoundaryScreen._saveBoundary] $error');
       debugPrintStack(stackTrace: stack);
@@ -64,6 +76,15 @@ class _WhatsappFarmBoundaryScreenState
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _openWhatsApp(Uri uri) async {
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (error, stack) {
+      debugPrint('[WhatsappFarmBoundaryScreen._openWhatsApp] $error');
+      debugPrintStack(stackTrace: stack);
     }
   }
 
@@ -143,12 +164,32 @@ class _WhatsappFarmBoundaryScreenState
                   const SizedBox(height: 10),
                   Text(
                     _text(
-                      en: 'Return to WhatsApp and send CONTINUE. GrainRight will ask the next farm question there.',
-                      hi: 'WhatsApp पर वापस जाकर CONTINUE भेजें। GrainRight अगला खेत प्रश्न वहीं पूछेगा।',
-                      mr: 'WhatsApp वर परत जाऊन CONTINUE पाठवा. GrainRight पुढील शेताचा प्रश्न तिथेच विचारेल.',
+                      en: _returnToWhatsapp == null
+                          ? 'Return to WhatsApp and send CONTINUE. GrainRight will ask the next farm question there.'
+                          : 'WhatsApp is opening with CONTINUE ready. Tap Send there to receive the next farm question.',
+                      hi: _returnToWhatsapp == null
+                          ? 'WhatsApp पर वापस जाकर CONTINUE भेजें। GrainRight अगला खेत प्रश्न वहीं पूछेगा।'
+                          : 'WhatsApp में CONTINUE तैयार है। अगला खेत प्रश्न पाने के लिए वहां Send दबाएं।',
+                      mr: _returnToWhatsapp == null
+                          ? 'WhatsApp वर परत जाऊन CONTINUE पाठवा. GrainRight पुढील शेताचा प्रश्न तिथेच विचारेल.'
+                          : 'WhatsApp मध्ये CONTINUE तयार आहे. पुढील शेताचा प्रश्न मिळवण्यासाठी तिथे Send दाबा.',
                     ),
                     textAlign: TextAlign.center,
                   ),
+                  if (_returnToWhatsapp != null) ...[
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      onPressed: () => _openWhatsApp(_returnToWhatsapp!),
+                      icon: const Icon(Icons.chat_outlined),
+                      label: Text(
+                        _text(
+                          en: 'Open WhatsApp',
+                          hi: 'WhatsApp खोलें',
+                          mr: 'WhatsApp उघडा',
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
