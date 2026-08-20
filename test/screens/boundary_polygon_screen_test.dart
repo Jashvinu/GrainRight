@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -8,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:kalsubai_farms/screens/boundary_polygon_screen.dart';
 import 'package:kalsubai_farms/screens/offline_maps_screen.dart';
 import 'package:kalsubai_farms/services/local_app_database.dart';
+import 'package:kalsubai_farms/services/location_service.dart';
 import 'package:kalsubai_farms/services/offline_map_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,14 +29,19 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final service = OfflineMapService(mapTilerApiKeyProvider: () => 'test-key');
+    final locationService = _FakeLocationService();
     addTearDown(service.dispose);
 
     await tester.pumpWidget(
       GetMaterialApp(
-        home: BoundaryPolygonScreen(mapService: service, loadMapTiles: false),
+        home: BoundaryPolygonScreen(
+          mapService: service,
+          locationService: locationService,
+          loadMapTiles: false,
+        ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     final map = find.byKey(const Key('farm_boundary_map'));
     expect(map, findsOneWidget);
@@ -45,11 +52,25 @@ void main() {
     expect(find.text('Map view'), findsNothing);
     expect(find.text('Map action'), findsNothing);
     expect(find.text('Save'), findsOneWidget);
+    expect(find.byTooltip('Use current location'), findsOneWidget);
+    final requestsBeforeTap = locationService.currentRequests;
+    await tester.tap(find.byKey(const Key('farm_boundary_recenter_fab')));
+    await tester.pumpAndSettle();
+    expect(locationService.currentRequests, requestsBeforeTap + 1);
+    expect(
+      find.byKey(const Key('farm_boundary_current_location_marker')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('Save farm boundary'), findsOneWidget);
     expect(find.text('1. Choose map view'), findsNothing);
     expect(find.text('2. Move map or mark farm'), findsNothing);
     final roadControl = find.byKey(const Key('farm_boundary_road_map'));
     final farmControl = find.byKey(const Key('farm_boundary_satellite_map'));
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester.getSemantics(farmControl).flagsCollection.isSelected,
+      Tristate.isTrue,
+    );
     final moveControl = find.byKey(const Key('farm_boundary_browse_mode'));
     final markControl = find.byKey(const Key('farm_boundary_draw_mode'));
     expect(
@@ -140,6 +161,7 @@ void main() {
     expect(_summaryText(tester), contains('2'));
 
     await tester.pumpWidget(const SizedBox.shrink());
+    semantics.dispose();
   });
 
   testWidgets('uses the confirmation callback instead of leaving the map', (
@@ -391,4 +413,21 @@ class _EmptyOfflineMapService extends OfflineMapService {
 
   @override
   Future<List<OfflineMapRegionRecord>> listRegions() async => const [];
+}
+
+class _FakeLocationService extends LocationService {
+  int currentRequests = 0;
+
+  @override
+  Future<LocationResult?> getLastKnownLocation() async => null;
+
+  @override
+  Future<LocationResult?> getCurrentLocation() async {
+    currentRequests += 1;
+    return const LocationResult(
+      latitude: 19.541,
+      longitude: 74.005,
+      accuracy: 5,
+    );
+  }
 }

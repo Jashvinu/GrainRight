@@ -23,6 +23,7 @@ import 'package:kalsubai_farms/core/widgets/app_back_button.dart';
 class BoundaryPolygonScreen extends StatefulWidget {
   final List<List<double>>? initialPolygon;
   final OfflineMapService? mapService;
+  final LocationService? locationService;
   final bool loadMapTiles;
   final Future<void> Function(List<List<double>> polygon)? onBoundaryConfirmed;
 
@@ -30,6 +31,7 @@ class BoundaryPolygonScreen extends StatefulWidget {
     super.key,
     this.initialPolygon,
     this.mapService,
+    this.locationService,
     this.loadMapTiles = true,
     this.onBoundaryConfirmed,
   });
@@ -46,7 +48,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
   final _mapController = MapController();
-  final _locationService = LocationService();
+  late final LocationService _locationService;
   final _networkStatusService = NetworkStatusService();
   late final OfflineMapService _offlineMapService;
   late final bool _ownsOfflineMapService;
@@ -64,8 +66,9 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   String? _searchError;
   int _searchGeneration = 0;
   _BoundaryMapMode _mode = _BoundaryMapMode.browse;
-  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.roads;
+  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.satellite;
   OfflineMapRegionRecord? _selectedOfflineRegion;
+  LatLng? _currentLocation;
   LatLng? _searchedPlaceCenter;
   String? _searchedPlaceLabel;
   LatLng _center = LatLng(
@@ -77,6 +80,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   @override
   void initState() {
     super.initState();
+    _locationService = widget.locationService ?? LocationService();
     _ownsOfflineMapService = widget.mapService == null;
     _offlineMapService = widget.mapService ?? OfflineMapService();
     if (widget.initialPolygon != null && widget.initialPolygon!.isNotEmpty) {
@@ -103,25 +107,16 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   }
 
   Future<void> _loadInitialTarget() async {
+    final regionsFuture = _refreshDownloadedRegions();
     try {
-      final regions = await _refreshDownloadedRegions();
-      if (!mounted) return;
-
-      final hasNetwork = await _networkStatusService.hasNetworkInterface();
-      if (!mounted) return;
-      if (!hasNetwork) {
-        final preferred = await _preferredOfflineRegion(regions);
-        if (!mounted) return;
-        if (preferred != null) {
-          _focusOfflineRegion(preferred, showSnack: false);
-          return;
-        }
-      }
-
       final quickLocation = await _locationService.getLastKnownLocation();
       if (!mounted) return;
       if (quickLocation != null) {
-        _center = LatLng(quickLocation.latitude, quickLocation.longitude);
+        _currentLocation = LatLng(
+          quickLocation.latitude,
+          quickLocation.longitude,
+        );
+        _center = _currentLocation!;
         _zoom = 18;
         if (_mapReady) _moveMap(_center, _zoom);
       }
@@ -129,7 +124,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       final location = await _locationService.getCurrentLocation();
       if (!mounted) return;
       if (location != null) {
-        _center = LatLng(location.latitude, location.longitude);
+        _currentLocation = LatLng(location.latitude, location.longitude);
+        _center = _currentLocation!;
         _zoom = 18;
         if (_mapReady) _moveMap(_center, _zoom);
       }
@@ -139,6 +135,17 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       if (mounted) {
         setState(() => _loadingLocation = false);
       }
+    }
+
+    try {
+      final regions = await regionsFuture;
+      final hasNetwork = await _networkStatusService.hasNetworkInterface();
+      if (!mounted || hasNetwork) return;
+      final preferred = await _preferredOfflineRegion(regions);
+      if (!mounted || preferred == null) return;
+      _focusOfflineRegion(preferred, showSnack: false);
+    } catch (e) {
+      debugPrint('[BoundaryPolygonScreen._loadInitialTarget.offline] $e');
     }
   }
 
@@ -362,7 +369,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
         _searchedPlaceLabel = place.address.trim().isEmpty
             ? place.title
             : place.address;
-        _baseMap = _BoundaryBaseMap.roads;
+        _baseMap = _BoundaryBaseMap.satellite;
         _mode = _BoundaryMapMode.draw;
       });
       _moveMap(center, 18);
@@ -397,6 +404,32 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   void _selectBaseMap(_BoundaryBaseMap baseMap) {
     if (_baseMap == baseMap) return;
     setState(() => _baseMap = baseMap);
+  }
+
+  Future<void> _locateCurrentPosition() async {
+    if (_loadingLocation) return;
+    setState(() => _loadingLocation = true);
+    try {
+      final location = await _locationService.getCurrentLocation();
+      if (!mounted) return;
+      if (location == null) {
+        Get.snackbar(
+          UiStrings.t('location_unavailable_title'),
+          UiStrings.t('location_error_body'),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+        return;
+      }
+      final center = LatLng(location.latitude, location.longitude);
+      setState(() {
+        _currentLocation = center;
+        _center = center;
+        _zoom = 18;
+      });
+      _moveMap(center, 18);
+    } finally {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
   }
 
   void _selectMapMode(_BoundaryMapMode mode) {
@@ -625,6 +658,19 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                 ),
               MarkerLayer(
                 markers: [
+                  if (_currentLocation != null)
+                    Marker(
+                      point: _currentLocation!,
+                      width: 28,
+                      height: 28,
+                      child: const Icon(
+                        key: Key('farm_boundary_current_location_marker'),
+                        Icons.my_location_rounded,
+                        color: Color(0xFF1565C0),
+                        size: 24,
+                        shadows: [Shadow(color: Colors.white, blurRadius: 5)],
+                      ),
+                    ),
                   if (_searchedPlaceCenter != null)
                     Marker(
                       point: _searchedPlaceCenter!,
@@ -1026,10 +1072,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                   FloatingActionButton.small(
                     key: const Key('farm_boundary_recenter_fab'),
                     heroTag: 'farm-boundary-recenter',
-                    tooltip: UiStrings.t('re_center'),
-                    onPressed: _loadingLocation
-                        ? null
-                        : () => _moveMap(_center, _zoom),
+                    tooltip: UiStrings.t('use_current_location'),
+                    onPressed: _loadingLocation ? null : _locateCurrentPosition,
                     backgroundColor: Colors.white,
                     foregroundColor: AppTheme.greenDark,
                     child: const Icon(Icons.my_location_rounded),
