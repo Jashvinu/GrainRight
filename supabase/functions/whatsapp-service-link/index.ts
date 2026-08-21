@@ -84,6 +84,41 @@ async function invokeGateway(body: Row): Promise<Row> {
   return data;
 }
 
+async function resultForWeb(
+  supabase: ReturnType<typeof serviceClient>,
+  link: Row,
+  rawResult: Row,
+): Promise<Row> {
+  const result = { ...rawResult };
+  if (text(link.service) !== "grading") return result;
+
+  const imageSources = [
+    {
+      pathKey: "grain_image_path",
+      urlKey: "grain_image_url",
+      bucket: "grain-images",
+    },
+    {
+      pathKey: "moisture_image_path",
+      urlKey: "moisture_image_url",
+      bucket: "moisture-images",
+    },
+  ] as const;
+
+  for (const image of imageSources) {
+    const path = text(result[image.pathKey]);
+    delete result[image.pathKey];
+    if (!path || !path.startsWith(`${text(link.user_id)}/whatsapp/`)) continue;
+    const signed = await supabase.storage
+      .from(image.bucket)
+      .createSignedUrl(path, 10 * 60);
+    if (!signed.error && signed.data?.signedUrl) {
+      result[image.urlKey] = signed.data.signedUrl;
+    }
+  }
+  return result;
+}
+
 async function completeService(
   supabase: ReturnType<typeof serviceClient>,
   link: Row,
@@ -185,7 +220,11 @@ async function completeService(
     .select("result,status,completed_at")
     .maybeSingle();
   if (error) throw error;
-  return object(updated?.result ?? result);
+  return await resultForWeb(
+    supabase,
+    link,
+    object(updated?.result ?? result),
+  );
 }
 
 Deno.serve(async (req) => {
@@ -259,7 +298,9 @@ Deno.serve(async (req) => {
           farmer,
           farm: farm.data,
           status: link.status,
-          result: link.status === "completed" ? link.result : null,
+          result: link.status === "completed"
+            ? await resultForWeb(supabase, link, object(link.result))
+            : null,
           task,
           expiresAt: link.expires_at,
         },

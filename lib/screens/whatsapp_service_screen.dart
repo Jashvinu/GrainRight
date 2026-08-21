@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -44,6 +45,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   XFile? _moisturePhoto;
   Uint8List? _grainPhotoBytes;
   Uint8List? _moisturePhotoBytes;
+  String? _grainPhotoUrl;
+  String? _moisturePhotoUrl;
   final List<XFile> _taskPhotos = <XFile>[];
   Uri? _returnToWhatsapp;
   String? _error;
@@ -93,6 +96,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         _task = _map(data['task']);
         final result = data['result'];
         _result = result is Map ? _map(result) : null;
+        _grainPhotoUrl = _result?['grain_image_url']?.toString();
+        _moisturePhotoUrl = _result?['moisture_image_url']?.toString();
       });
       if (_service == 'grading' && _result == null) {
         await _loadCropCatalog();
@@ -123,6 +128,75 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         _grainPhotoBytes = bytes;
       }
     });
+  }
+
+  Future<void> _showPhotoSourcePicker(bool moisture) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  _copy('Add photo', 'फोटो जोड़ें', 'फोटो जोडा'),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.camera_alt_outlined),
+                ),
+                title: Text(
+                  _copy('Take with camera', 'कैमरे से लें', 'कॅमेऱ्याने घ्या'),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.photo_library_outlined),
+                ),
+                title: Text(
+                  _copy('Choose from phone', 'फोन से चुनें', 'फोनमधून निवडा'),
+                ),
+                onTap: () => Navigator.pop(context, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || source == null) return;
+    await _pickPhoto(moisture, source);
+  }
+
+  Future<void> _loadReportImages() async {
+    Future<Uint8List?> load(String? url) async {
+      final value = url?.trim() ?? '';
+      if (value.isEmpty) return null;
+      try {
+        final response = await http.get(Uri.parse(value));
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          return response.bodyBytes;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    if (_grainPhotoBytes == null && _grainPhotoUrl != null) {
+      _grainPhotoBytes = await load(_grainPhotoUrl);
+    }
+    if (_moisturePhotoBytes == null && _moisturePhotoUrl != null) {
+      _moisturePhotoBytes = await load(_moisturePhotoUrl);
+    }
   }
 
   Future<void> _removePhoto(bool moisture) async {
@@ -697,19 +771,13 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                 child: OutlinedButton.icon(
                   onPressed: _submitting
                       ? null
-                      : () => _pickPhoto(moisture, ImageSource.camera),
-                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                  label: Text(_copy('Take photo', 'कैमरा', 'कॅमेरा')),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _submitting
-                      ? null
-                      : () => _pickPhoto(moisture, ImageSource.gallery),
-                  icon: const Icon(Icons.photo_library_outlined, size: 18),
-                  label: Text(_copy('Choose', 'चुनें', 'निवडा')),
+                      : () => _showPhotoSourcePicker(moisture),
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
+                  label: Text(
+                    photo == null
+                        ? _copy('Add photo', 'फोटो जोड़ें', 'फोटो जोडा')
+                        : _copy('Change photo', 'फोटो बदलें', 'फोटो बदला'),
+                  ),
                 ),
               ),
               if (photo != null) ...[
@@ -1002,7 +1070,6 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   Widget _farmerDetailsStrip() {
     final name = '${_farmer['name'] ?? _farmer['farmer_name'] ?? 'Farmer'}'
         .trim();
-    final farmerId = '${_farmer['id'] ?? _farmer['farmer_id'] ?? ''}'.trim();
     final location = '${_farmer['location'] ?? _farm['location_label'] ?? ''}'
         .trim();
     final farmName =
@@ -1042,10 +1109,11 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
             spacing: 12,
             runSpacing: 4,
             children: [
-              if (farmerId.isNotEmpty)
-                _detailText('${_copy('ID', 'आईडी', 'आयडी')}: $farmerId'),
               _detailText('${_copy('Farm', 'खेत', 'शेत')}: $farmName'),
-              if (location.isNotEmpty) _detailText(location),
+              if (location.isNotEmpty)
+                _detailText(
+                  '${_copy('Location', 'स्थान', 'ठिकाण')}: $location',
+                ),
               _detailText(
                 '${_copy('Crop', 'फसल', 'पीक')}: ${_resultCropLabel()}',
               ),
@@ -1066,31 +1134,40 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
 
   Widget _metricTile(String label, String value, IconData icon, Color color) =>
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
             Icon(icon, size: 17, color: color),
-            const SizedBox(height: 5),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 10.5, color: AppTheme.textMuted),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-                color: color,
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: color,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -1199,34 +1276,63 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
             '${result['review_status'] ?? ''}'.toLowerCase() == 'pending'
         ? _copy('Needs FPC review', 'FPC जाँच जरूरी', 'FPC तपासणी आवश्यक')
         : _copy('Ready to use', 'उपयोग के लिए तैयार', 'वापरण्यास तयार');
-    final analysisId = '${result['analysis_id'] ?? ''}'.trim();
     final overallConfidence = _displayValue(
       confidence['overall'] ?? result['confidence_score'],
     );
-    final signal = '${result['signal_highlights'] ?? ''}'.trim();
+    String yesNo(dynamic value) => value == null
+        ? '—'
+        : value == true
+        ? _copy('Yes', 'हाँ', 'होय')
+        : _copy('No', 'नहीं', 'नाही');
+    String valueOrDash(dynamic value) => _displayValue(value);
+    final reasons = quality['reject_reasons'] ?? result['reject_reasons'];
+    final signal = valueOrDash(result['signal_highlights']);
     return [
       _ResultSection(_copy('Review', 'जाँच', 'तपासणी'), reviewStatus),
+      _ResultSection(
+        _copy('Grain score', 'अनाज स्कोर', 'धान्य गुण'),
+        valueOrDash(quality['grain_score']),
+      ),
+      _ResultSection(
+        _copy('Broken grain', 'टूटा अनाज', 'तुटलेले धान्य'),
+        '${valueOrDash(quality['broken_grain_percent'])}%',
+      ),
+      _ResultSection(
+        _copy('Foreign matter', 'बाहरी पदार्थ', 'परकीय पदार्थ'),
+        '${valueOrDash(quality['foreign_matter_percent'])}%',
+      ),
+      _ResultSection(
+        _copy('Damaged grain', 'खराब अनाज', 'खराब धान्य'),
+        '${valueOrDash(quality['damaged_percent'])}%',
+      ),
+      _ResultSection(
+        _copy('Uniformity', 'एकरूपता', 'एकसारखेपणा'),
+        valueOrDash(quality['uniformity_score']),
+      ),
+      _ResultSection(
+        _copy('Mold detected', 'फफूंदी मिली', 'बुरशी आढळली'),
+        yesNo(quality['mold_visible']),
+      ),
+      _ResultSection(
+        _copy('Reject recommendation', 'अस्वीकृति सुझाव', 'नकार सूचना'),
+        yesNo(quality['reject_recommended'] ?? result['reject_recommended']),
+      ),
+      if (reasons != null)
+        _ResultSection(
+          _copy('Review reason', 'जाँच का कारण', 'तपासणीचे कारण'),
+          valueOrDash(reasons),
+        ),
+      _ResultSection(
+        _copy('Moisture source', 'नमी का स्रोत', 'ओलाव्याचा स्रोत'),
+        valueOrDash(_map(result['moisture'])['source']),
+      ),
       if (overallConfidence != '—')
         _ResultSection(
           _copy('Confidence', 'भरोसा', 'विश्वास'),
           overallConfidence,
         ),
-      if (analysisId.isNotEmpty)
-        _ResultSection(
-          _copy('Report ID', 'रिपोर्ट आईडी', 'अहवाल आयडी'),
-          analysisId,
-        ),
-      if (signal.isNotEmpty)
+      if (signal != '—' && signal.isNotEmpty)
         _ResultSection(_copy('Note', 'नोट', 'नोंद'), signal),
-      if (quality.isEmpty && analysisId.isEmpty)
-        _ResultSection(
-          _copy('Status', 'स्थिति', 'स्थिती'),
-          _copy(
-            'Result saved successfully.',
-            'परिणाम सफलतापूर्वक सेव हुआ।',
-            'निकाल यशस्वीपणे सेव झाला.',
-          ),
-        ),
     ];
   }
 
@@ -1319,6 +1425,7 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     if (result == null || _downloading) return;
     setState(() => _downloading = true);
     try {
+      await _loadReportImages();
       final document = pw.Document();
       document.addPage(
         pw.Page(
@@ -1337,13 +1444,24 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
             );
             final risk =
                 '${moisture['risk_level'] ?? result['moisture_risk'] ?? '—'}';
+            final moistureSource = '${moisture['source'] ?? '—'}';
             final grainImage = _grainPhotoBytes == null
                 ? null
                 : pw.MemoryImage(_grainPhotoBytes!);
+            final moistureImage = _moisturePhotoBytes == null
+                ? null
+                : pw.MemoryImage(_moisturePhotoBytes!);
             final farmName = '${_farm['name'] ?? 'Selected farm'}';
             final location = '${_farm['location_label'] ?? ''}'.trim();
             final farmerName = '${_farmer['name'] ?? 'Farmer'}';
-            final farmerId = '${_farmer['id'] ?? ''}'.trim();
+            String yesNo(dynamic value) => value == null
+                ? 'Not available'
+                : value == true
+                ? 'Yes'
+                : 'No';
+            final rejectReasons = _displayValue(
+              quality['reject_reasons'] ?? result['reject_reasons'],
+            );
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
@@ -1402,7 +1520,6 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                         [
                           'Farm: $farmName',
                           if (location.isNotEmpty) 'Location: $location',
-                          if (farmerId.isNotEmpty) 'Farmer ID: $farmerId',
                         ].join('  |  '),
                         style: const pw.TextStyle(fontSize: 9.5),
                       ),
@@ -1413,24 +1530,10 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                 pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    if (grainImage != null)
-                      pw.Container(
-                        width: 128,
-                        height: 128,
-                        margin: const pw.EdgeInsets.only(right: 14),
-                        padding: const pw.EdgeInsets.all(4),
-                        decoration: pw.BoxDecoration(
-                          border: pw.Border.all(
-                            color: const PdfColor(0.82, 0.88, 0.82),
-                          ),
-                          borderRadius: pw.BorderRadius.circular(7),
-                        ),
-                        child: pw.ClipRRect(
-                          horizontalRadius: 5,
-                          verticalRadius: 5,
-                          child: pw.Image(grainImage, fit: pw.BoxFit.cover),
-                        ),
-                      ),
+                    _pdfImageBox('Grain sample', grainImage),
+                    pw.SizedBox(width: 8),
+                    _pdfImageBox('Moisture reading', moistureImage),
+                    pw.SizedBox(width: 12),
                     pw.Expanded(
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1450,16 +1553,16 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                           pw.Row(
                             children: [
                               _pdfMetric('Grade', grade),
-                              pw.SizedBox(width: 12),
+                              pw.SizedBox(width: 10),
                               _pdfMetric('Score', score),
-                              pw.SizedBox(width: 12),
+                              pw.SizedBox(width: 10),
                               _pdfMetric('Moisture', '$moisturePercent%'),
                             ],
                           ),
-                          if (grainImage == null) ...[
+                          if (grainImage == null || moistureImage == null) ...[
                             pw.SizedBox(height: 7),
                             pw.Text(
-                              'Grain photo is available in the GrainRight record.',
+                              'A photo could not be loaded for this report.',
                               style: const pw.TextStyle(fontSize: 8.5),
                             ),
                           ],
@@ -1469,6 +1572,88 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                   ],
                 ),
                 pw.SizedBox(height: 13),
+                pw.Text(
+                  'Grading information',
+                  style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: const PdfColor(0.08, 0.36, 0.18),
+                  ),
+                ),
+                pw.SizedBox(height: 6),
+                pw.Table(
+                  columnWidths: const {
+                    0: pw.FlexColumnWidth(1),
+                    1: pw.FlexColumnWidth(1),
+                  },
+                  children: [
+                    pw.TableRow(
+                      children: [
+                        _pdfInfoCell(
+                          'Grain score',
+                          _displayValue(quality['grain_score']),
+                        ),
+                        _pdfInfoCell(
+                          'Broken grain',
+                          '${_displayValue(quality['broken_grain_percent'])}%',
+                        ),
+                      ],
+                    ),
+                    pw.TableRow(
+                      children: [
+                        _pdfInfoCell(
+                          'Foreign matter',
+                          '${_displayValue(quality['foreign_matter_percent'])}%',
+                        ),
+                        _pdfInfoCell(
+                          'Damaged grain',
+                          '${_displayValue(quality['damaged_percent'])}%',
+                        ),
+                      ],
+                    ),
+                    pw.TableRow(
+                      children: [
+                        _pdfInfoCell(
+                          'Uniformity',
+                          _displayValue(quality['uniformity_score']),
+                        ),
+                        _pdfInfoCell(
+                          'Mold detected',
+                          yesNo(quality['mold_visible']),
+                        ),
+                      ],
+                    ),
+                    pw.TableRow(
+                      children: [
+                        _pdfInfoCell('Moisture risk', risk),
+                        _pdfInfoCell('Reading source', moistureSource),
+                      ],
+                    ),
+                    pw.TableRow(
+                      children: [
+                        _pdfInfoCell(
+                          'Manual review',
+                          yesNo(result['manual_review_required']),
+                        ),
+                        _pdfInfoCell(
+                          'Reject recommendation',
+                          yesNo(
+                            quality['reject_recommended'] ??
+                                result['reject_recommended'],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (rejectReasons != '—' && rejectReasons.isNotEmpty) ...[
+                  pw.SizedBox(height: 5),
+                  pw.Text(
+                    'Review reason: $rejectReasons',
+                    style: const pw.TextStyle(fontSize: 8.5),
+                  ),
+                ],
+                pw.SizedBox(height: 10),
                 pw.Container(
                   width: double.infinity,
                   padding: const pw.EdgeInsets.all(11),
@@ -1533,6 +1718,56 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         value,
         style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
       ),
+    ],
+  );
+
+  pw.Widget _pdfInfoCell(String label, String value) => pw.Container(
+    margin: const pw.EdgeInsets.only(bottom: 4, right: 5),
+    padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+    decoration: pw.BoxDecoration(
+      color: const PdfColor(0.97, 0.98, 0.96),
+      borderRadius: pw.BorderRadius.circular(4),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
+        pw.SizedBox(height: 2),
+        pw.Text(
+          value,
+          maxLines: 2,
+          style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold),
+        ),
+      ],
+    ),
+  );
+
+  pw.Widget _pdfImageBox(String label, pw.ImageProvider? image) => pw.Column(
+    children: [
+      pw.Container(
+        width: 92,
+        height: 92,
+        padding: const pw.EdgeInsets.all(3),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: const PdfColor(0.82, 0.88, 0.82)),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: image == null
+            ? pw.Center(
+                child: pw.Text(
+                  'Not available',
+                  textAlign: pw.TextAlign.center,
+                  style: const pw.TextStyle(fontSize: 7),
+                ),
+              )
+            : pw.ClipRRect(
+                horizontalRadius: 4,
+                verticalRadius: 4,
+                child: pw.Image(image, fit: pw.BoxFit.cover),
+              ),
+      ),
+      pw.SizedBox(height: 3),
+      pw.Text(label, style: const pw.TextStyle(fontSize: 7.5)),
     ],
   );
 
