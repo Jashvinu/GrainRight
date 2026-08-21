@@ -1650,7 +1650,7 @@ Deno.serve(async (req) => {
       const identity = await requireFarmer(supabase, phone, preferredLanguage);
       const { data: link, error } = await supabase
         .from("whatsapp_service_links")
-        .select("id,service,language,result,completed_at")
+        .select("id,service,language,result,completed_at,farm_id")
         .eq("whatsapp_phone", phone)
         .eq("user_id", identity.user_id)
         .eq("status", "completed")
@@ -1675,12 +1675,32 @@ Deno.serve(async (req) => {
         .eq("status", "completed")
         .is("consumed_at", null);
       if (consumeError) throw consumeError;
+      const farm = await supabase
+        .from("farms")
+        .select("id,name,location_label,crop,variety")
+        .eq("id", link.farm_id)
+        .eq("user_id", identity.user_id)
+        .maybeSingle();
+      if (farm.error) throw farm.error;
+      const profile = await supabase
+        .from("farmer_phone_profiles")
+        .select("farmer_id,farmer_name,default_location")
+        .eq("user_id", identity.user_id)
+        .eq("farmer_id", identity.farmer_id)
+        .maybeSingle();
+      if (profile.error) throw profile.error;
       return successResponse(
         {
           found: true,
           service: link.service,
           language: language(link.language),
           result: object(link.result),
+          farmer: {
+            id: identity.farmer_id,
+            name: text(profile.data?.farmer_name) || "Farmer",
+            location: text(profile.data?.default_location),
+          },
+          farm: farm.data ?? null,
           completedAt: link.completed_at,
         },
         200,

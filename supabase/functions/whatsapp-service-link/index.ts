@@ -217,6 +217,23 @@ Deno.serve(async (req) => {
     if (!farm.data)
       return errorResponse("The linked farm is no longer available.", 404);
 
+    let farmerProfileQuery = supabase
+      .from("farmer_phone_profiles")
+      .select("farmer_id,farmer_name,default_location,phone")
+      .eq("user_id", link.user_id)
+      .limit(1);
+    if (text(link.farmer_id)) {
+      farmerProfileQuery = farmerProfileQuery.eq("farmer_id", link.farmer_id);
+    }
+    const farmerProfile = await farmerProfileQuery.maybeSingle();
+    if (farmerProfile.error) throw farmerProfile.error;
+    const farmer = {
+      id: text(farmerProfile.data?.farmer_id) || text(link.farmer_id),
+      name: text(farmerProfile.data?.farmer_name) || "Farmer",
+      phone: text(farmerProfile.data?.phone) || text(link.whatsapp_phone),
+      location: text(farmerProfile.data?.default_location),
+    };
+
     let task: Row | null = null;
     if (text(link.service) === "daily_tasks") {
       const taskQuery = await supabase
@@ -239,6 +256,7 @@ Deno.serve(async (req) => {
           linkId: link.id,
           service: link.service,
           language: language(link.language),
+          farmer,
           farm: farm.data,
           status: link.status,
           result: link.status === "completed" ? link.result : null,
