@@ -2140,6 +2140,75 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (action === "inventory_add") {
+      const farm = await resolveFarm(
+        supabase,
+        identity,
+        body.farm ?? body.farmId,
+      );
+      const item = object(body.item);
+      const productName = text(item.product_name ?? item.productName);
+      const quantity = Number(text(item.quantity));
+      if (!productName) return errorResponse("An inventory product name is required.", 400);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return errorResponse("Inventory quantity must be greater than zero.", 400);
+      }
+
+      const moistureText = text(item.moisture_percent ?? item.moisturePercent);
+      const moisturePercent = moistureText.length === 0 ? null : Number(moistureText);
+      if (
+        moisturePercent !== null &&
+        (!Number.isFinite(moisturePercent) || moisturePercent < 0 || moisturePercent > 100)
+      ) {
+        return errorResponse("Inventory moisture must be between 0 and 100 percent.", 400);
+      }
+
+      const harvestedAtRaw = text(item.harvested_at ?? item.harvestedAt);
+      const harvestedAt = harvestedAtRaw.length === 0
+        ? new Date().toISOString()
+        : /^\d{4}-\d{2}-\d{2}$/.test(harvestedAtRaw)
+          ? `${harvestedAtRaw}T00:00:00.000Z`
+          : harvestedAtRaw;
+      if (Number.isNaN(Date.parse(harvestedAt))) {
+        return errorResponse("Inventory harvest date is invalid.", 400);
+      }
+
+      const inventoryId = (text(item.inventory_id ?? item.inventoryId) ||
+        `whatsapp-${crypto.randomUUID()}`).slice(0, 120);
+      const row = {
+        user_id: identity.user_id,
+        farmer_phone: phone,
+        farmer_id: identity.farmer_id,
+        farm_id: farm.id,
+        farm_name: text(farm.name),
+        inventory_id: inventoryId,
+        product_category: "crop_lot",
+        product_name: productName,
+        crop: text(item.crop) || text(farm.crop),
+        variety: text(item.variety),
+        quantity,
+        unit: text(item.unit) || "kg",
+        grade: text(item.grade),
+        moisture_percent: moisturePercent,
+        harvested_at: harvestedAt,
+        source_flow: "whatsapp_inventory",
+        notes: text(item.notes),
+      };
+      const { data, error } = await supabase
+        .from("farmer_inventory_items")
+        .upsert(row, { onConflict: "user_id,inventory_id" })
+        .select(
+          "inventory_id,product_name,crop,variety,quantity,unit,grade,moisture_percent,harvested_at,updated_at",
+        )
+        .single();
+      if (error) throw error;
+      return successResponse(
+        { farm, item: data },
+        201,
+        "whatsapp_inventory_added",
+      );
+    }
+
     if (action === "economics") {
       const farm = await resolveFarm(
         supabase,

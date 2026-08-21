@@ -45,6 +45,7 @@ void main() {
       'farm_setup_link',
       'daily_tasks',
       'inventory',
+      'inventory_add',
       'economics',
       'harvest',
       'marketplace',
@@ -71,8 +72,8 @@ void main() {
     expect(gateway, contains('farm_economic_plans'));
     expect(gateway, contains('farm_harvest_zone_plans'));
     expect(gateway, contains('marketplace_listings'));
-    expect(gateway, contains('route: "/farmer/farm-setup"'));
-    expect(gateway, contains('whatsapp_farm_setup_route'));
+    expect(gateway, contains('boundaryMapUrl'));
+    expect(gateway, contains('whatsapp-farm-boundary?'));
   });
 
   test('private writes remain behind the internal whatsapp bridge', () {
