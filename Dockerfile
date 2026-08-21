@@ -25,7 +25,10 @@ RUN boundary_build_id=$(sha256sum build/web/main.dart.js | awk '{print substr($1
     && sed "s|main.dart.js|main.dart.js?v=${boundary_build_id}|g" \
       build/web/flutter_bootstrap.js > build/web/whatsapp-boundary-bootstrap.js \
     && sed "s|__WHATSAPP_BOUNDARY_BUILD_ID__|${boundary_build_id}|g" \
-      render/whatsapp-boundary.html.template > build/web/whatsapp-boundary.html
+      render/whatsapp-boundary.html.template > build/web/whatsapp-boundary.html \
+    && cp build/web/whatsapp-boundary-bootstrap.js build/web/whatsapp-service-bootstrap.js \
+    && sed "s|__WHATSAPP_SERVICE_BUILD_ID__|${boundary_build_id}|g" \
+      render/whatsapp-service.html.template > build/web/whatsapp-service.html
 
 FROM nginx:1.27-alpine
 

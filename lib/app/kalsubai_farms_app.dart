@@ -8,6 +8,7 @@ import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'bindings/app_bindings.dart';
 import 'routes/app_pages.dart';
 import '../screens/whatsapp_farm_boundary_screen.dart';
+import '../screens/whatsapp_service_screen.dart';
 
 class KalsubaiFarmsApp extends StatelessWidget {
   final Locale initialLocale;
@@ -69,6 +70,35 @@ class WhatsappBoundaryApp extends StatelessWidget {
       ],
       debugShowCheckedModeBanner: false,
       home: WhatsappFarmBoundaryScreen(token: token),
+    );
+  }
+}
+
+class WhatsappServiceApp extends StatelessWidget {
+  final String token;
+  final Locale initialLocale;
+
+  const WhatsappServiceApp({
+    super.key,
+    required this.token,
+    this.initialLocale = const Locale('en'),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GetMaterialApp(
+      title: 'GrainRight WhatsApp Service',
+      theme: AppTheme.theme,
+      locale: initialLocale,
+      fallbackLocale: const Locale('en'),
+      supportedLocales: const [Locale('en'), Locale('hi'), Locale('mr')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      debugShowCheckedModeBanner: false,
+      home: WhatsappServiceScreen(token: token),
     );
   }
 }

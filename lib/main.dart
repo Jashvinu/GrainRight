@@ -13,8 +13,10 @@ import 'config/supabase_config.dart';
 import 'services/offline_map_download_manager.dart';
 import 'services/local_notification_service.dart';
 import 'services/push_notification_service.dart';
+import 'core/theme/app_theme.dart';
 import 'app.dart';
 import 'utils/whatsapp_boundary_launch.dart';
+import 'utils/whatsapp_service_launch.dart';
 
 void main() {
   runZonedGuarded(() {
@@ -31,11 +33,20 @@ void main() {
 Future<void> _completeProductionBootstrap() async {
   final bootstrap = await _bootstrapProductionApp();
   final boundaryLaunch = _whatsappBoundaryLaunchFromBrowser();
+  final serviceLaunch = _whatsappServiceLaunchFromBrowser();
   if (bootstrap.supabaseReady && boundaryLaunch != null) {
     runApp(
       WhatsappBoundaryApp(
         token: boundaryLaunch.token,
         initialLocale: Locale(boundaryLaunch.languageCode),
+      ),
+    );
+    _deferPlatformServicesBootstrap();
+  } else if (bootstrap.supabaseReady && serviceLaunch != null) {
+    runApp(
+      WhatsappServiceApp(
+        token: serviceLaunch.token,
+        initialLocale: Locale(serviceLaunch.languageCode),
       ),
     );
     _deferPlatformServicesBootstrap();
@@ -45,6 +56,11 @@ Future<void> _completeProductionBootstrap() async {
   } else {
     runApp(_StartupRecoveryApp(initialLocale: bootstrap.locale));
   }
+}
+
+WhatsappServiceLaunch? _whatsappServiceLaunchFromBrowser() {
+  if (!kIsWeb) return null;
+  return whatsappServiceLaunchFromUri(Uri.base);
 }
 
 WhatsappBoundaryLaunch? _whatsappBoundaryLaunchFromBrowser() {
@@ -165,7 +181,7 @@ class _StartupLoadingApp extends StatelessWidget {
     return const MaterialApp(
       debugShowCheckedModeBanner: false,
       home: Scaffold(
-        backgroundColor: Color(0xFFFAF7F0),
+        backgroundColor: AppTheme.surface,
         body: SafeArea(
           child: Center(
             child: Column(
@@ -174,8 +190,9 @@ class _StartupLoadingApp extends StatelessWidget {
                 Text(
                   'Kalsubai Farms',
                   style: TextStyle(
-                    color: Color(0xFF0B5D2A),
+                    color: AppTheme.green,
                     fontSize: 22,
+
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -185,7 +202,7 @@ class _StartupLoadingApp extends StatelessWidget {
                   height: 28,
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
-                    color: Color(0xFF0B5D2A),
+                    color: AppTheme.green,
                   ),
                 ),
               ],
@@ -218,7 +235,7 @@ class _StartupRecoveryApp extends StatelessWidget {
                   const Icon(
                     Icons.wifi_off_rounded,
                     size: 48,
-                    color: Color(0xFF0B5D2A),
+                    color: AppTheme.green,
                   ),
                   const SizedBox(height: 16),
                   const Text(

@@ -31,6 +31,23 @@ server {
         try_files $uri =404;
     }
 
+    location = /whatsapp-service {
+        rewrite ^ /whatsapp-service.html last;
+    }
+
+    location = /whatsapp-service.html {
+        internal;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        add_header Clear-Site-Data "\"cache\"" always;
+        try_files $uri =404;
+    }
+
+    location = /whatsapp-service-bootstrap.js {
+        expires -1;
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
         add_header Cache-Control "no-cache, must-revalidate";
