@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../core/theme/app_theme.dart';
 import '../utils/whatsapp_service_handoff.dart';
 
 class WhatsappServiceScreen extends StatefulWidget {
@@ -24,9 +25,11 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   String _service = '';
   String _language = 'en';
   Map<String, dynamic> _farm = const {};
+  Map<String, dynamic> _task = const {};
   Map<String, dynamic>? _result;
   XFile? _grainPhoto;
   XFile? _moisturePhoto;
+  final List<XFile> _taskPhotos = <XFile>[];
   Uri? _returnToWhatsapp;
   String? _error;
 
@@ -71,6 +74,7 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         _service = '${data['service'] ?? ''}';
         _language = '${data['language'] ?? 'en'}';
         _farm = _map(data['farm']);
+        _task = _map(data['task']);
         final result = data['result'];
         _result = result is Map ? _map(result) : null;
       });
@@ -101,6 +105,16 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     });
   }
 
+  Future<void> _captureTaskPhoto() async {
+    if (_taskPhotos.length >= 3) return;
+    final photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 88,
+    );
+    if (!mounted || photo == null) return;
+    setState(() => _taskPhotos.add(photo));
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     if (_service == 'ai' && _question.text.trim().isEmpty) {
@@ -124,6 +138,17 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       );
       return;
     }
+    if (_service == 'daily_tasks' &&
+        (_task['id'] == null || _taskPhotos.length < 3)) {
+      setState(
+        () => _error = _copy(
+          'Capture three photos from different parts of the farm.',
+          'खेत के अलग-अलग हिस्सों से तीन फोटो लें।',
+          'शेताच्या वेगवेगळ्या भागांतून तीन फोटो घ्या.',
+        ),
+      );
+      return;
+    }
     setState(() {
       _submitting = true;
       _error = null;
@@ -139,6 +164,15 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         body['moistureImageBase64'] = base64Encode(moisture);
         body['grainImageMimeType'] = _mimeType(_grainPhoto!.name);
         body['moistureImageMimeType'] = _mimeType(_moisturePhoto!.name);
+      } else if (_service == 'daily_tasks') {
+        body['taskId'] = _task['id'];
+        body['taskPhotos'] = [
+          for (final photo in _taskPhotos)
+            {
+              'base64': base64Encode(await photo.readAsBytes()),
+              'mimeType': _mimeType(photo.name),
+            },
+        ];
       }
       final response = await Supabase.instance.client.functions.invoke(
         'whatsapp-service-link',
@@ -183,27 +217,38 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       return _message(_error!);
     }
     return Scaffold(
-      appBar: AppBar(title: Text(_title)),
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_title),
+            Text(
+              _copy('GrainRight service', 'GrainRight सेवा', 'GrainRight सेवा'),
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+        actions: [
+          if (_result != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: Chip(
+                avatar: const Icon(Icons.check_circle, size: 16),
+                label: Text(_copy('Completed', 'पूरा हुआ', 'पूर्ण')), 
+              ),
+            ),
+        ],
+      ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 620),
-            child: ListView(
-              padding: const EdgeInsets.all(24),
+        child: Container(
+          color: AppTheme.surface,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               children: [
-                Text(
-                  _farm['name']?.toString() ?? '',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (_farm['crop'] != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text('${_farm['crop']}'),
-                  ),
-                const SizedBox(height: 24),
+                _farmHeaderCard(),
                 if (_error != null) _errorBox(_error!),
                 if (_result != null) ...[
                   _resultCard(),
@@ -211,6 +256,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                 ],
                 if (_result == null && _service == 'ai') _aiForm(),
                 if (_result == null && _service == 'grading') _gradingForm(),
+                if (_result == null && _service == 'daily_tasks')
+                  _dailyTaskForm(),
                 if (_result != null && _returnToWhatsapp != null)
                   FilledButton.icon(
                     onPressed: () => _openWhatsApp(_returnToWhatsapp!),
@@ -219,7 +266,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                       _copy('Open WhatsApp', 'WhatsApp खोलें', 'WhatsApp उघडा'),
                     ),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -317,12 +365,216 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     ],
   );
 
-  Widget _resultCard() => Card(
+  Widget _dailyTaskForm() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Text(
+        _copy('Today’s farm task', 'आज का खेत काम', 'आजचे शेतकाम'),
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        _task['title_key']?.toString() ??
+            _copy('Field check', 'खेत निरीक्षण', 'शेत तपासणी'),
+      ),
+      if ((_task['description_key']?.toString() ?? '').trim().isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(_task['description_key'].toString()),
+        ),
+      const SizedBox(height: 16),
+      Text(
+        _copy(
+          'Capture one clear photo from each of three different farm areas.',
+          'खेत के तीन अलग-अलग हिस्सों से एक-एक साफ फोटो लें।',
+          'शेताच्या तीन वेगवेगळ्या भागांतून प्रत्येकी एक स्पष्ट फोटो घ्या.',
+        ),
+      ),
+      const SizedBox(height: 12),
+      for (var index = 0; index < 3; index++)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: OutlinedButton.icon(
+            onPressed: _submitting || index < _taskPhotos.length
+                ? null
+                : _captureTaskPhoto,
+            icon: Icon(
+              index < _taskPhotos.length
+                  ? Icons.check_circle_outline
+                  : Icons.camera_alt_outlined,
+            ),
+            label: Text(
+              index < _taskPhotos.length
+                  ? _copy(
+                      'Photo ${index + 1} captured',
+                      'फोटो ${index + 1} लिया गया',
+                      'फोटो ${index + 1} घेतला',
+                    )
+                  : _copy(
+                      'Take photo ${index + 1}',
+                      'फोटो ${index + 1} लें',
+                      'फोटो ${index + 1} घ्या',
+                    ),
+            ),
+          ),
+        ),
+      const SizedBox(height: 8),
+      FilledButton(
+        onPressed: _submitting ? null : _submit,
+        child: Text(
+          _submitting
+              ? _copy('Saving…', 'सेव हो रहा है…', 'सेव होत आहे…')
+              : _copy(
+                  'Save task evidence',
+                  'काम का प्रमाण सेव करें',
+                  'कामाचा पुरावा सेव करा',
+                ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _farmHeaderCard() => Card(
+    margin: EdgeInsets.zero,
+    color: AppTheme.greenDark,
     child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: SelectableText(_resultText),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CircleAvatar(
+            radius: 24,
+            backgroundColor: Color(0x33FFFFFF),
+            child: Icon(Icons.agriculture_outlined, color: Colors.white),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _farm['name']?.toString() ?? _copy('Selected farm', 'चुना हुआ खेत', 'निवडलेले शेत'),
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                ),
+                if (_farm['crop'] != null)
+                  Text(
+                    '${_farm['crop']}',
+                    style: const TextStyle(color: Color(0xFFDDEAD5), fontSize: 14),
+                  ),
+                if (_farm['location_label'] != null)
+                  Text(
+                    '${_farm['location_label']}',
+                    style: const TextStyle(color: Color(0xFFDDEAD5), fontSize: 13),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     ),
   );
+
+  Widget _resultCard() {
+    final sections = _resultSections(_result ?? const {});
+    return Card(
+      margin: const EdgeInsets.only(top: 14),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.insights_outlined, color: AppTheme.green),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _copy('Full result', 'पूरा परिणाम', 'संपूर्ण निकाल'),
+                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            for (final section in sections) _resultSection(section),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _resultSection(_ResultSection section) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.greenPale,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(section.label, style: const TextStyle(color: AppTheme.greenDark, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          SelectableText(section.value, style: const TextStyle(height: 1.4)),
+        ],
+      ),
+    ),
+  );
+
+  List<_ResultSection> _resultSections(Map<String, dynamic> result) {
+    final sections = <_ResultSection>[];
+    void visit(String key, dynamic value, [int depth = 0]) {
+      if (value == null || key.endsWith('_path') || key == 'success' || key == 'code') return;
+      final label = _prettyKey(key);
+      if (value is Map) {
+        final entries = value.entries.toList();
+        if (entries.isEmpty) return;
+        if (depth == 0) {
+          for (final entry in entries) {
+            visit('${entry.key}', entry.value, depth + 1);
+          }
+        } else {
+          final lines = <String>[];
+          for (final entry in entries) {
+            if (entry.key.toString().endsWith('_path')) {
+              continue;
+            }
+            lines.add('${_prettyKey(entry.key.toString())}: ${_displayValue(entry.value)}');
+          }
+          if (lines.isNotEmpty) sections.add(_ResultSection(label, lines.join('\n')));
+        }
+      } else if (value is List) {
+        final lines = value.map(_displayValue).where((item) => item.isNotEmpty).toList();
+        if (lines.isNotEmpty) sections.add(_ResultSection(label, lines.map((item) => '• $item').join('\n')));
+      } else {
+        sections.add(_ResultSection(label, _displayValue(value)));
+      }
+    }
+    for (final entry in result.entries) {
+      visit(entry.key, entry.value);
+    }
+    return sections.isEmpty
+        ? [_ResultSection(_copy('Result', 'परिणाम', 'निकाल'), _resultText)]
+        : sections;
+  }
+
+  String _prettyKey(String key) => key
+      .replaceAll(RegExp(r'([a-z])([A-Z])'), r'$1 $2')
+      .replaceAll('_', ' ')
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .map((part) => part[0].toUpperCase() + part.substring(1))
+      .join(' ');
+
+  String _displayValue(dynamic value) {
+    if (value == null) return '—';
+    if (value is Map) return value.entries.map((entry) => '${_prettyKey(entry.key.toString())}: ${_displayValue(entry.value)}').join(', ');
+    if (value is List) return value.map(_displayValue).join(', ');
+    if (value is bool) return value ? 'Yes' : 'No';
+    return '$value';
+  }
 
   String get _resultText {
     final answer = _result?['answer'] ?? _map(_result?['data'])['answer'];
@@ -356,6 +608,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   );
   String get _title => _service == 'grading'
       ? _copy('Grain grading', 'अनाज ग्रेडिंग', 'धान्य ग्रेडिंग')
+      : _service == 'daily_tasks'
+      ? _copy('Daily farm task', 'दैनिक खेत काम', 'दैनंदिन शेतकाम')
       : _copy('AI farm chat', 'खेत AI चैट', 'शेत AI चॅट');
   String _copy(String en, String hi, String mr) => _language == 'hi'
       ? hi
@@ -366,4 +620,11 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       value is Map ? Map<String, dynamic>.from(value) : <String, dynamic>{};
   String _mimeType(String name) =>
       name.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+}
+
+class _ResultSection {
+  final String label;
+  final String value;
+
+  const _ResultSection(this.label, this.value);
 }
