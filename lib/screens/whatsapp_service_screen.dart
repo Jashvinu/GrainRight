@@ -42,6 +42,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   bool _downloading = false;
   XFile? _grainPhoto;
   XFile? _moisturePhoto;
+  Uint8List? _grainPhotoBytes;
+  Uint8List? _moisturePhotoBytes;
   final List<XFile> _taskPhotos = <XFile>[];
   Uri? _returnToWhatsapp;
   String? _error;
@@ -107,17 +109,30 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     }
   }
 
-  Future<void> _pickPhoto(bool moisture) async {
-    final photo = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 88,
-    );
+  Future<void> _pickPhoto(bool moisture, ImageSource source) async {
+    final photo = await _picker.pickImage(source: source, imageQuality: 88);
     if (!mounted || photo == null) return;
+    final bytes = await photo.readAsBytes();
+    if (!mounted) return;
     setState(() {
       if (moisture) {
         _moisturePhoto = photo;
+        _moisturePhotoBytes = bytes;
       } else {
         _grainPhoto = photo;
+        _grainPhotoBytes = bytes;
+      }
+    });
+  }
+
+  Future<void> _removePhoto(bool moisture) async {
+    setState(() {
+      if (moisture) {
+        _moisturePhoto = null;
+        _moisturePhotoBytes = null;
+      } else {
+        _grainPhoto = null;
+        _grainPhotoBytes = null;
       }
     });
   }
@@ -225,8 +240,9 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       if (_service == 'ai') {
         body['question'] = _question.text.trim();
       } else if (_service == 'grading') {
-        final grain = await _grainPhoto!.readAsBytes();
-        final moisture = await _moisturePhoto!.readAsBytes();
+        final grain = _grainPhotoBytes ?? await _grainPhoto!.readAsBytes();
+        final moisture =
+            _moisturePhotoBytes ?? await _moisturePhoto!.readAsBytes();
         body['grainImageBase64'] = base64Encode(grain);
         body['moistureImageBase64'] = base64Encode(moisture);
         body['grainImageMimeType'] = _mimeType(_grainPhoto!.name);
@@ -387,18 +403,175 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   Widget _gradingForm() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Text(
+      _gradingIntroCard(),
+      const SizedBox(height: 14),
+      _gradingStepTitle(
+        '1',
         _copy(
-          'Upload two clear photos',
-          'दो साफ फोटो अपलोड करें',
-          'दोन स्पष्ट फोटो अपलोड करा',
+          'Select crop and variety',
+          'फसल और किस्म चुनें',
+          'पीक आणि वाण निवडा',
         ),
-        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
       ),
       const SizedBox(height: 8),
       if (_loadingCrops)
         const LinearProgressIndicator(minHeight: 3)
-      else ...[
+      else
+        _cropSelectionCard(),
+      const SizedBox(height: 16),
+      _gradingStepTitle(
+        '2',
+        _copy(
+          'Add two clear photos',
+          'दो साफ फोटो जोड़ें',
+          'दोन स्पष्ट फोटो जोडा',
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        _copy(
+          'Use the camera or choose a photo from your phone.',
+          'कैमरा इस्तेमाल करें या फोन से फोटो चुनें।',
+          'कॅमेरा वापरा किंवा फोनमधून फोटो निवडा.',
+        ),
+        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12.5),
+      ),
+      const SizedBox(height: 10),
+      _photoCaptureCard(
+        moisture: false,
+        title: _copy('Grain sample', 'अनाज का नमूना', 'धान्याचा नमुना'),
+        subtitle: _copy(
+          'Spread a small sample in good light.',
+          'थोड़ा अनाज अच्छी रोशनी में फैलाएँ।',
+          'थोडे धान्य चांगल्या प्रकाशात पसरवा.',
+        ),
+        icon: Icons.grain_outlined,
+      ),
+      const SizedBox(height: 10),
+      _photoCaptureCard(
+        moisture: true,
+        title: _copy(
+          'Moisture-meter reading',
+          'नमी मीटर की रीडिंग',
+          'ओलावा मीटरचे मोजमाप',
+        ),
+        subtitle: _copy(
+          'Keep the meter reading visible and sharp.',
+          'मीटर की रीडिंग साफ और दिखाई देने वाली रखें।',
+          'मीटरचे मोजमाप स्पष्ट आणि दिसेल असे ठेवा.',
+        ),
+        icon: Icons.water_drop_outlined,
+      ),
+      const SizedBox(height: 12),
+      _photoProgress(),
+      const SizedBox(height: 16),
+      FilledButton.icon(
+        onPressed: _submitting ? null : _submit,
+        icon: _submitting
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.auto_awesome_outlined),
+        label: Text(
+          _submitting
+              ? _copy('Analysing…', 'विश्लेषण हो रहा है…', 'विश्लेषण सुरू आहे…')
+              : _copy(
+                  'Analyse grain quality',
+                  'अनाज की गुणवत्ता जाँचें',
+                  'धान्याची गुणवत्ता तपासा',
+                ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _gradingIntroCard() => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        colors: [AppTheme.greenDark, AppTheme.green],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const CircleAvatar(
+          radius: 24,
+          backgroundColor: Color(0x2EFFFFFF),
+          child: Icon(Icons.assessment_outlined, color: Colors.white),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _copy(
+                  'Check your grain quality',
+                  'अपने अनाज की गुणवत्ता जाँचें',
+                  'तुमच्या धान्याची गुणवत्ता तपासा',
+                ),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                _copy(
+                  'Choose the crop, add two photos, and get a simple result.',
+                  'फसल चुनें, दो फोटो जोड़ें और आसान परिणाम पाएँ।',
+                  'पीक निवडा, दोन फोटो जोडा आणि सोपा निकाल मिळवा.',
+                ),
+                style: const TextStyle(color: Colors.white70, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _gradingStepTitle(String number, String title) => Row(
+    children: [
+      CircleAvatar(
+        radius: 13,
+        backgroundColor: AppTheme.greenPale,
+        child: Text(
+          number,
+          style: const TextStyle(
+            color: AppTheme.greenDark,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+      ),
+    ],
+  );
+
+  Widget _cropSelectionCard() => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+      border: Border.all(color: const Color(0xFFE2EBDD)),
+    ),
+    child: Column(
+      children: [
         DropdownButtonFormField<CropOption>(
           initialValue: _selectedCrop,
           isExpanded: true,
@@ -423,8 +596,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                   });
                 },
         ),
-        const SizedBox(height: 8),
-        if ((_selectedCrop?.varieties ?? const []).isNotEmpty)
+        if ((_selectedCrop?.varieties ?? const []).isNotEmpty) ...[
+          const SizedBox(height: 10),
           DropdownButtonFormField<CropVariety>(
             key: ValueKey(_selectedCrop?.value),
             initialValue: _selectedVariety,
@@ -445,49 +618,139 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                 ? null
                 : (variety) => setState(() => _selectedVariety = variety),
           ),
-        const SizedBox(height: 8),
+        ],
       ],
-      OutlinedButton.icon(
-        onPressed: () => _pickPhoto(false),
-        icon: const Icon(Icons.grain),
-        label: Text(
-          _grainPhoto == null
-              ? _copy(
-                  'Choose grain photo',
-                  'अनाज की फोटो चुनें',
-                  'धान्याचा फोटो निवडा',
-                )
-              : _grainPhoto!.name,
-        ),
-      ),
-      OutlinedButton.icon(
-        onPressed: () => _pickPhoto(true),
-        icon: const Icon(Icons.water_drop_outlined),
-        label: Text(
-          _moisturePhoto == null
-              ? _copy(
-                  'Choose moisture-meter photo',
-                  'नमी मीटर की फोटो चुनें',
-                  'ओलावा मीटरचा फोटो निवडा',
-                )
-              : _moisturePhoto!.name,
-        ),
-      ),
-      const SizedBox(height: 16),
-      FilledButton(
-        onPressed: _submitting ? null : _submit,
-        child: Text(
-          _submitting
-              ? _copy('Analysing…', 'विश्लेषण हो रहा है…', 'विश्लेषण सुरू आहे…')
-              : _copy(
-                  'Analyse and submit',
-                  'विश्लेषण करके भेजें',
-                  'विश्लेषण करून पाठवा',
-                ),
-        ),
-      ),
-    ],
+    ),
   );
+
+  Widget _photoCaptureCard({
+    required bool moisture,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
+    final photo = moisture ? _moisturePhoto : _grainPhoto;
+    final bytes = moisture ? _moisturePhotoBytes : _grainPhotoBytes;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+        border: Border.all(
+          color: photo == null ? const Color(0xFFE2EBDD) : AppTheme.green,
+          width: photo == null ? 1 : 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppTheme.greenDark, size: 21),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (photo != null)
+                const Icon(Icons.check_circle, color: AppTheme.green, size: 20),
+            ],
+          ),
+          if (bytes != null) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+              child: Image.memory(
+                bytes,
+                width: double.infinity,
+                height: 150,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              photo?.name ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _submitting
+                      ? null
+                      : () => _pickPhoto(moisture, ImageSource.camera),
+                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  label: Text(_copy('Take photo', 'कैमरा', 'कॅमेरा')),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _submitting
+                      ? null
+                      : () => _pickPhoto(moisture, ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                  label: Text(_copy('Choose', 'चुनें', 'निवडा')),
+                ),
+              ),
+              if (photo != null) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: _copy('Remove photo', 'फोटो हटाएँ', 'फोटो काढा'),
+                  onPressed: _submitting ? null : () => _removePhoto(moisture),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _photoProgress() {
+    final count =
+        (_grainPhoto != null ? 1 : 0) + (_moisturePhoto != null ? 1 : 0);
+    return Row(
+      children: [
+        Expanded(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: count / 2,
+              backgroundColor: const Color(0xFFE5ECE0),
+              color: AppTheme.green,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          '$count/2 ${_copy('photos added', 'फोटो जुड़े', 'फोटो जोडले')}',
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+        ),
+      ],
+    );
+  }
 
   Widget _dailyTaskForm() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -692,14 +955,14 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
               tilePadding: EdgeInsets.zero,
               childrenPadding: EdgeInsets.zero,
               title: Text(
-                _copy('Technical details', 'तकनीकी विवरण', 'तांत्रिक तपशील'),
+                _copy('More details', 'अधिक जानकारी', 'अधिक माहिती'),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               children: [
-                for (final section in _resultSections(result))
+                for (final section in _compactResultSections(result))
                   _resultSection(section),
               ],
             ),
@@ -928,60 +1191,43 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     ),
   );
 
-  List<_ResultSection> _resultSections(Map<String, dynamic> result) {
-    final sections = <_ResultSection>[];
-    void visit(String key, dynamic value, [int depth = 0]) {
-      if (value == null ||
-          key.endsWith('_path') ||
-          key == 'success' ||
-          key == 'code') {
-        return;
-      }
-      final label = _prettyKey(key);
-      if (value is Map) {
-        final entries = value.entries.toList();
-        if (entries.isEmpty) {
-          return;
-        }
-        if (depth == 0) {
-          for (final entry in entries) {
-            visit('${entry.key}', entry.value, depth + 1);
-          }
-        } else {
-          final lines = <String>[];
-          for (final entry in entries) {
-            if (entry.key.toString().endsWith('_path')) {
-              continue;
-            }
-            lines.add(
-              '${_prettyKey(entry.key.toString())}: ${_displayValue(entry.value)}',
-            );
-          }
-          if (lines.isNotEmpty) {
-            sections.add(_ResultSection(label, lines.join('\n')));
-          }
-        }
-      } else if (value is List) {
-        final lines = value
-            .map(_displayValue)
-            .where((item) => item.isNotEmpty)
-            .toList();
-        if (lines.isNotEmpty) {
-          sections.add(
-            _ResultSection(label, lines.map((item) => '• $item').join('\n')),
-          );
-        }
-      } else {
-        sections.add(_ResultSection(label, _displayValue(value)));
-      }
-    }
-
-    for (final entry in result.entries) {
-      visit(entry.key, entry.value);
-    }
-    return sections.isEmpty
-        ? [_ResultSection(_copy('Result', 'परिणाम', 'निकाल'), _resultText)]
-        : sections;
+  List<_ResultSection> _compactResultSections(Map<String, dynamic> result) {
+    final quality = _map(result['quality']);
+    final confidence = _map(result['confidence']);
+    final reviewStatus =
+        result['manual_review_required'] == true ||
+            '${result['review_status'] ?? ''}'.toLowerCase() == 'pending'
+        ? _copy('Needs FPC review', 'FPC जाँच जरूरी', 'FPC तपासणी आवश्यक')
+        : _copy('Ready to use', 'उपयोग के लिए तैयार', 'वापरण्यास तयार');
+    final analysisId = '${result['analysis_id'] ?? ''}'.trim();
+    final overallConfidence = _displayValue(
+      confidence['overall'] ?? result['confidence_score'],
+    );
+    final signal = '${result['signal_highlights'] ?? ''}'.trim();
+    return [
+      _ResultSection(_copy('Review', 'जाँच', 'तपासणी'), reviewStatus),
+      if (overallConfidence != '—')
+        _ResultSection(
+          _copy('Confidence', 'भरोसा', 'विश्वास'),
+          overallConfidence,
+        ),
+      if (analysisId.isNotEmpty)
+        _ResultSection(
+          _copy('Report ID', 'रिपोर्ट आईडी', 'अहवाल आयडी'),
+          analysisId,
+        ),
+      if (signal.isNotEmpty)
+        _ResultSection(_copy('Note', 'नोट', 'नोंद'), signal),
+      if (quality.isEmpty && analysisId.isEmpty)
+        _ResultSection(
+          _copy('Status', 'स्थिति', 'स्थिती'),
+          _copy(
+            'Result saved successfully.',
+            'परिणाम सफलतापूर्वक सेव हुआ।',
+            'निकाल यशस्वीपणे सेव झाला.',
+          ),
+        ),
+    ];
   }
 
   String _prettyKey(String key) => key
@@ -1074,50 +1320,191 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     setState(() => _downloading = true);
     try {
       final document = pw.Document();
-      final sections = _resultSections(result);
       document.addPage(
-        pw.MultiPage(
-          margin: const pw.EdgeInsets.all(32),
-          build: (context) => [
-            pw.Header(
-              level: 0,
-              child: pw.Text('GrainRight Grain Grading Report'),
-            ),
-            pw.Text('Farm: ${_farm['name'] ?? 'Selected farm'}'),
-            if ((_farm['location_label']?.toString() ?? '').isNotEmpty)
-              pw.Text('Location: ${_farm['location_label']}'),
-            pw.Text('Farmer: ${_farmer['name'] ?? 'Farmer'}'),
-            if ((_farmer['id']?.toString() ?? '').isNotEmpty)
-              pw.Text('Farmer ID: ${_farmer['id']}'),
-            pw.Text('Crop: ${_resultCropLabel()}'),
-            pw.Text('Variety: ${_resultVarietyLabel()}'),
-            pw.Text('AI suggestion: ${_farmerSuggestion()}'),
-            pw.SizedBox(height: 16),
-            for (final section in sections)
-              pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 10),
-                padding: const pw.EdgeInsets.all(10),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(
-                    color: const PdfColor(0.82, 0.88, 0.82),
-                  ),
-                  borderRadius: pw.BorderRadius.circular(6),
-                ),
-                child: pw.Column(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(28, 26, 28, 24),
+          build: (context) {
+            final quality = _map(result['quality']);
+            final moisture = _map(result['moisture']);
+            final grade =
+                '${quality['grade'] ?? result['final_grade'] ?? result['grade'] ?? '—'}';
+            final score = _displayValue(
+              quality['score'] ?? result['score'] ?? result['quality_score'],
+            );
+            final moisturePercent = _displayValue(
+              moisture['percent_estimate'] ?? result['moisture_percent'],
+            );
+            final risk =
+                '${moisture['risk_level'] ?? result['moisture_risk'] ?? '—'}';
+            final grainImage = _grainPhotoBytes == null
+                ? null
+                : pw.MemoryImage(_grainPhotoBytes!);
+            final farmName = '${_farm['name'] ?? 'Selected farm'}';
+            final location = '${_farm['location_label'] ?? ''}'.trim();
+            final farmerName = '${_farmer['name'] ?? 'Farmer'}';
+            final farmerId = '${_farmer['id'] ?? ''}'.trim();
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
-                      section.label,
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'GrainRight',
+                            style: pw.TextStyle(
+                              color: const PdfColor(0.08, 0.36, 0.18),
+                              fontSize: 20,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
+                          ),
+                          pw.SizedBox(height: 3),
+                          pw.Text(
+                            'Grain quality report',
+                            style: pw.TextStyle(
+                              color: const PdfColor(0.28, 0.34, 0.29),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(section.value),
+                    pw.Text(
+                      DateTime.now().toLocal().toString().split(' ').first,
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
                   ],
                 ),
-              ),
-            pw.SizedBox(height: 8),
-            pw.Text('Generated: ${DateTime.now().toLocal().toString()}'),
-          ],
+                pw.SizedBox(height: 12),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(11),
+                  decoration: pw.BoxDecoration(
+                    color: const PdfColor(0.95, 0.98, 0.94),
+                    borderRadius: pw.BorderRadius.circular(7),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        farmerName,
+                        style: pw.TextStyle(
+                          fontSize: 14,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        [
+                          'Farm: $farmName',
+                          if (location.isNotEmpty) 'Location: $location',
+                          if (farmerId.isNotEmpty) 'Farmer ID: $farmerId',
+                        ].join('  |  '),
+                        style: const pw.TextStyle(fontSize: 9.5),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(height: 12),
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    if (grainImage != null)
+                      pw.Container(
+                        width: 128,
+                        height: 128,
+                        margin: const pw.EdgeInsets.only(right: 14),
+                        padding: const pw.EdgeInsets.all(4),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(
+                            color: const PdfColor(0.82, 0.88, 0.82),
+                          ),
+                          borderRadius: pw.BorderRadius.circular(7),
+                        ),
+                        child: pw.ClipRRect(
+                          horizontalRadius: 5,
+                          verticalRadius: 5,
+                          child: pw.Image(grainImage, fit: pw.BoxFit.cover),
+                        ),
+                      ),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            'Sample details',
+                            style: pw.TextStyle(
+                              fontSize: 11,
+                              fontWeight: pw.FontWeight.bold,
+                              color: const PdfColor(0.08, 0.36, 0.18),
+                            ),
+                          ),
+                          pw.SizedBox(height: 6),
+                          pw.Text('Crop: ${_resultCropLabel()}'),
+                          pw.Text('Variety: ${_resultVarietyLabel()}'),
+                          pw.SizedBox(height: 9),
+                          pw.Row(
+                            children: [
+                              _pdfMetric('Grade', grade),
+                              pw.SizedBox(width: 12),
+                              _pdfMetric('Score', score),
+                              pw.SizedBox(width: 12),
+                              _pdfMetric('Moisture', '$moisturePercent%'),
+                            ],
+                          ),
+                          if (grainImage == null) ...[
+                            pw.SizedBox(height: 7),
+                            pw.Text(
+                              'Grain photo is available in the GrainRight record.',
+                              style: const pw.TextStyle(fontSize: 8.5),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 13),
+                pw.Container(
+                  width: double.infinity,
+                  padding: const pw.EdgeInsets.all(11),
+                  decoration: pw.BoxDecoration(
+                    color: const PdfColor(1, 0.97, 0.86),
+                    borderRadius: pw.BorderRadius.circular(7),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        'What to do next',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          color: const PdfColor(0.45, 0.31, 0.02),
+                        ),
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text(_farmerSuggestion()),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'Moisture status: $risk',
+                        style: const pw.TextStyle(fontSize: 9),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.Spacer(),
+                pw.Divider(color: const PdfColor(0.82, 0.88, 0.82)),
+                pw.Text(
+                  'Keep this report with the grain sample. Detailed analysis is saved in GrainRight.',
+                  style: const pw.TextStyle(fontSize: 8.5),
+                ),
+              ],
+            );
+          },
         ),
       );
       final bytes = Uint8List.fromList(await document.save());
@@ -1137,23 +1524,17 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     }
   }
 
-  String get _resultText {
-    final answer = _result?['answer'] ?? _map(_result?['data'])['answer'];
-    if (answer != null) return '$answer';
-    final grade = _result?['grade'] ?? _map(_result?['result'])['grade'];
-    if (grade is Map) {
-      return _copy(
-        'Grade: ${grade['grade'] ?? grade['final_grade'] ?? 'Available'}',
-        'ग्रेड: ${grade['grade'] ?? grade['final_grade'] ?? 'उपलब्ध'}',
-        'ग्रेड: ${grade['grade'] ?? grade['final_grade'] ?? 'उपलब्ध'}',
-      );
-    }
-    return _copy(
-      'Service completed. Return to WhatsApp and send CONTINUE.',
-      'सेवा पूरी हुई। WhatsApp पर लौटकर CONTINUE भेजें।',
-      'सेवा पूर्ण झाली. WhatsApp वर परत जाऊन CONTINUE पाठवा.',
-    );
-  }
+  pw.Widget _pdfMetric(String label, String value) => pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(label, style: const pw.TextStyle(fontSize: 8.5)),
+      pw.SizedBox(height: 2),
+      pw.Text(
+        value,
+        style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+      ),
+    ],
+  );
 
   Widget _message(String message) => Scaffold(
     body: Center(
