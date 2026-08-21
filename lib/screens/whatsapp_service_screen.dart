@@ -1,12 +1,18 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_theme.dart';
+import '../models/grading/crop_option.dart';
+import '../services/grain_grading_service.dart';
 import '../utils/whatsapp_service_handoff.dart';
+import '../utils/whatsapp_result_downloader.dart';
 
 class WhatsappServiceScreen extends StatefulWidget {
   final String? token;
@@ -20,6 +26,7 @@ class WhatsappServiceScreen extends StatefulWidget {
 class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   final _question = TextEditingController();
   final _picker = ImagePicker();
+  final _gradingService = GrainGradingService();
   bool _loading = true;
   bool _submitting = false;
   String _service = '';
@@ -27,6 +34,11 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   Map<String, dynamic> _farm = const {};
   Map<String, dynamic> _task = const {};
   Map<String, dynamic>? _result;
+  List<CropOption> _crops = const [];
+  CropOption? _selectedCrop;
+  CropVariety? _selectedVariety;
+  bool _loadingCrops = false;
+  bool _downloading = false;
   XFile? _grainPhoto;
   XFile? _moisturePhoto;
   final List<XFile> _taskPhotos = <XFile>[];
@@ -78,6 +90,9 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         final result = data['result'];
         _result = result is Map ? _map(result) : null;
       });
+      if (_service == 'grading' && _result == null) {
+        await _loadCropCatalog();
+      }
     } catch (_) {
       setState(() {
         _loading = false;
@@ -105,6 +120,51 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     });
   }
 
+  Future<void> _loadCropCatalog() async {
+    setState(() => _loadingCrops = true);
+    try {
+      final crops = await _gradingService.fetchCrops();
+      final loaded = crops.isEmpty ? _fallbackCrops : crops;
+      final farmCrop = (_farm['crop']?.toString() ?? '').trim().toLowerCase();
+      CropOption selected = loaded.first;
+      if (farmCrop.isNotEmpty) {
+        selected = loaded.firstWhere(
+          (crop) => crop.label.toLowerCase().contains(farmCrop) ||
+              farmCrop.contains(crop.label.toLowerCase()) ||
+              crop.value.toLowerCase() == farmCrop ||
+              crop.aliases.any((alias) => alias.toLowerCase() == farmCrop),
+          orElse: () => loaded.first,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _crops = loaded;
+        _selectedCrop = selected;
+        _selectedVariety = selected.varieties.isEmpty
+            ? null
+            : selected.varieties.first;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _crops = _fallbackCrops;
+        _selectedCrop = _fallbackCrops.first;
+        _selectedVariety = _fallbackCrops.first.varieties.first;
+      });
+    } finally {
+      if (mounted) setState(() => _loadingCrops = false);
+    }
+  }
+
+  static const List<CropOption> _fallbackCrops = [
+    CropOption(
+      value: 'finger_millets',
+      label: 'Finger Millet (Ragi)',
+      aliases: ['ragi', 'nachni'],
+      varieties: [CropVariety(value: 'local', label: 'Local')],
+    ),
+  ];
+
   Future<void> _captureTaskPhoto() async {
     if (_taskPhotos.length >= 3) return;
     final photo = await _picker.pickImage(
@@ -128,7 +188,10 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       return;
     }
     if (_service == 'grading' &&
-        (_grainPhoto == null || _moisturePhoto == null)) {
+        (_grainPhoto == null ||
+            _moisturePhoto == null ||
+            _selectedCrop == null ||
+            (_selectedCrop!.varieties.isNotEmpty && _selectedVariety == null))) {
       setState(
         () => _error = _copy(
           'Upload both photos before submitting.',
@@ -164,6 +227,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         body['moistureImageBase64'] = base64Encode(moisture);
         body['grainImageMimeType'] = _mimeType(_grainPhoto!.name);
         body['moistureImageMimeType'] = _mimeType(_moisturePhoto!.name);
+        body['cropType'] = _selectedCrop?.value ?? '';
+        body['cropVariety'] = _selectedVariety?.value ?? '';
       } else if (_service == 'daily_tasks') {
         body['taskId'] = _task['id'];
         body['taskPhotos'] = [
@@ -320,9 +385,60 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
           'दो साफ फोटो अपलोड करें',
           'दोन स्पष्ट फोटो अपलोड करा',
         ),
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
       ),
-      const SizedBox(height: 12),
+      const SizedBox(height: 8),
+      if (_loadingCrops)
+        const LinearProgressIndicator(minHeight: 3)
+      else ...[
+        DropdownButtonFormField<CropOption>(
+          initialValue: _selectedCrop,
+          isExpanded: true,
+          decoration: InputDecoration(
+            labelText: _copy('Crop', 'फसल', 'पीक'),
+            prefixIcon: const Icon(Icons.eco_outlined),
+            isDense: true,
+          ),
+          items: [
+            for (final crop in _crops)
+              DropdownMenuItem(value: crop, child: Text(_cropLabel(crop))),
+          ],
+          onChanged: _submitting
+              ? null
+              : (crop) {
+                  if (crop == null) return;
+                  setState(() {
+                    _selectedCrop = crop;
+                    _selectedVariety = crop.varieties.isEmpty
+                        ? null
+                        : crop.varieties.first;
+                  });
+                },
+        ),
+        const SizedBox(height: 8),
+        if ((_selectedCrop?.varieties ?? const []).isNotEmpty)
+          DropdownButtonFormField<CropVariety>(
+            key: ValueKey(_selectedCrop?.value),
+            initialValue: _selectedVariety,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: _copy('Variety', 'किस्म', 'वाण'),
+              prefixIcon: const Icon(Icons.spa_outlined),
+              isDense: true,
+            ),
+            items: [
+              for (final variety in _selectedCrop!.varieties)
+                DropdownMenuItem(
+                  value: variety,
+                  child: Text(_varietyLabel(variety)),
+                ),
+            ],
+            onChanged: _submitting
+                ? null
+                : (variety) => setState(() => _selectedVariety = variety),
+          ),
+        const SizedBox(height: 8),
+      ],
       OutlinedButton.icon(
         onPressed: () => _pickPhoto(false),
         icon: const Icon(Icons.grain),
@@ -479,7 +595,7 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     return Card(
       margin: const EdgeInsets.only(top: 14),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -490,13 +606,32 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
                 Expanded(
                   child: Text(
                     _copy('Full result', 'पूरा परिणाम', 'संपूर्ण निकाल'),
-                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             for (final section in sections) _resultSection(section),
+            const SizedBox(height: 2),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _downloading ? null : _downloadResult,
+                icon: _downloading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_outlined),
+                label: Text(
+                  _downloading
+                      ? _copy('Preparing PDF…', 'PDF बन रहा है…', 'PDF तयार होत आहे…')
+                      : _copy('Download PDF report', 'PDF रिपोर्ट डाउनलोड करें', 'PDF रिपोर्ट डाउनलोड करा'),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -504,10 +639,10 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   }
 
   Widget _resultSection(_ResultSection section) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.only(bottom: 8),
     child: Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppTheme.greenPale,
         borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
@@ -516,8 +651,8 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(section.label, style: const TextStyle(color: AppTheme.greenDark, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          SelectableText(section.value, style: const TextStyle(height: 1.4)),
+          const SizedBox(height: 4),
+          SelectableText(section.value, style: const TextStyle(height: 1.3)),
         ],
       ),
     ),
@@ -574,6 +709,68 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     if (value is List) return value.map(_displayValue).join(', ');
     if (value is bool) return value ? 'Yes' : 'No';
     return '$value';
+  }
+
+  String _cropLabel(CropOption crop) => crop.label;
+
+  String _varietyLabel(CropVariety variety) => variety.label;
+
+  Future<void> _downloadResult() async {
+    final result = _result;
+    if (result == null || _downloading) return;
+    setState(() => _downloading = true);
+    try {
+      final document = pw.Document();
+      final sections = _resultSections(result);
+      document.addPage(
+        pw.MultiPage(
+          margin: const pw.EdgeInsets.all(32),
+          build: (context) => [
+            pw.Header(
+              level: 0,
+              child: pw.Text('GrainRight Grain Grading Report'),
+            ),
+            pw.Text('Farm: ${_farm['name'] ?? 'Selected farm'}'),
+            if ((_farm['location_label']?.toString() ?? '').isNotEmpty)
+              pw.Text('Location: ${_farm['location_label']}'),
+            pw.Text('Crop: ${_selectedCrop?.label ?? _farm['crop'] ?? '-'}'),
+            pw.Text('Variety: ${_selectedVariety?.label ?? _farm['variety'] ?? '-'}'),
+            pw.SizedBox(height: 16),
+            for (final section in sections)
+              pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 10),
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: const PdfColor(0.82, 0.88, 0.82)),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(section.label, style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(section.value),
+                  ],
+                ),
+              ),
+            pw.SizedBox(height: 8),
+            pw.Text('Generated: ${DateTime.now().toLocal().toString()}'),
+          ],
+        ),
+      );
+      final bytes = Uint8List.fromList(await document.save());
+      await downloadWhatsappResult(bytes, 'grainright-grading-report.pdf');
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = _copy(
+              'The report could not be downloaded. Please try again.',
+              'रिपोर्ट डाउनलोड नहीं हो सकी। फिर कोशिश करें।',
+              'रिपोर्ट डाउनलोड होऊ शकली नाही. पुन्हा प्रयत्न करा.',
+            ));
+      }
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
   }
 
   String get _resultText {

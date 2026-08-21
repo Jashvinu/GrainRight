@@ -136,6 +136,37 @@ async function completeService(
         moistureSaved.path ?? object(moistureSaved.data).path,
       ),
       cropType: text(body.cropType),
+      cropVariety: text(body.cropVariety ?? body.crop_variety),
+    });
+  } else if (service === "daily_tasks") {
+    const taskId = text(body.taskId ?? body.task_id);
+    const rawPhotos = body.taskPhotos ?? body.task_photos;
+    const photos: unknown[] = Array.isArray(rawPhotos) ? rawPhotos : [];
+    if (!taskId || photos.length < 3) {
+      throw new Error("Select a daily task and capture three farm-area photos.");
+    }
+    for (let index = 0; index < 3; index += 1) {
+      const photo = object(photos[index]);
+      const photoBase64 = text(photo.base64 ?? photo.mediaBase64).replace(
+        /^data:[^;]+;base64,/,
+        "",
+      );
+      if (!photoBase64) throw new Error(`Farm photo ${index + 1} is required.`);
+      await invokeGateway({
+        action: "daily_task_photo",
+        ...common,
+        taskId,
+        captureIndex: index + 1,
+        farmId: text(link.farm_id),
+        mediaBase64: photoBase64,
+        mediaMimeType: text(photo.mimeType ?? photo.mediaMimeType) || "image/jpeg",
+      });
+    }
+    result = await invokeGateway({
+      action: "daily_task_complete",
+      ...common,
+      taskId,
+      farmId: text(link.farm_id),
     });
   } else {
     throw new Error("This web service is not available.");
@@ -186,6 +217,22 @@ Deno.serve(async (req) => {
     if (!farm.data)
       return errorResponse("The linked farm is no longer available.", 404);
 
+    let task: Row | null = null;
+    if (text(link.service) === "daily_tasks") {
+      const taskQuery = await supabase
+        .from("farmer_daily_tasks")
+        .select("id,title_key,description_key,priority,status,task_date,due_at,action_route")
+        .eq("user_id", link.user_id)
+        .eq("farm_id", link.farm_id)
+        .in("status", ["pending", "snoozed"])
+        .order("task_date", { ascending: false })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+      if (taskQuery.error) throw taskQuery.error;
+      task = taskQuery.data as Row | null;
+    }
+
     if (action === "load") {
       return successResponse(
         {
@@ -195,6 +242,7 @@ Deno.serve(async (req) => {
           farm: farm.data,
           status: link.status,
           result: link.status === "completed" ? link.result : null,
+          task,
           expiresAt: link.expires_at,
         },
         200,

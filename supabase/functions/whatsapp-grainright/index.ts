@@ -131,7 +131,19 @@ function serviceLinkUrl(
   return `${appUrl}/whatsapp-service?${parameters.toString()}`;
 }
 
-const webServices = new Set(["ai", "grading"]);
+function fpcSignupUrl(
+  appUrl: string,
+  token: string,
+  preferredLanguage: "en" | "hi" | "mr",
+): string {
+  const parameters = new URLSearchParams({
+    whatsapp_token: token,
+    lang: preferredLanguage,
+  });
+  return `${appUrl}/fpc/signup?${parameters.toString()}`;
+}
+
+const webServices = new Set(["ai", "grading", "daily_tasks"]);
 
 async function farmerIdentity(
   supabase: ReturnType<typeof serviceClient>,
@@ -1285,6 +1297,7 @@ Deno.serve(async (req) => {
           token_hash: tokenHash,
           step: "boundary",
           language: preferredLanguage,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id)
@@ -1315,6 +1328,7 @@ Deno.serve(async (req) => {
           token_hash: tokenHash,
           step: "boundary",
           language: preferredLanguage,
+          expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id)
@@ -1546,6 +1560,33 @@ Deno.serve(async (req) => {
         200,
         "whatsapp_fpc_verified",
       );
+    }
+
+    if (action === "fpc_signup_link_create") {
+      const token = crypto.randomUUID().replaceAll("-", "") +
+        crypto.randomUUID().replaceAll("-", "");
+      const tokenHash = await hashToken(token);
+      await supabase.from("whatsapp_role_signup_links")
+        .update({ status: "cancelled" })
+        .eq("whatsapp_phone", phone)
+        .eq("role", "fpc")
+        .eq("status", "active");
+      const { data: link, error } = await supabase
+        .from("whatsapp_role_signup_links")
+        .insert({
+          token_hash: tokenHash,
+          whatsapp_phone: phone,
+          role: "fpc",
+          language: preferredLanguage,
+        })
+        .select("id,expires_at")
+        .single();
+      if (error) throw error;
+      const appUrl = configuredAppUrl(true)!;
+      return successResponse({
+        url: fpcSignupUrl(appUrl, token, preferredLanguage),
+        expiresAt: link.expires_at,
+      }, 200, "whatsapp_fpc_signup_link_created");
     }
 
     if (action === "farm_list") {
@@ -1921,10 +1962,101 @@ Deno.serve(async (req) => {
         moisture_image_path: text(body.moistureImagePath) || null,
         manual_moisture_percent: body.manualMoisturePercent ?? null,
         crop_type: text(body.cropType) || text(farm.crop) || "finger_millets",
+        crop_variety: text(body.cropVariety ?? body.crop_variety) ||
+          text(farm.variety) || "local",
         source: "whatsapp",
         whatsapp_user_id: identity.user_id,
       });
       return successResponse(response as Row, 200, "whatsapp_grading_complete");
+    }
+
+    if (action === "daily_task_photo") {
+      const taskId = text(body.taskId ?? body.task_id);
+      const captureIndex = Number(body.captureIndex ?? body.capture_index);
+      const encoded = text(body.mediaBase64 ?? body.media_base64).replace(
+        /^data:[^;]+;base64,/,
+        "",
+      );
+      const mimeType = text(body.mediaMimeType ?? body.media_mime_type) ||
+        "image/jpeg";
+      if (!taskId || !Number.isInteger(captureIndex) || captureIndex < 1 || captureIndex > 3) {
+        throw new HttpError("A valid daily task photo number is required.", 400);
+      }
+      if (!encoded || !mimeType.startsWith("image/")) {
+        throw new HttpError("A valid farm photo is required.", 400);
+      }
+      const task = await supabase
+        .from("farmer_daily_tasks")
+        .select("id,user_id,farm_id,status")
+        .eq("id", taskId)
+        .eq("user_id", identity.user_id)
+        .maybeSingle();
+      if (task.error) throw task.error;
+      if (!task.data || text(task.data.farm_id) !== text(body.farmId ?? body.farm_id)) {
+        throw new HttpError("This daily task is not linked to the selected farm.", 403);
+      }
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+      } catch {
+        throw new HttpError("The farm photo payload is invalid.", 400);
+      }
+      if (bytes.byteLength > 12 * 1024 * 1024) {
+        throw new HttpError("Each farm photo must be under 12 MB.", 413);
+      }
+      const extension = mimeType.includes("png") ? "png" : "jpg";
+      const path = `${identity.user_id}/whatsapp/daily-tasks/${taskId}/${captureIndex}-${crypto.randomUUID()}.${extension}`;
+      const upload = await supabase.storage.from("farm-stage-evidence").upload(
+        path,
+        bytes,
+        { contentType: mimeType, upsert: false },
+      );
+      if (upload.error) throw upload.error;
+      const evidence = await supabase.from("farmer_daily_task_evidence").upsert({
+        task_id: taskId,
+        user_id: identity.user_id,
+        farmer_id: identity.farmer_id,
+        farm_id: task.data.farm_id,
+        capture_index: captureIndex,
+        photo_path: path,
+      }, { onConflict: "task_id,capture_index" }).select("id,capture_index,photo_path").single();
+      if (evidence.error) throw evidence.error;
+      return successResponse({ taskId, captureIndex, path, evidence: evidence.data }, 201, "whatsapp_daily_task_photo_saved");
+    }
+
+    if (action === "daily_task_complete") {
+      const taskId = text(body.taskId ?? body.task_id);
+      if (!taskId) throw new HttpError("Daily task is required.", 400);
+      const evidence = await supabase.from("farmer_daily_task_evidence")
+        .select("id,capture_index,photo_path")
+        .eq("task_id", taskId)
+        .eq("user_id", identity.user_id)
+        .order("capture_index", { ascending: true });
+      if (evidence.error) throw evidence.error;
+      if ((evidence.data ?? []).length < 3) {
+        throw new HttpError("Three farm-area photos are required before completing this task.", 400);
+      }
+      const task = await supabase.from("farmer_daily_tasks")
+        .select("*")
+        .eq("id", taskId)
+        .eq("user_id", identity.user_id)
+        .eq("farm_id", text(body.farmId ?? body.farm_id))
+        .maybeSingle();
+      if (task.error) throw task.error;
+      if (!task.data) throw new HttpError("Daily task was not found.", 404);
+      const metadata = object(task.data.metadata);
+      const updated = await supabase.from("farmer_daily_tasks")
+        .update({
+          status: "done",
+          completed_at: new Date().toISOString(),
+          metadata: { ...metadata, whatsapp_photo_evidence_count: 3 },
+        })
+        .eq("id", taskId)
+        .eq("user_id", identity.user_id)
+        .select("*")
+        .single();
+      if (updated.error) throw updated.error;
+      return successResponse({ task: updated.data, evidence: evidence.data }, 200, "whatsapp_daily_task_completed");
     }
 
     if (action === "farm_setup_link") {
