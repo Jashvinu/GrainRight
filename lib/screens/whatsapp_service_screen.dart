@@ -130,54 +130,6 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     });
   }
 
-  Future<void> _showPhotoSourcePicker(bool moisture) async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(18, 4, 18, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _copy('Add photo', 'फोटो जोड़ें', 'फोटो जोडा'),
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.camera_alt_outlined),
-                ),
-                title: Text(
-                  _copy('Take with camera', 'कैमरे से लें', 'कॅमेऱ्याने घ्या'),
-                ),
-                onTap: () => Navigator.pop(context, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  child: Icon(Icons.photo_library_outlined),
-                ),
-                title: Text(
-                  _copy('Choose from phone', 'फोन से चुनें', 'फोनमधून निवडा'),
-                ),
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (!mounted || source == null) return;
-    await _pickPhoto(moisture, source);
-  }
-
   Future<void> _loadReportImages() async {
     Future<Uint8List?> load(String? url) async {
       final value = url?.trim() ?? '';
@@ -407,7 +359,9 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 children: [
-                  _farmHeaderCard(),
+                  _service == 'grading'
+                      ? _gradingIntroCard()
+                      : _farmHeaderCard(),
                   if (_error != null) _errorBox(_error!),
                   if (_result != null) ...[
                     _resultCard(),
@@ -477,8 +431,7 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   Widget _gradingForm() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      _gradingIntroCard(),
-      const SizedBox(height: 14),
+      const SizedBox(height: 16),
       _gradingStepTitle(
         '1',
         _copy(
@@ -565,7 +518,7 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   );
 
   Widget _gradingIntroCard() => Container(
-    padding: const EdgeInsets.all(16),
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
     decoration: BoxDecoration(
       gradient: const LinearGradient(
         colors: [AppTheme.greenDark, AppTheme.green],
@@ -574,39 +527,79 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       ),
       borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
     ),
-    child: Row(
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const CircleAvatar(
-          radius: 24,
-          backgroundColor: Color(0x2EFFFFFF),
-          child: Icon(Icons.assessment_outlined, color: Colors.white),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _copy(
-                  'Check your grain quality',
-                  'अपने अनाज की गुणवत्ता जाँचें',
-                  'तुमच्या धान्याची गुणवत्ता तपासा',
-                ),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const CircleAvatar(
+              radius: 24,
+              backgroundColor: Color(0x2EFFFFFF),
+              child: Icon(Icons.assessment_outlined, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _copy(
+                      'Check your grain quality',
+                      'अपने अनाज की गुणवत्ता जाँचें',
+                      'तुमच्या धान्याची गुणवत्ता तपासा',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      height: 1.15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _copy(
+                      'A quick quality check for this farm lot.',
+                      'इस खेत की उपज के लिए जल्दी गुणवत्ता जाँच।',
+                      'या शेतमालासाठी जलद गुणवत्ता तपासणी.',
+                    ),
+                    style: const TextStyle(color: Colors.white70, height: 1.3),
+                  ),
+                ],
               ),
-              const SizedBox(height: 5),
-              Text(
-                _copy(
-                  'Choose the crop, add two photos, and get a simple result.',
-                  'फसल चुनें, दो फोटो जोड़ें और आसान परिणाम पाएँ।',
-                  'पीक निवडा, दोन फोटो जोडा आणि सोपा निकाल मिळवा.',
-                ),
-                style: const TextStyle(color: Colors.white70, height: 1.3),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.only(top: 14),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0x45FFFFFF))),
+          ),
+          child: Wrap(
+            spacing: 18,
+            runSpacing: 12,
+            children: [
+              _gradingContextItem(
+                Icons.person_outline,
+                _copy('Farmer', 'किसान', 'शेतकरी'),
+                _farmerDisplayName(),
+              ),
+              _gradingContextItem(
+                Icons.agriculture_outlined,
+                _copy('Farm', 'खेत', 'शेत'),
+                _farmDisplayName(),
+              ),
+              _gradingContextItem(
+                Icons.location_on_outlined,
+                _copy('Location', 'स्थान', 'ठिकाण'),
+                _farmLocation(),
+              ),
+              _gradingContextItem(
+                Icons.eco_outlined,
+                _copy('Crop', 'फसल', 'पीक'),
+                _farmCrop(),
               ),
             ],
           ),
@@ -614,6 +607,45 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
       ],
     ),
   );
+
+  Widget _gradingContextItem(IconData icon, String label, String value) =>
+      SizedBox(
+        width: 142,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Colors.white70, size: 17),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _gradingStepTitle(String number, String title) => Row(
     children: [
@@ -765,35 +797,54 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
             ),
           ],
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _submitting
-                      ? null
-                      : () => _showPhotoSourcePicker(moisture),
-                  icon: const Icon(Icons.add_a_photo_outlined, size: 18),
-                  label: Text(
-                    photo == null
-                        ? _copy('Add photo', 'फोटो जोड़ें', 'फोटो जोडा')
-                        : _copy('Change photo', 'फोटो बदलें', 'फोटो बदला'),
-                  ),
-                ),
-              ),
-              if (photo != null) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  tooltip: _copy('Remove photo', 'फोटो हटाएँ', 'फोटो काढा'),
-                  onPressed: _submitting ? null : () => _removePhoto(moisture),
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ],
-          ),
+          _photoSourceActions(moisture, photo != null),
         ],
       ),
     );
   }
+
+  Widget _photoSourceActions(bool moisture, bool hasPhoto) => LayoutBuilder(
+    builder: (context, constraints) {
+      final actions = [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _submitting
+                ? null
+                : () => _pickPhoto(moisture, ImageSource.camera),
+            icon: const Icon(Icons.camera_alt_outlined, size: 18),
+            label: Text(
+              _copy('Camera', 'कैमरा', 'कॅमेरा'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _submitting
+                ? null
+                : () => _pickPhoto(moisture, ImageSource.gallery),
+            icon: const Icon(Icons.photo_library_outlined, size: 18),
+            label: Text(
+              _copy('Gallery', 'गैलरी', 'गॅलरी'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        if (hasPhoto) ...[
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: _copy('Remove photo', 'फोटो हटाएँ', 'फोटो काढा'),
+            onPressed: _submitting ? null : () => _removePhoto(moisture),
+            icon: const Icon(Icons.delete_outline),
+          ),
+        ],
+      ];
+      return Row(children: actions);
+    },
+  );
 
   Widget _photoProgress() {
     final count =
@@ -908,25 +959,24 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _farm['name']?.toString() ??
-                      _copy('Selected farm', 'चुना हुआ खेत', 'निवडलेले शेत'),
+                  _farmDisplayName(),
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                if (_farm['crop'] != null)
+                if (_farmCrop().isNotEmpty)
                   Text(
-                    '${_farm['crop']}',
+                    _farmCrop(),
                     style: const TextStyle(
                       color: Color(0xFFDDEAD5),
                       fontSize: 14,
                     ),
                   ),
-                if (_farm['location_label'] != null)
+                if (_farmLocation().isNotEmpty)
                   Text(
-                    '${_farm['location_label']}',
+                    _farmLocation(),
                     style: const TextStyle(
                       color: Color(0xFFDDEAD5),
                       fontSize: 13,
@@ -1068,13 +1118,9 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
   }
 
   Widget _farmerDetailsStrip() {
-    final name = '${_farmer['name'] ?? _farmer['farmer_name'] ?? 'Farmer'}'
-        .trim();
-    final location = '${_farmer['location'] ?? _farm['location_label'] ?? ''}'
-        .trim();
-    final farmName =
-        '${_farm['name'] ?? _copy('Selected farm', 'चुना हुआ खेत', 'निवडलेले शेत')}'
-            .trim();
+    final name = _farmerDisplayName();
+    final location = _farmLocation();
+    final farmName = _farmDisplayName();
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(10),
@@ -1131,6 +1177,55 @@ class _WhatsappServiceScreenState extends State<WhatsappServiceScreen> {
     value,
     style: const TextStyle(fontSize: 11.5, color: AppTheme.textMuted),
   );
+
+  String _farmerDisplayName() => _firstDisplayValue([
+    _farmer['name'],
+    _farmer['farmer_name'],
+  ], _copy('Farmer', 'किसान', 'शेतकरी'));
+
+  String _farmDisplayName() => _firstDisplayValue([
+    _farm['name'],
+    _farm['farm_name'],
+  ], _copy('Selected farm', 'चुना हुआ खेत', 'निवडलेले शेत'));
+
+  String _farmLocation() => _firstDisplayValue([
+    _farm['location_label'],
+    _farm['location'],
+    _farmer['location'],
+    _farmer['default_location'],
+  ], _copy('Location not added', 'स्थान नहीं जोड़ा गया', 'ठिकाण जोडलेले नाही'));
+
+  String _farmCrop() => _firstDisplayValue([
+    _farm['crop'],
+    _farm['crop_name'],
+  ], _copy('Crop not selected', 'फसल नहीं चुनी', 'पीक निवडलेले नाही'));
+
+  String _firstDisplayValue(List<dynamic> values, String fallback) {
+    for (final value in values) {
+      final text = _readableValue(value);
+      if (text.isNotEmpty) return text;
+    }
+    return fallback;
+  }
+
+  String _readableValue(dynamic value) {
+    if (value is Map) {
+      final parts = <String>[];
+      for (final key in const [
+        'village',
+        'taluka',
+        'tehsil',
+        'district',
+        'state',
+      ]) {
+        final part = value[key]?.toString().trim() ?? '';
+        if (part.isNotEmpty && part.toLowerCase() != 'null') parts.add(part);
+      }
+      return parts.join(', ');
+    }
+    final text = value?.toString().trim() ?? '';
+    return text.toLowerCase() == 'null' ? '' : text;
+  }
 
   Widget _metricTile(String label, String value, IconData icon, Color color) =>
       Container(
