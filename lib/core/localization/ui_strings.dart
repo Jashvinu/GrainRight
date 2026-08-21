@@ -5070,6 +5070,11 @@ class UiStrings {
       'hi': 'फिर केंद्रित करें',
       'mr': 'पुन्हा मध्यभागी आणा',
     },
+    'use_current_location': {
+      'en': 'Use current location',
+      'hi': 'वर्तमान स्थान का उपयोग करें',
+      'mr': 'सध्याचे स्थान वापरा',
+    },
     'tap_corners_boundary': {
       'en': 'Tap corners to build the farm boundary.',
       'hi': 'खेत सीमा बनाने के लिए कोनों पर टैप करें।',
