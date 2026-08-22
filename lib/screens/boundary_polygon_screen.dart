@@ -59,7 +59,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   List<OfflinePlacePrediction> _searchResults = const [];
 
   bool _mapReady = false;
-  bool _loadingLocation = true;
+  bool _loadingLocation = false;
   bool _loadingDownloadedMaps = false;
   bool _confirming = false;
   bool _searching = false;
@@ -69,6 +69,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   _BoundaryBaseMap _baseMap = _BoundaryBaseMap.satellite;
   OfflineMapRegionRecord? _selectedOfflineRegion;
   LatLng? _currentLocation;
+  double _locationAccuracyMeters = 0;
+  bool _userMovedMap = false;
   LatLng? _searchedPlaceCenter;
   String? _searchedPlaceLabel;
   LatLng _center = LatLng(
@@ -112,22 +114,14 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       final quickLocation = await _locationService.getLastKnownLocation();
       if (!mounted) return;
       if (quickLocation != null) {
-        _currentLocation = LatLng(
-          quickLocation.latitude,
-          quickLocation.longitude,
-        );
-        _center = _currentLocation!;
-        _zoom = 18;
-        if (_mapReady) _moveMap(_center, _zoom);
+        _applyLocation(quickLocation);
+        if (mounted) setState(() => _loadingLocation = false);
       }
 
       final location = await _locationService.getCurrentLocation();
       if (!mounted) return;
       if (location != null) {
-        _currentLocation = LatLng(location.latitude, location.longitude);
-        _center = _currentLocation!;
-        _zoom = 18;
-        if (_mapReady) _moveMap(_center, _zoom);
+        _applyLocation(location, recenter: !_userMovedMap);
       }
     } catch (e) {
       debugPrint('[BoundaryPolygonScreen._loadInitialTarget] $e');
@@ -420,13 +414,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
         );
         return;
       }
-      final center = LatLng(location.latitude, location.longitude);
-      setState(() {
-        _currentLocation = center;
-        _center = center;
-        _zoom = 18;
-      });
-      _moveMap(center, 18);
+      _userMovedMap = false;
+      _applyLocation(location);
     } finally {
       if (mounted) setState(() => _loadingLocation = false);
     }
@@ -439,9 +428,23 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
 
   void _addPoint(TapPosition _, LatLng point) {
     if (_mode != _BoundaryMapMode.draw) return;
+    _userMovedMap = true;
     setState(() {
       _points.add(point);
     });
+  }
+
+  void _applyLocation(LocationResult location, {bool recenter = true}) {
+    final center = LatLng(location.latitude, location.longitude);
+    setState(() {
+      _currentLocation = center;
+      _locationAccuracyMeters = location.accuracy;
+      if (recenter) {
+        _center = center;
+        _zoom = 18;
+      }
+    });
+    if (recenter) _moveMap(center, 18);
   }
 
   void _removeLastPoint() {
@@ -588,6 +591,9 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                     )
                   : null,
               onTap: _addPoint,
+              onPositionChanged: (_, hasGesture) {
+                if (hasGesture) _userMovedMap = true;
+              },
               onMapReady: () {
                 _mapReady = true;
                 if (_points.isEmpty) {
@@ -605,6 +611,9 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                   urlTemplate: _baseMap == _BoundaryBaseMap.roads
                       ? openStreetMapTileUrl
                       : fieldImageryTileUrl,
+                  fallbackUrlTemplate: _baseMap == _BoundaryBaseMap.satellite
+                      ? openStreetMapTileUrl
+                      : null,
                   offlineUrlTemplateOverride:
                       _baseMap == _BoundaryBaseMap.satellite
                       ? _selectedOfflineRegion?.sourceId
@@ -656,6 +665,19 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                     ),
                   ],
                 ),
+              if (_currentLocation != null)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _currentLocation!,
+                      radius: math.max(_locationAccuracyMeters, 5),
+                      useRadiusInMeter: true,
+                      color: const Color(0x221565C0),
+                      borderColor: const Color(0x661565C0),
+                      borderStrokeWidth: 1,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
                   if (_currentLocation != null)
@@ -663,12 +685,16 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                       point: _currentLocation!,
                       width: 28,
                       height: 28,
-                      child: const Icon(
-                        key: Key('farm_boundary_current_location_marker'),
-                        Icons.my_location_rounded,
-                        color: Color(0xFF1565C0),
-                        size: 24,
-                        shadows: [Shadow(color: Colors.white, blurRadius: 5)],
+                      child: Tooltip(
+                        message:
+                            'GPS ±${_locationAccuracyMeters.toStringAsFixed(0)} m',
+                        child: const Icon(
+                          key: Key('farm_boundary_current_location_marker'),
+                          Icons.my_location_rounded,
+                          color: Color(0xFF1565C0),
+                          size: 24,
+                          shadows: [Shadow(color: Colors.white, blurRadius: 5)],
+                        ),
                       ),
                     ),
                   if (_searchedPlaceCenter != null)

@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/retry.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/runtime_config.dart';
 import 'local_app_database.dart';
@@ -47,6 +47,7 @@ List<Widget> fieldImageryTileLayers({
       offlineUrlTemplateOverride: offlineUrlTemplateOverride,
       maxNativeZoom: fieldImageryMaxNativeZoom,
       maxOfflineNativeZoom: maxOfflineNativeZoom,
+      fallbackUrlTemplate: openStreetMapTileUrl,
       keepBuffer: keepBuffer,
       panBuffer: panBuffer,
       tileDisplay: tileDisplay,
@@ -97,6 +98,7 @@ bool shouldShowFieldReferenceLabels(String template) {
 
 class OfflineAwareTileLayer extends StatefulWidget {
   final String urlTemplate;
+  final String? fallbackUrlTemplate;
   final String? offlineUrlTemplateOverride;
   final int? maxNativeZoom;
   final int? maxOfflineNativeZoom;
@@ -110,6 +112,7 @@ class OfflineAwareTileLayer extends StatefulWidget {
   const OfflineAwareTileLayer({
     super.key,
     required this.urlTemplate,
+    this.fallbackUrlTemplate,
     this.offlineUrlTemplateOverride,
     this.maxNativeZoom,
     this.maxOfflineNativeZoom,
@@ -215,11 +218,13 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
     _tileProvider.configure(
       sourceId: activeTemplate,
       allowNetwork: canTryLiveTiles,
-      preferCache: usingOfflineTemplate || !canTryLiveTiles,
-      writeNetworkTiles: _online && usingOfflineTemplate,
+      fallbackSourceId: widget.fallbackUrlTemplate,
+      preferCache: true,
+      writeNetworkTiles: canTryLiveTiles,
     );
     return TileLayer(
       urlTemplate: activeTemplate,
+      fallbackUrl: widget.fallbackUrlTemplate,
       minZoom: mapTileMinZoom,
       maxZoom: mapTileMaxZoom,
       maxNativeZoom: effectiveMaxNativeZoom,
@@ -349,12 +354,10 @@ class _OfflineMapGridPainter extends CustomPainter {
 }
 
 class _CachedMapTileProvider extends TileProvider {
-  static final http.BaseClient _httpClient = RetryClient(
-    http.Client(),
-    retries: 2,
-  );
+  static final http.Client _httpClient = http.Client();
 
   String _sourceId = '';
+  String? _fallbackSourceId;
   bool _allowNetwork = true;
   bool _preferCache = false;
   bool _writeNetworkTiles = false;
@@ -367,8 +370,10 @@ class _CachedMapTileProvider extends TileProvider {
     required bool allowNetwork,
     required bool preferCache,
     required bool writeNetworkTiles,
+    String? fallbackSourceId,
   }) {
     _sourceId = sourceId;
+    _fallbackSourceId = fallbackSourceId;
     _allowNetwork = allowNetwork;
     _preferCache = preferCache;
     _writeNetworkTiles = writeNetworkTiles;
@@ -378,7 +383,9 @@ class _CachedMapTileProvider extends TileProvider {
   ImageProvider getImage(TileCoordinates coordinates, TileLayer options) {
     return _CachedTileImageProvider(
       url: getTileUrl(coordinates, options),
+      fallbackUrl: getTileFallbackUrl(coordinates, options),
       sourceId: _sourceId,
+      fallbackSourceId: _fallbackSourceId,
       z: coordinates.z,
       x: coordinates.x,
       y: coordinates.y,
@@ -393,12 +400,15 @@ class _CachedMapTileProvider extends TileProvider {
 
 @immutable
 class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
+  static final _BrowserTileCache _browserTileCache = _BrowserTileCache();
   static final Uint8List _transparentTileBytes = base64Decode(
     'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
   );
 
   final String url;
+  final String? fallbackUrl;
   final String sourceId;
+  final String? fallbackSourceId;
   final int z;
   final int x;
   final int y;
@@ -406,11 +416,13 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   final bool allowNetwork;
   final bool preferCache;
   final bool writeNetworkTiles;
-  final http.BaseClient httpClient;
+  final http.Client httpClient;
 
   const _CachedTileImageProvider({
     required this.url,
+    required this.fallbackUrl,
     required this.sourceId,
+    required this.fallbackSourceId,
     required this.z,
     required this.x,
     required this.y,
@@ -447,28 +459,92 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
     if (preferCache) {
       final cachedCodec = await _tryLoadCachedTile(db, decode);
       if (cachedCodec != null) return cachedCodec;
+      final cachedFallbackCodec = await _tryLoadCachedTile(
+        db,
+        decode,
+        sourceIdOverride: fallbackSourceId,
+      );
+      if (cachedFallbackCodec != null) return cachedFallbackCodec;
     }
 
     if (!allowNetwork) {
       return _decodeTransparentTile(decode);
     }
 
+    final fallbackTileUrl = fallbackUrl;
+    final fallbackTileSourceId = fallbackSourceId;
+    if (fallbackTileUrl != null && fallbackTileSourceId != null) {
+      // Let a healthy satellite request win, but do not make a weak mobile
+      // connection wait before showing a readable road map underneath it.
+      final primaryFuture = _loadNetworkTile(
+        decode,
+        db: db,
+        tileUrl: url,
+        tileSourceId: sourceId,
+      );
+      final fallbackFuture = _loadNetworkTile(
+        decode,
+        db: db,
+        tileUrl: fallbackTileUrl,
+        tileSourceId: fallbackTileSourceId,
+      );
+      final primaryCodec = await primaryFuture.timeout(
+        const Duration(milliseconds: 2500),
+        onTimeout: () => null,
+      );
+      if (primaryCodec != null) return primaryCodec;
+      final fallbackCodec = await fallbackFuture;
+      if (fallbackCodec != null) return fallbackCodec;
+    } else {
+      final networkCodec = await _loadNetworkTile(
+        decode,
+        db: db,
+        tileUrl: url,
+        tileSourceId: sourceId,
+      );
+      if (networkCodec != null) return networkCodec;
+    }
+
+    final cachedCodec = await _tryLoadCachedTile(db, decode);
+    if (cachedCodec != null) return cachedCodec;
+    final cachedFallbackCodec = await _tryLoadCachedTile(
+      db,
+      decode,
+      sourceIdOverride: fallbackSourceId,
+    );
+    return cachedFallbackCodec ?? _decodeTransparentTile(decode);
+  }
+
+  Future<ui.Codec?> _loadNetworkTile(
+    ImageDecoderCallback decode, {
+    required LocalAppDatabase? db,
+    required String tileUrl,
+    required String tileSourceId,
+  }) async {
     try {
       final response = await httpClient
-          .get(Uri.parse(url), headers: headers)
-          .timeout(const Duration(seconds: 12));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        return _decodeTransparentTile(decode);
-      }
+          .get(Uri.parse(tileUrl), headers: headers)
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
 
       final bytes = response.bodyBytes;
-      if (bytes.isEmpty) return _decodeTransparentTile(decode);
+      if (bytes.isEmpty) return null;
 
-      if (writeNetworkTiles && db != null) {
+      if (writeNetworkTiles && kIsWeb) {
+        unawaited(
+          _browserTileCache.write(
+            sourceId: tileSourceId,
+            z: z,
+            x: x,
+            y: y,
+            bytes: bytes,
+          ),
+        );
+      } else if (writeNetworkTiles && db != null) {
         unawaited(
           db
               .writeTile(
-                sourceId: sourceId,
+                sourceId: tileSourceId,
                 z: z,
                 x: x,
                 y: y,
@@ -486,20 +562,34 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       return decode(buffer);
     } catch (_) {
-      final cachedCodec = await _tryLoadCachedTile(db, decode);
-      return cachedCodec ?? _decodeTransparentTile(decode);
+      return null;
     }
   }
 
   Future<ui.Codec?> _tryLoadCachedTile(
     LocalAppDatabase? db,
-    ImageDecoderCallback decode,
-  ) async {
-    if (db == null) return null;
+    ImageDecoderCallback decode, {
+    String? sourceIdOverride,
+  }) async {
+    if (!kIsWeb && db == null) return null;
     try {
-      final cached = await db.readTile(sourceId: sourceId, z: z, x: x, y: y);
+      final tileSourceId = sourceIdOverride ?? sourceId;
+      if (tileSourceId.isEmpty) return null;
+      final cached = kIsWeb
+          ? await _browserTileCache.read(
+              sourceId: tileSourceId,
+              z: z,
+              x: x,
+              y: y,
+            )
+          : (await db!.readTile(
+              sourceId: tileSourceId,
+              z: z,
+              x: x,
+              y: y,
+            ))?.bytes;
       if (cached == null) return null;
-      final buffer = await ui.ImmutableBuffer.fromUint8List(cached.bytes);
+      final buffer = await ui.ImmutableBuffer.fromUint8List(cached);
       return decode(buffer);
     } catch (e) {
       debugPrint('[OfflineAwareTileLayer.readTile] ${_shortError(e)}');
@@ -530,7 +620,9 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   bool operator ==(Object other) {
     return other is _CachedTileImageProvider &&
         other.url == url &&
+        other.fallbackUrl == fallbackUrl &&
         other.sourceId == sourceId &&
+        other.fallbackSourceId == fallbackSourceId &&
         other.z == z &&
         other.x == x &&
         other.y == y &&
@@ -542,7 +634,9 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
   @override
   int get hashCode => Object.hash(
     url,
+    fallbackUrl,
     sourceId,
+    fallbackSourceId,
     z,
     x,
     y,
@@ -550,4 +644,78 @@ class _CachedTileImageProvider extends ImageProvider<_CachedTileImageProvider> {
     preferCache,
     writeNetworkTiles,
   );
+}
+
+/// Small bounded tile cache for Flutter web, backed by browser localStorage.
+/// The native path uses LocalAppDatabase; web has no SQLite connection.
+class _BrowserTileCache {
+  static const _indexKey = 'grainright_map_tile_cache_index_v1';
+  static const _keyPrefix = 'grainright_map_tile_v1_';
+  static const _maxEntries = 20;
+  static const _maxTileBytes = 140000;
+
+  static final Future<SharedPreferences> _preferences =
+      SharedPreferences.getInstance();
+  Future<void>? _writeQueue;
+
+  Future<Uint8List?> read({
+    required String sourceId,
+    required int z,
+    required int x,
+    required int y,
+  }) async {
+    if (!kIsWeb) return null;
+    try {
+      final encoded = (await _preferences).getString(
+        _tileKey(sourceId: sourceId, z: z, x: x, y: y),
+      );
+      if (encoded == null || encoded.isEmpty) return null;
+      return Uint8List.fromList(base64Url.decode(encoded));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> write({
+    required String sourceId,
+    required int z,
+    required int x,
+    required int y,
+    required Uint8List bytes,
+  }) async {
+    if (!kIsWeb || bytes.isEmpty || bytes.length > _maxTileBytes) return;
+
+    final operation = (_writeQueue ?? Future<void>.value()).then<void>((
+      _,
+    ) async {
+      try {
+        final preferences = await _preferences;
+        final tileKey = _tileKey(sourceId: sourceId, z: z, x: x, y: y);
+        await preferences.setString(tileKey, base64Url.encode(bytes));
+
+        final index = preferences.getStringList(_indexKey) ?? <String>[];
+        index.remove(tileKey);
+        index.add(tileKey);
+        while (index.length > _maxEntries) {
+          await preferences.remove(index.removeAt(0));
+        }
+        await preferences.setStringList(_indexKey, index);
+      } catch (_) {
+        // Browser storage can be disabled or quota-limited. Map rendering
+        // continues from the network/fallback source in that case.
+      }
+    });
+    _writeQueue = operation;
+    await operation;
+  }
+
+  String _tileKey({
+    required String sourceId,
+    required int z,
+    required int x,
+    required int y,
+  }) {
+    final identity = '$sourceId|$z|$x|$y';
+    return '$_keyPrefix${base64Url.encode(utf8.encode(identity))}';
+  }
 }

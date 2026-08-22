@@ -10,6 +10,7 @@ import 'package:kalsubai_farms/screens/boundary_polygon_screen.dart';
 import 'package:kalsubai_farms/screens/offline_maps_screen.dart';
 import 'package:kalsubai_farms/services/local_app_database.dart';
 import 'package:kalsubai_farms/services/location_service.dart';
+import 'package:kalsubai_farms/services/map_tile_provider.dart';
 import 'package:kalsubai_farms/services/offline_map_service.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -197,6 +198,58 @@ void main() {
 
     expect(savedPolygon, hasLength(4));
     expect(find.byType(BoundaryPolygonScreen), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('shows cached location before precise GPS finishes', (
+    tester,
+  ) async {
+    final service = _DelayedLocationService();
+    final mapService = OfflineMapService(
+      mapTilerApiKeyProvider: () => 'test-key',
+    );
+    addTearDown(mapService.dispose);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: BoundaryPolygonScreen(
+          mapService: mapService,
+          locationService: service,
+          loadMapTiles: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('farm_boundary_current_location_marker')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('GPS ±40 m'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byTooltip('GPS ±4 m'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('satellite map falls back to readable road tiles', (
+    tester,
+  ) async {
+    final mapService = OfflineMapService(
+      mapTilerApiKeyProvider: () => 'test-key',
+    );
+    addTearDown(mapService.dispose);
+
+    await tester.pumpWidget(
+      GetMaterialApp(home: BoundaryPolygonScreen(mapService: mapService)),
+    );
+    await tester.pump();
+
+    final layer = tester.widget<OfflineAwareTileLayer>(
+      find.byKey(const ValueKey('farm-boundary-base-map-layer')),
+    );
+    expect(layer.fallbackUrlTemplate, openStreetMapTileUrl);
+
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -428,6 +481,27 @@ class _FakeLocationService extends LocationService {
       latitude: 19.541,
       longitude: 74.005,
       accuracy: 5,
+    );
+  }
+}
+
+class _DelayedLocationService extends LocationService {
+  @override
+  Future<LocationResult?> getLastKnownLocation() async {
+    return const LocationResult(
+      latitude: 19.541,
+      longitude: 74.005,
+      accuracy: 40,
+    );
+  }
+
+  @override
+  Future<LocationResult?> getCurrentLocation() async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    return const LocationResult(
+      latitude: 19.5412,
+      longitude: 74.0052,
+      accuracy: 4,
     );
   }
 }
