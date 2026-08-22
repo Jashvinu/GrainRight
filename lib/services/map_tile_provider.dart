@@ -17,7 +17,12 @@ String get fieldImageryTileUrl {
   return satellite.isNotEmpty ? satellite : openStreetMapTileUrl;
 }
 
-const String openStreetMapTileUrl = RuntimeConfig.onlineBaseTileUrlTemplate;
+const String _defaultOpenStreetMapTileUrl =
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+final String openStreetMapTileUrl =
+    RuntimeConfig.onlineBaseTileUrlTemplate.trim().isNotEmpty
+    ? RuntimeConfig.onlineBaseTileUrlTemplate
+    : _defaultOpenStreetMapTileUrl;
 const String fieldRoadsTileUrl =
     'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
 const String fieldPlacesTileUrl =

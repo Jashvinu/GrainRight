@@ -248,6 +248,7 @@ void main() {
     final layer = tester.widget<OfflineAwareTileLayer>(
       find.byKey(const ValueKey('farm-boundary-base-map-layer')),
     );
+    expect(openStreetMapTileUrl, isNotEmpty);
     expect(layer.fallbackUrlTemplate, openStreetMapTileUrl);
 
     await tester.pumpWidget(const SizedBox.shrink());
