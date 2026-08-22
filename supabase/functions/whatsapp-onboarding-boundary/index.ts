@@ -246,6 +246,254 @@ async function reverseGeocode(
   }
 }
 
+function rows(raw: unknown): Row[] {
+  return Array.isArray(raw)
+    ? raw.filter((value): value is Row =>
+      value !== null && typeof value === "object" && !Array.isArray(value)
+    )
+    : [];
+}
+
+function numeric(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) {
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  }
+  return null;
+}
+
+function rowNumber(row: Row, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numeric(row[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function scanDate(row: Row): string {
+  return text(row.scan_date ?? row.created_at ?? row.updated_at);
+}
+
+function latestScanDate(data: Row[]): string {
+  return data.reduce((latest, row) => {
+    const value = scanDate(row);
+    return value > latest ? value : latest;
+  }, "");
+}
+
+function sameScanRows(data: Row[], scan: string): Row[] {
+  if (!scan) return data;
+  const latest = data.filter((row) => scanDate(row) === scan);
+  return latest.length > 0 ? latest : data;
+}
+
+function averageValue(data: Row[], keys: string[]): number | null {
+  const values = data
+    .map((row) => rowNumber(row, keys))
+    .filter((value): value is number => value !== null);
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function maximumValue(data: Row[], keys: string[]): number | null {
+  let maximum: number | null = null;
+  for (const row of data) {
+    const value = rowNumber(row, keys);
+    if (value !== null && (maximum === null || value > maximum)) maximum = value;
+  }
+  return maximum;
+}
+
+function diseaseScores(row: Row): Record<string, number> {
+  const scores: Record<string, number> = {};
+  const perDisease = row.per_disease;
+  if (perDisease && typeof perDisease === "object" && !Array.isArray(perDisease)) {
+    for (const [name, value] of Object.entries(perDisease as Row)) {
+      const parsed = numeric(value);
+      if (parsed !== null) scores[name] = parsed;
+    }
+  }
+  const columns: Record<string, string> = {
+    rice_blast_risk: "rice_blast",
+    sheath_blight_risk: "sheath_blight",
+    blb_risk: "bacterial_leaf_blight",
+    downy_mildew_risk: "downy_mildew",
+    leaf_spot_risk: "leaf_spot",
+    charcoal_rot_risk: "charcoal_rot",
+  };
+  for (const [column, name] of Object.entries(columns)) {
+    const value = numeric(row[column]);
+    if (value !== null) scores[name] = Math.max(scores[name] ?? 0, value);
+  }
+  return scores;
+}
+
+function topDiseaseRisks(data: Row[]): Record<string, number> {
+  const risks: Record<string, number> = {};
+  for (const row of data) {
+    for (const [name, value] of Object.entries(diseaseScores(row))) {
+      risks[name] = Math.max(risks[name] ?? 0, value);
+    }
+  }
+  return risks;
+}
+
+function maxRisk(data: Row[], risks: Record<string, number>): number {
+  let maximum = 0;
+  for (const row of data) {
+    maximum = Math.max(
+      maximum,
+      rowNumber(row, ["composite_risk", "max_risk_score", "risk_score"]) ?? 0,
+    );
+  }
+  for (const value of Object.values(risks)) maximum = Math.max(maximum, value);
+  return maximum;
+}
+
+function metric(
+  value: number | null,
+  index: string,
+  date: string,
+  source = "disease_risk_cells",
+) {
+  return value === null
+    ? null
+    : { value, index, date, source, status: "available" };
+}
+
+function recommendationFromSnapshot(snapshot: Row): Row | null {
+  const recommendation = snapshot.recommendation;
+  return recommendation && typeof recommendation === "object" && !Array.isArray(recommendation)
+    ? recommendation as Row
+    : null;
+}
+
+async function monitoringSummary(
+  supabase: ReturnType<typeof serviceClient>,
+  farmId: string,
+): Promise<Row | null> {
+  const { data: farm, error: farmError } = await supabase
+    .from("farms")
+    .select(
+      "id,name,geometry,bounds,area_hectares,area_acres,location_label,crop,variety,season,irrigation,soil_type,ownership_type,seed_source,harvest_intent,sowing_date,current_status,current_status_stage,current_status_updated_at",
+    )
+    .eq("id", farmId)
+    .maybeSingle();
+  if (farmError) throw farmError;
+  if (!farm) return null;
+
+  const [snapshotResult, zonesResult, cellsResult] = await Promise.all([
+    supabase
+      .from("farm_data_snapshots")
+      .select("snapshot,collected_at,updated_at")
+      .eq("farm_id", farmId)
+      .order("collected_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("disease_scout_zones")
+      .select("*")
+      .eq("farm_id", farmId)
+      .order("scan_date", { ascending: false })
+      .order("zone_rank", { ascending: true }),
+    supabase
+      .from("disease_risk_cells")
+      .select("*")
+      .eq("farm_id", farmId)
+      .order("scan_date", { ascending: false })
+      .order("composite_risk", { ascending: false })
+      .limit(80),
+  ]);
+  if (snapshotResult.error) throw snapshotResult.error;
+  if (zonesResult.error) throw zonesResult.error;
+  if (cellsResult.error) throw cellsResult.error;
+
+  const snapshot = object(snapshotResult.data?.snapshot);
+  const zones = rows(zonesResult.data);
+  const cells = rows(cellsResult.data);
+  const scan = latestScanDate([...cells, ...zones]);
+  const latestCells = sameScanRows(cells, scan);
+  const latestZones = sameScanRows(zones, scan);
+  const risks = topDiseaseRisks(latestCells);
+  const recommendation = recommendationFromSnapshot(snapshot);
+  const recommendationUpdatedAt = text(
+    snapshotResult.data?.updated_at ?? snapshotResult.data?.collected_at,
+  );
+  const weatherRisk = maximumValue(latestCells, ["weather_risk"]);
+  const disease = {
+    scan_date: scan,
+    crop: text(farm.crop),
+    season: text(farm.season),
+    images_analyzed: 0,
+    risk_cells_count: latestCells.length,
+    high_risk_cells: latestCells.filter((row) =>
+      (rowNumber(row, ["composite_risk", "max_risk_score", "risk_score"]) ?? 0) >= 0.55
+    ).length,
+    max_risk: maxRisk(latestCells, risks),
+    top_disease_risks: risks,
+    scout_zones: latestZones,
+    risk_cells: latestCells,
+  };
+
+  return {
+    farm,
+    satellite_metrics: {
+      water_level: metric(averageValue(latestCells, ["moisture", "ndwi"]), "moisture", scan),
+      crop_health: metric(averageValue(latestCells, ["ndvi"]), "ndvi", scan),
+      canopy: metric(averageValue(latestCells, ["ndre", "gndvi", "savi"]), "canopy", scan),
+      last_update: scan,
+    },
+    weather_context: {
+      weather_data_status: weatherRisk === null ? "missing" : "available",
+      weather_risk: weatherRisk,
+      scan_date: scan,
+      source: "disease_risk_cells",
+      ...(recommendation === null ? {} : {
+        recommendation,
+        recommendation_updated_at: recommendationUpdatedAt,
+      }),
+    },
+    disease,
+    advice: null,
+    monitoring_status: scan ? "available" : "not_available",
+  };
+}
+
+async function loadOnboarding(
+  supabase: ReturnType<typeof serviceClient>,
+  token: string,
+): Promise<Row | null> {
+  const tokenHash = await hashToken(token);
+  const { data, error } = await supabase
+    .from("whatsapp_farmer_onboardings")
+    .select("id,draft,step,expires_at,status,flow_type,language,farm_id")
+    .eq("token_hash", tokenHash)
+    .in("status", ["active", "completed"])
+    .gt("expires_at", new Date().toISOString())
+    .maybeSingle();
+  if (error) throw error;
+  return data as Row | null;
+}
+
+async function loadBoundaryState(
+  supabase: ReturnType<typeof serviceClient>,
+  onboarding: Row,
+): Promise<Row> {
+  const draft = object(onboarding.draft);
+  const draftFarm = object(draft.farm);
+  const farmId = text(onboarding.farm_id);
+  const summary = farmId ? await monitoringSummary(supabase, farmId) : null;
+  return {
+    onboardingId: onboarding.id,
+    status: text(onboarding.status),
+    step: text(onboarding.step),
+    farm: summary?.farm ?? draftFarm,
+    summary,
+    returnToWhatsappUrl: whatsappReturnUrl(),
+  };
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -255,8 +503,21 @@ Deno.serve(async (req) => {
     const body = object(await req.json());
     const token = text(body.token);
     if (token.length < 32) return errorResponse("This boundary link is invalid.", 400);
-    const geometry = validateGeometry(body.geometry ?? body.geojson);
     const supabase = serviceClient();
+    const action = text(body.action).toLowerCase() || "save";
+    if (action === "load" || action === "refresh") {
+      const onboarding = await loadOnboarding(supabase, token);
+      if (!onboarding) {
+        return errorResponse("This boundary link has expired or was already used.", 410);
+      }
+      return successResponse(
+        await loadBoundaryState(supabase, onboarding),
+        200,
+        "whatsapp_boundary_state_loaded",
+      );
+    }
+    if (action !== "save") return errorResponse("Unsupported boundary action.", 400);
+    const geometry = validateGeometry(body.geometry ?? body.geojson);
     const tokenHash = await hashToken(token);
     const { data: onboarding, error: lookupError } = await supabase
       .from("whatsapp_farmer_onboardings")
@@ -306,11 +567,11 @@ Deno.serve(async (req) => {
       .update({
         draft: updatedDraft,
         step: onboarding.flow_type === "existing_farmer_farm" ? "boundary_saved" : "crop",
-        token_hash: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", onboarding.id)
       .eq("status", "active")
+      .eq("step", "boundary")
       .select("id,step,expires_at")
       .single();
     if (updateError) throw updateError;
@@ -321,6 +582,9 @@ Deno.serve(async (req) => {
       areaAcres: areaHectares * 2.47105,
       locationLabel: geocode.label,
       geocodeStatus: geocode.status,
+      status: "boundary_saved",
+      farm: updatedDraft.farm,
+      summary: null,
       returnToWhatsappUrl: whatsappReturnUrl(),
     }, 200, "whatsapp_boundary_saved");
   } catch (error) {
