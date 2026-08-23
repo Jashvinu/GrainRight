@@ -381,20 +381,47 @@ class FarmAlertItem {
   final String detail;
   final String severity;
   final String action;
+  final String category;
+  final String sourceType;
+  final String confidence;
+  final double? riskScore;
+  final int hotspotCount;
+  final Map<String, dynamic>? focusCell;
+  final List<String> evidence;
+  final List<String> researchRefs;
 
   const FarmAlertItem({
     required this.title,
     required this.detail,
     required this.severity,
     required this.action,
+    this.category = '',
+    this.sourceType = '',
+    this.confidence = '',
+    this.riskScore,
+    this.hotspotCount = 0,
+    this.focusCell,
+    this.evidence = const [],
+    this.researchRefs = const [],
   });
 
   factory FarmAlertItem.fromJson(Map<String, dynamic> json) {
+    final rawFocusCell = json['focus_cell'];
     return FarmAlertItem(
       title: json['title'] as String? ?? '',
       detail: json['detail'] as String? ?? '',
       severity: json['severity'] as String? ?? 'medium',
       action: json['action'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      sourceType: json['source_type'] as String? ?? '',
+      confidence: json['confidence'] as String? ?? '',
+      riskScore: (json['risk_score'] as num?)?.toDouble(),
+      hotspotCount: (json['hotspot_count'] as num?)?.toInt() ?? 0,
+      focusCell: rawFocusCell is Map
+          ? Map<String, dynamic>.from(rawFocusCell)
+          : null,
+      evidence: _stringList(json['evidence']),
+      researchRefs: _stringList(json['research_refs']),
     );
   }
 
@@ -403,5 +430,20 @@ class FarmAlertItem {
     'detail': detail,
     'severity': severity,
     'action': action,
+    if (category.trim().isNotEmpty) 'category': category,
+    if (sourceType.trim().isNotEmpty) 'source_type': sourceType,
+    if (confidence.trim().isNotEmpty) 'confidence': confidence,
+    if (riskScore != null) 'risk_score': riskScore,
+    if (hotspotCount > 0) 'hotspot_count': hotspotCount,
+    if (focusCell != null) 'focus_cell': focusCell,
+    if (evidence.isNotEmpty) 'evidence': evidence,
+    if (researchRefs.isNotEmpty) 'research_refs': researchRefs,
   };
+
+  static List<String> _stringList(dynamic raw) {
+    return (raw as List? ?? const [])
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
 }

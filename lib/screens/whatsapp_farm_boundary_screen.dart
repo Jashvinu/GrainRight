@@ -1,3 +1,5 @@
+// ignore_for_file: unused_element
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
@@ -7,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme/app_theme.dart';
 import '../models/satellite/farm_summary_model.dart';
+import '../models/satellite/farm_alert_model.dart';
 import '../utils/whatsapp_boundary_handoff.dart';
 import '../widgets/satellite/satellite_map_view.dart';
 import 'boundary_polygon_screen.dart';
@@ -31,6 +34,8 @@ class _WhatsappFarmBoundaryScreenState
   FarmerFarmSummary? _monitoring;
   String? _summaryError;
   Uri? _returnToWhatsapp;
+  String _alertFilter = 'all';
+  final Set<String> _expandedAlerts = <String>{};
 
   String get _token =>
       widget.token?.trim() ?? Get.parameters['token']?.trim() ?? '';
@@ -196,6 +201,7 @@ class _WhatsappFarmBoundaryScreenState
     return Scaffold(
       appBar: AppBar(
         title: Text(_text(en: 'Your farm', hi: 'आपका खेत', mr: 'तुमचे शेत')),
+        centerTitle: false,
         actions: [
           Tooltip(
             message: _text(
@@ -221,28 +227,157 @@ class _WhatsappFarmBoundaryScreenState
         onRefresh: _refreshSummary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
           children: [
-            _farmHeader(),
-            if (_farmDetailText().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _sectionCard(
-                icon: Icons.agriculture_outlined,
-                color: AppTheme.greenDark,
-                title: _text(
-                  en: 'Farm details',
-                  hi: 'खेत का विवरण',
-                  mr: 'शेताचा तपशील',
+            _compactFarmHeader(),
+            const SizedBox(height: 12),
+            _satelliteHero(polygon, center),
+            if (_summaryError != null)
+              _messageBanner(_summaryError!, isError: true),
+            if (!_setupComplete) _setupPendingCard(),
+            if (_setupComplete && _monitoring == null) _monitoringEmptyCard(),
+            if (_monitoring != null) _monitoringReport(_monitoring!),
+            const SizedBox(height: 12),
+            _whatsappContinueCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _compactFarmHeader() {
+    // Farm details remain available in the compact header and the saved report.
+    final name = '${_farm['name'] ?? ''}'.trim();
+    final location = '${_farm['location_label'] ?? ''}'.trim();
+    final acres = _number(_farm['area_acres']);
+    final crop = '${_farm['crop'] ?? ''}'.trim();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+      decoration: BoxDecoration(
+        color: AppTheme.greenDark,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.eco_rounded, color: Colors.white, size: 24),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  name.isEmpty
+                      ? _text(
+                          en: 'Farm boundary saved',
+                          hi: 'खेत की सीमा सेव है',
+                          mr: 'शेताची सीमा सेव आहे',
+                        )
+                      : name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
-                body: _farmDetailText(),
+              ),
+              _statusPill(
+                _monitoring?.monitoringStatus == 'available'
+                    ? 'SCANNED'
+                    : 'READY',
               ),
             ],
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
-              child: SatelliteMapView(
+          ),
+          if (location.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                const Icon(
+                  Icons.place_outlined,
+                  color: Colors.white70,
+                  size: 16,
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    location,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 13),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _heroMeta(
+                crop.isEmpty ? 'Crop pending' : crop,
+                Icons.grass_outlined,
+              ),
+              _heroMeta(
+                acres == null
+                    ? 'Area pending'
+                    : '${acres.toStringAsFixed(2)} acres',
+                Icons.square_foot,
+              ),
+              _heroMeta(
+                _monitoring?.lastUpdate == null
+                    ? 'First scan pending'
+                    : 'Scan ready',
+                Icons.satellite_alt_outlined,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusPill(String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: .16),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 10,
+        fontWeight: FontWeight.w800,
+        letterSpacing: .7,
+      ),
+    ),
+  );
+
+  Widget _heroMeta(String label, IconData icon) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: .11),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: Colors.white70),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(color: Colors.white, fontSize: 11)),
+      ],
+    ),
+  );
+
+  Widget _satelliteHero(List<LatLng> polygon, LatLng? center) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+          child: Stack(
+            children: [
+              SatelliteMapView(
                 key: const Key('whatsapp_saved_farm_map'),
-                height: 360,
+                height: 300,
                 farmPolygon: polygon,
                 center: center,
                 heatCircles: _monitoring == null
@@ -252,20 +387,391 @@ class _WhatsappFarmBoundaryScreenState
                 showReferenceLabels: false,
                 satelliteOnly: true,
               ),
+              Positioned(
+                left: 12,
+                top: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: .64),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.satellite_alt, color: Colors.white, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Farm satellite',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            const Icon(Icons.info_outline, size: 13, color: AppTheme.textMuted),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                'Esri World Imagery · Early-warning signals, not a diagnosis',
+                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+              ),
             ),
-            const SizedBox(height: 14),
-            if (_summaryError != null)
-              _messageBanner(_summaryError!, isError: true),
-            if (!_setupComplete) _setupPendingCard(),
-            if (_setupComplete && _monitoring == null) _monitoringEmptyCard(),
-            if (_monitoring != null) _monitoringSection(_monitoring!),
-            const SizedBox(height: 12),
-            _whatsappContinueCard(),
+            const Text(
+              'Terms',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.greenDark,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _monitoringReport(FarmerFarmSummary summary) {
+    final alerts = _filteredAlerts(summary.alerts);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 15),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _text(
+                  en: 'Monitoring overview',
+                  hi: 'मॉनिटरिंग सारांश',
+                  mr: 'मॉनिटरिंग सारांश',
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              summary.lastUpdate == null ? 'Pending' : 'Latest scan',
+              style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+            ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _metricTile(
+              'Crop health',
+              summary.cropHealth?.value,
+              AppTheme.success,
+            ),
+            _metricTile(
+              'Moisture',
+              summary.waterLevel?.value,
+              AppTheme.weather,
+            ),
+            _metricTile('Canopy', summary.canopy?.value, AppTheme.monitoring),
+            _metricTile(
+              'Alerts',
+              summary.alerts.length.toDouble(),
+              AppTheme.warning,
+              percentage: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _nextSteps(summary),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _text(en: 'Alert center', hi: 'अलर्ट सेंटर', mr: 'अलर्ट सेंटर'),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            Text(
+              '${summary.alerts.length} total',
+              style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children:
+                ['all', 'high', 'medium', 'low', 'weather', 'water', 'disease']
+                    .map(
+                      (filter) => Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text(
+                            filter == 'all'
+                                ? 'All'
+                                : '${filter[0].toUpperCase()}${filter.substring(1)}',
+                          ),
+                          selected: _alertFilter == filter,
+                          onSelected: (_) =>
+                              setState(() => _alertFilter = filter),
+                        ),
+                      ),
+                    )
+                    .toList(),
+          ),
+        ),
+        const SizedBox(height: 9),
+        if (alerts.isEmpty)
+          _sectionCard(
+            icon: Icons.check_circle_outline,
+            color: AppTheme.success,
+            title: 'No alerts in this view',
+            body:
+                'Keep regular field checks active and refresh after the next satellite scan.',
+          )
+        else
+          ...alerts.asMap().entries.map(
+            (entry) => _alertCard(entry.value, entry.key),
+          ),
+        const SizedBox(height: 8),
+        Text(
+          'Signals are early warnings from saved satellite data. Confirm in the field before applying treatment.',
+          style: const TextStyle(
+            color: AppTheme.textMuted,
+            fontSize: 11,
+            height: 1.3,
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<FarmAlertItem> _filteredAlerts(List<FarmAlertItem> alerts) {
+    final filtered = _alertFilter == 'all'
+        ? alerts
+        : alerts
+              .where(
+                (item) =>
+                    item.severity.toLowerCase() == _alertFilter ||
+                    item.category.toLowerCase() == _alertFilter,
+              )
+              .toList();
+    final rank = {'high': 0, 'medium': 1, 'low': 2};
+    filtered.sort(
+      (a, b) => (rank[a.severity.toLowerCase()] ?? 3).compareTo(
+        rank[b.severity.toLowerCase()] ?? 3,
+      ),
+    );
+    return filtered;
+  }
+
+  Widget _nextSteps(FarmerFarmSummary summary) {
+    final actions = summary.advice?.nextActions ?? const <String>[];
+    final fallback = actions.isEmpty
+        ? [
+            'Inspect highlighted cells during your next field round.',
+            'Capture a clear crop photo if you see symptoms.',
+            'Refresh after the next saved satellite scan.',
+          ]
+        : actions;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.gold.withValues(alpha: .1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        border: Border.all(color: AppTheme.gold.withValues(alpha: .35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: AppTheme.gold),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'What to do next',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 9),
+          ...fallback
+              .take(4)
+              .toList()
+              .asMap()
+              .entries
+              .map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${entry.key + 1}',
+                        style: const TextStyle(
+                          color: AppTheme.gold,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          entry.value,
+                          style: const TextStyle(fontSize: 13, height: 1.25),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _alertCard(FarmAlertItem alert, int index) {
+    final key = '${alert.category}:${alert.title}:$index';
+    final expanded = _expandedAlerts.contains(key);
+    final severity = alert.severity.toLowerCase();
+    final color = severity == 'high'
+        ? AppTheme.danger
+        : severity == 'low'
+        ? AppTheme.success
+        : AppTheme.warning;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+        border: Border.all(color: color.withValues(alpha: .35)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+        onTap: () => setState(
+          () =>
+              expanded ? _expandedAlerts.remove(key) : _expandedAlerts.add(key),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      alert.title,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  Text(
+                    severity.toUpperCase(),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Icon(
+                    expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                    color: AppTheme.textMuted,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                alert.detail,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppTheme.textMuted,
+                  height: 1.3,
+                ),
+              ),
+              if (expanded) ...[
+                const Divider(height: 18),
+                _alertDetailLine(
+                  Icons.play_circle_outline,
+                  'Action',
+                  alert.action,
+                ),
+                if (alert.evidence.isNotEmpty)
+                  _alertDetailLine(
+                    Icons.fact_check_outlined,
+                    'Evidence',
+                    alert.evidence.join(' · '),
+                  ),
+                if (alert.focusCell != null)
+                  _alertDetailLine(
+                    Icons.location_on_outlined,
+                    'Focus cell',
+                    'Highlighted on the satellite map',
+                  ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _alertDetailLine(IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 7),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: AppTheme.greenDark),
+        const SizedBox(width: 7),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                color: AppTheme.textDark,
+                fontSize: 12,
+                height: 1.3,
+              ),
+              children: [
+                TextSpan(
+                  text: '$label: ',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                TextSpan(text: value),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _farmHeader() {
     final name = '${_farm['name'] ?? ''}'.trim();

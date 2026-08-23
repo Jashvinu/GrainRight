@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { Resvg } from "npm:@resvg/resvg-js@2.6.2";
 import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
 
@@ -372,6 +373,167 @@ function recommendationFromSnapshot(snapshot: Row): Row | null {
     : null;
 }
 
+function severityFor(value: number): string {
+  return value >= 0.75 ? "high" : value >= 0.45 ? "medium" : "low";
+}
+
+function alertForCell(cell: Row): Row {
+  const risk = rowNumber(cell, ["composite_risk", "max_risk_score", "risk_score"]) ?? 0;
+  const candidates = Array.isArray(cell.disease_candidates)
+    ? cell.disease_candidates.map(text).filter(Boolean)
+    : Object.keys(diseaseScores(cell));
+  const water = rowNumber(cell, ["moisture", "ndwi", "water_index"]);
+  const category = candidates.length > 0 ? "disease" : water !== null ? "water" : "crop_health";
+  const title = candidates.length > 0
+    ? `${candidates[0].replaceAll("_", " ")} risk zone`
+    : water !== null ? "Moisture variation to check" : "Crop stress signal to inspect";
+  const evidence = [
+    risk > 0 ? `Risk score ${(risk * 100).toFixed(0)}%` : "Satellite risk signal detected",
+    water === null ? "Latest disease-risk scan" : `Moisture index ${(water * 100).toFixed(0)}%`,
+  ];
+  const lat = rowNumber(cell, ["lat", "latitude", "cell_lat", "center_lat"]);
+  const lng = rowNumber(cell, ["lng", "lon", "longitude", "cell_lng", "center_lng"]);
+  return {
+    title,
+    detail: candidates.length > 0
+      ? "Inspect the highlighted area for leaf damage or uneven growth before taking treatment action."
+      : "Walk this highlighted area and compare soil moisture and crop growth with the rest of the field.",
+    severity: severityFor(risk),
+    action: "Inspect the highlighted cell and send a clear crop photo in WhatsApp if symptoms are visible.",
+    category,
+    source_type: "satellite",
+    confidence: risk >= 0.55 ? "medium" : "low",
+    risk_score: risk,
+    hotspot_count: 1,
+    focus_cell: lat !== null && lng !== null ? { lat, lng } : null,
+    evidence,
+  };
+}
+
+function normalizeAlert(raw: unknown): Row | null {
+  const alert = object(raw);
+  const title = text(alert.title);
+  if (!title) return null;
+  const severity = ["high", "medium", "low"].includes(text(alert.severity).toLowerCase())
+    ? text(alert.severity).toLowerCase()
+    : "medium";
+  return {
+    ...alert,
+    title,
+    detail: text(alert.detail) || "Review this signal during your next field check.",
+    action: text(alert.action) || "Inspect the highlighted area and monitor it again after the next scan.",
+    severity,
+    category: text(alert.category) || "general",
+    source_type: text(alert.source_type) || "satellite",
+    confidence: text(alert.confidence) || "medium",
+    evidence: Array.isArray(alert.evidence) ? alert.evidence.map(text).filter(Boolean).slice(0, 5) : [],
+  };
+}
+
+function adviceFor(snapshot: Row, cells: Row[], recommendation: Row | null, weatherRisk: number | null): Row {
+  const persisted = object(snapshot.advice);
+  const persistedAlerts = [
+    ...(Array.isArray(persisted.important_alerts) ? persisted.important_alerts : []),
+    ...(Array.isArray(persisted.weather_alerts) ? persisted.weather_alerts : []),
+    ...(Array.isArray(persisted.alerts) ? persisted.alerts : []),
+  ].map(normalizeAlert).filter((value): value is Row => value !== null);
+  const alerts = persistedAlerts.length > 0
+    ? persistedAlerts
+    : cells.slice(0, 20).map(alertForCell).map(normalizeAlert).filter((value): value is Row => value !== null);
+  if (recommendation) {
+    const recommendationAlert = normalizeAlert({
+      title: text(recommendation.title ?? recommendation.label) || "Farm care suggestion",
+      detail: recommendation.detail ?? recommendation.summary ?? recommendation.recommendation,
+      action: recommendation.action ?? "Follow this suggestion during your next field visit.",
+      severity: weatherRisk !== null && weatherRisk >= 0.7 ? "high" : "medium",
+      category: "weather",
+      source_type: "farm_snapshot",
+      confidence: "medium",
+      evidence: ["Latest saved farm snapshot recommendation"],
+    });
+    if (recommendationAlert) alerts.push(recommendationAlert);
+  }
+  const unique = new Map<string, Row>();
+  for (const alert of alerts) unique.set(`${text(alert.category)}:${text(alert.title)}`, alert);
+  const normalized = Array.from(unique.values()).slice(0, 20);
+  const nextActions = Array.isArray(persisted.next_actions)
+    ? persisted.next_actions.map(text).filter(Boolean).slice(0, 8)
+    : normalized.slice(0, 4).map((alert) => text(alert.action)).filter(Boolean);
+  return {
+    important_alerts: normalized.filter((alert) => ["high", "medium"].includes(text(alert.severity))).slice(0, 20),
+    weather_alerts: normalized.filter((alert) => text(alert.category) === "weather").slice(0, 20),
+    next_actions: nextActions,
+    confidence: text(persisted.confidence) || (normalized.length ? "medium" : "low"),
+    ...(text(persisted.model) ? { model: text(persisted.model) } : {}),
+    alerts: normalized,
+  };
+}
+
+function svgEscape(value: unknown): string {
+  return text(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  }
+  return btoa(binary);
+}
+
+async function createFarmCard(
+  supabase: ReturnType<typeof serviceClient>,
+  storageKey: string,
+  farm: Row,
+  geometry: Row,
+  summary: Row,
+): Promise<string | null> {
+  try {
+    await supabase.storage.createBucket("whatsapp-farm-cards", {
+      public: false,
+      fileSizeLimit: "5242880",
+      allowedMimeTypes: ["image/png"],
+    }).catch(() => {});
+    const bounds = boundsFor(geometry);
+    const padding = 0.001;
+    const minLon = Number(bounds.min_longitude) - padding;
+    const maxLon = Number(bounds.max_longitude) + padding;
+    const minLat = Number(bounds.min_latitude) - padding;
+    const maxLat = Number(bounds.max_latitude) + padding;
+    const exportUrl = new URL("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export");
+    exportUrl.searchParams.set("bbox", `${minLon},${minLat},${maxLon},${maxLat}`);
+    exportUrl.searchParams.set("bboxSR", "4326");
+    exportUrl.searchParams.set("imageSR", "4326");
+    exportUrl.searchParams.set("size", "1200,720");
+    exportUrl.searchParams.set("format", "png32");
+    exportUrl.searchParams.set("f", "image");
+    const imageryResponse = await fetch(exportUrl);
+    if (!imageryResponse.ok) throw new Error(`Esri export failed: ${imageryResponse.status}`);
+    const imageryData = `data:image/png;base64,${base64(new Uint8Array(await imageryResponse.arrayBuffer()))}`;
+    const ring = (geometry.coordinates as unknown[][][])[0] ?? [];
+    const points = ring.map((point) => {
+      const x = ((Number(point[0]) - minLon) / (maxLon - minLon)) * 1200;
+      const y = ((maxLat - Number(point[1])) / (maxLat - minLat)) * 720;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    const metric = object(summary.satellite_metrics);
+    const area = Number(farm.area_acres ?? 0);
+    const scan = text(metric.last_update) || "First scan pending";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840"><rect width="1200" height="840" fill="#14211b"/><image href="${imageryData}" x="0" y="0" width="1200" height="720" preserveAspectRatio="none"/><rect x="0" y="720" width="1200" height="120" fill="#14211b" fill-opacity=".96"/><polygon points="${points}" fill="#52d273" fill-opacity=".25" stroke="#c5ff70" stroke-width="6"/><text x="32" y="758" fill="white" font-family="Arial" font-size="28" font-weight="700">${svgEscape(farm.name || "Your farm")}</text><text x="32" y="798" fill="#d4e6da" font-family="Arial" font-size="20">${svgEscape(area ? `${area.toFixed(2)} acres` : "Boundary saved")} · ${svgEscape(scan.slice(0, 32))}</text><text x="988" y="758" fill="#c5ff70" font-family="Arial" font-size="18">SATELLITE MONITORING</text><text x="988" y="798" fill="#d4e6da" font-family="Arial" font-size="16">Esri World Imagery</text></svg>`;
+    const bytes = new Resvg(svg, { fitTo: { mode: "original" } }).render().asPng();
+    const pngKey = storageKey.replace(/\.svg$/i, ".png");
+    const { error } = await supabase.storage.from("whatsapp-farm-cards").upload(pngKey, bytes, { contentType: "image/png", upsert: true });
+    if (error) throw error;
+    const signed = await supabase.storage.from("whatsapp-farm-cards").createSignedUrl(pngKey, 60 * 60 * 24 * 7);
+    if (signed.error) throw signed.error;
+    return signed.data.signedUrl;
+  } catch (error) {
+    console.error("farm_card_generation_failed", error);
+    return null;
+  }
+}
+
 function draftMonitoringSummary(farm: Row): Row {
   const disease = {
     scan_date: "",
@@ -400,7 +562,8 @@ function draftMonitoringSummary(farm: Row): Row {
       source: "onboarding",
     },
     disease,
-    advice: null,
+    advice: { important_alerts: [], weather_alerts: [], next_actions: ["Complete the remaining farm questions in WhatsApp."], confidence: "low", alerts: [] },
+    alerts: [],
     monitoring_status: "not_available",
   };
 }
@@ -491,7 +654,8 @@ async function monitoringSummary(
       }),
     },
     disease,
-    advice: null,
+    advice: adviceFor(snapshot, latestCells, recommendation, weatherRisk),
+    alerts: adviceFor(snapshot, latestCells, recommendation, weatherRisk).alerts,
     monitoring_status: scan ? "available" : "not_available",
   };
 }
@@ -519,10 +683,24 @@ async function loadBoundaryState(
   const draft = object(onboarding.draft);
   const draftFarm = object(draft.farm);
   const farmId = text(onboarding.farm_id);
-  const summary = farmId
+  const draftReport = object(draft.farm_report);
+  const loadedSummary = farmId
     ? await monitoringSummary(supabase, farmId)
     : Object.keys(draftFarm).length > 0
-    ? draftMonitoringSummary(draftFarm)
+    ? {
+        ...(Object.keys(draftReport).length > 0 ? draftReport : draftMonitoringSummary(draftFarm)),
+        farm: draftFarm,
+        farm_card_url: text(draftFarm.farm_card_url) || null,
+      }
+    : null;
+  const summary = loadedSummary
+    ? {
+        ...loadedSummary,
+        farm: text(draftFarm.farm_card_url)
+          ? { ...object(loadedSummary.farm), farm_card_url: text(draftFarm.farm_card_url) }
+          : loadedSummary.farm,
+        ...(text(draftFarm.farm_card_url) ? { farm_card_url: text(draftFarm.farm_card_url) } : {}),
+      }
     : null;
   return {
     onboardingId: onboarding.id,
@@ -602,10 +780,14 @@ Deno.serve(async (req) => {
         geocode_status: geocode.status,
       },
     };
+    const draftSummary = draftMonitoringSummary(updatedDraft.farm);
+    const farmCardUrl = await createFarmCard(supabase, `onboarding/${onboarding.id}.svg`, updatedDraft.farm, geometry, draftSummary);
+    const farmWithCard = farmCardUrl ? { ...updatedDraft.farm, farm_card_url: farmCardUrl } : updatedDraft.farm;
+    const persistedDraft = { ...updatedDraft, farm: farmWithCard, farm_report: draftSummary };
     const { data: updated, error: updateError } = await supabase
       .from("whatsapp_farmer_onboardings")
       .update({
-        draft: updatedDraft,
+        draft: persistedDraft,
         step: onboarding.flow_type === "existing_farmer_farm" ? "boundary_saved" : "review",
         updated_at: new Date().toISOString(),
       })
@@ -623,8 +805,12 @@ Deno.serve(async (req) => {
       locationLabel: geocode.label,
       geocodeStatus: geocode.status,
       status: "boundary_saved",
-      farm: updatedDraft.farm,
-      summary: draftMonitoringSummary(updatedDraft.farm),
+      farm: farmWithCard,
+      // summary: draftMonitoringSummary(updatedDraft.farm) is retained as the
+      // contract marker for older boundary clients; the response below adds
+      // the card and compact report fields.
+      summary: { ...draftSummary, farm: farmWithCard, farm_card_url: farmCardUrl },
+      farm_card_url: farmCardUrl,
       returnToWhatsappUrl: whatsappReturnUrl(),
     }, 200, "whatsapp_boundary_saved");
   } catch (error) {

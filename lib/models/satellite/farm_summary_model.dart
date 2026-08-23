@@ -13,6 +13,9 @@ class FarmerFarmSummary {
   final List<Map<String, dynamic>> riskCellRows;
   final double maxDiseaseRisk;
   final FarmAlertAdvice? advice;
+  final List<FarmAlertItem> alerts;
+  final String? monitoringStatus;
+  final String? farmCardUrl;
 
   const FarmerFarmSummary({
     required this.farm,
@@ -27,6 +30,9 @@ class FarmerFarmSummary {
     required this.riskCellRows,
     required this.maxDiseaseRisk,
     this.advice,
+    this.alerts = const [],
+    this.monitoringStatus,
+    this.farmCardUrl,
   });
 
   factory FarmerFarmSummary.fromJson(Map<String, dynamic> json) {
@@ -72,7 +78,25 @@ class FarmerFarmSummary {
       maxDiseaseRisk:
           _double(disease['max_risk']) ?? _maxDiseaseRisk(diseaseScreen),
       advice: _advice(root['advice']),
+      alerts: _alerts(root['alerts'], _advice(root['advice'])),
+      monitoringStatus: _text(root['monitoring_status']),
+      farmCardUrl: _text(root['farm_card_url'] ?? farmMap['farm_card_url']),
     );
+  }
+
+  static List<FarmAlertItem> _alerts(dynamic raw, FarmAlertAdvice? advice) {
+    final parsed = (raw as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => FarmAlertItem.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => item.title.trim().isNotEmpty)
+        .toList();
+    if (parsed.isNotEmpty) return parsed.take(20).toList(growable: false);
+    final fallback = [...?advice?.importantAlerts, ...?advice?.weatherAlerts];
+    final seen = <String>{};
+    return fallback
+        .where((item) => seen.add('${item.category}:${item.title}'))
+        .take(20)
+        .toList(growable: false);
   }
 
   static Map<String, dynamic> _map(dynamic raw) {

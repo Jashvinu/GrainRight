@@ -588,6 +588,14 @@ async function completeOnboarding(
   phone: string,
   row: Row,
 ) {
+  const draftForExtras = object(row.draft);
+  const farmDraftForExtras = object(draftForExtras.farm);
+  const completionExtras = {
+    farmCardUrl: text(farmDraftForExtras.farm_card_url) || null,
+    report: Object.keys(object(draftForExtras.farm_report)).length > 0
+      ? object(draftForExtras.farm_report)
+      : null,
+  };
   if (text(row.status) === "completed" && text(row.farm_id)) {
     const { data: farm, error } = await supabase
       .from("farms")
@@ -600,6 +608,7 @@ async function completeOnboarding(
       farm,
       farmId: row.farm_id,
       idempotent: true,
+      ...completionExtras,
     };
   }
   const draft = object(row.draft);
@@ -729,6 +738,7 @@ async function completeOnboarding(
       farm: savedFarm,
       farmId: savedFarm.id,
       idempotent: false,
+      ...completionExtras,
     };
   } catch (error) {
     if (createdFarmId) {
@@ -751,6 +761,14 @@ async function completeExistingFarmSetup(
   row: Row,
   preferredLanguage: "en" | "hi" | "mr",
 ) {
+  const draftForExtras = object(row.draft);
+  const farmDraftForExtras = object(draftForExtras.farm);
+  const completionExtras = {
+    farmCardUrl: text(farmDraftForExtras.farm_card_url) || null,
+    report: Object.keys(object(draftForExtras.farm_report)).length > 0
+      ? object(draftForExtras.farm_report)
+      : null,
+  };
   const identity = await requireFarmer(supabase, phone, preferredLanguage);
   if (text(row.status) === "completed" && text(row.farm_id)) {
     const { data: farm, error } = await supabase
@@ -766,6 +784,7 @@ async function completeExistingFarmSetup(
       farm,
       farmId: row.farm_id,
       idempotent: true,
+      ...completionExtras,
     };
   }
 
@@ -817,6 +836,7 @@ async function completeExistingFarmSetup(
     farm,
     farmId: farm.id,
     idempotent: false,
+    ...completionExtras,
   };
 }
 
