@@ -18,6 +18,8 @@ class SatelliteMapView extends StatelessWidget {
   final ValueChanged<LatLng>? onTap;
   final double height;
   final bool showZoomControls;
+  final bool autoFitContent;
+  final bool showReferenceLabels;
 
   /// Fallback center when there is no polygon (e.g. a point-only farm). Used
   /// before [SatelliteConfig.defaultCenter] so the map opens on the farm.
@@ -36,6 +38,8 @@ class SatelliteMapView extends StatelessWidget {
     this.onTap,
     this.height = 260,
     this.showZoomControls = false,
+    this.autoFitContent = true,
+    this.showReferenceLabels = true,
     this.center,
   });
 
@@ -53,6 +57,8 @@ class SatelliteMapView extends StatelessWidget {
       onTap: onTap,
       height: height,
       showZoomControls: showZoomControls,
+      autoFitContent: autoFitContent,
+      showReferenceLabels: showReferenceLabels,
       center: center,
       key: key,
     );
@@ -71,6 +77,8 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final ValueChanged<LatLng>? onTap;
   final double height;
   final bool showZoomControls;
+  final bool autoFitContent;
+  final bool showReferenceLabels;
   final LatLng? center;
 
   const _SatelliteMapViewInternal({
@@ -86,6 +94,8 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.onTap,
     this.height = 260,
     this.showZoomControls = false,
+    this.autoFitContent = true,
+    this.showReferenceLabels = true,
     this.center,
   });
 
@@ -197,7 +207,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 onTap: (_, point) => widget.onTap?.call(point),
                 onMapReady: () {
                   _mapReady = true;
-                  _fitToContent();
+                  if (widget.autoFitContent) _fitToContent();
                   setState(() {});
                 },
               ),
@@ -223,7 +233,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
-                if (shouldShowFieldReferenceLabels(fieldImageryTileUrl))
+                if (widget.showReferenceLabels &&
+                    shouldShowFieldReferenceLabels(fieldImageryTileUrl))
                   ...fieldReferenceTileLayers(),
                 if (widget.farmPolygon != null &&
                     widget.farmPolygon!.length >= 3)
@@ -258,22 +269,25 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       child: _ZoomControlButton(
                         icon: Icons.add,
                         onTap: _zoomIn,
+                        semanticLabel: UiStrings.t('zoom_in'),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Tooltip(
                       message: UiStrings.t('zoom_out'),
                       child: _ZoomControlButton(
                         icon: Icons.remove,
                         onTap: _zoomOut,
+                        semanticLabel: UiStrings.t('zoom_out'),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     Tooltip(
                       message: UiStrings.t('locate_farm_area'),
                       child: _ZoomControlButton(
-                        icon: Icons.location_on,
+                        icon: Icons.my_location_rounded,
                         onTap: _locate,
+                        semanticLabel: UiStrings.t('locate_farm_area'),
                       ),
                     ),
                   ],
@@ -312,21 +326,42 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
 class _ZoomControlButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
+  final String semanticLabel;
 
-  const _ZoomControlButton({required this.icon, required this.onTap});
+  const _ZoomControlButton({
+    required this.icon,
+    required this.onTap,
+    required this.semanticLabel,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      shape: const CircleBorder(),
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(icon, color: AppTheme.greenDark, size: 18),
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: Icon(
+                icon,
+                color: Colors.white,
+                size: 22,
+                shadows: const [
+                  Shadow(
+                    color: Colors.black54,
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

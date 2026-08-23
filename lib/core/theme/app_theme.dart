@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color green = Color(0xFF0B5D2A);
-  static const Color greenDark = Color(0xFF0C4A24);
-  static const Color greenLight = Color(0xFF4CAF50);
-  static const Color gold = Color(0xFFCDA434);
-  static const Color earth = Color(0xFF7A5230);
-  static const Color greenPale = Color(0xFFEEF7ED);
-  static const Color surface = Color(0xFFFAF7F0);
-  static const Color textDark = Color(0xFF1B231B);
-  static const Color textMuted = Color(0xFF667066);
-  static const Color error = Color(0xFFB91C1C);
+  // Earthy premium brand palette. Status colours remain semantic so a
+  // weather or disease warning is never confused with a decorative accent.
+  static const Color green = Color(0xFF4F6A3A);
+  static const Color greenDark = Color(0xFF2F4930);
+  static const Color greenLight = Color(0xFF8AA565);
+  static const Color gold = Color(0xFFC38B3A);
+  static const Color earth = Color(0xFFA96845);
+  static const Color greenPale = Color(0xFFF0F3E7);
+  static const Color surface = Color(0xFFFAF6EC);
+  static const Color surfaceWarm = Color(0xFFF4EBDD);
+  static const Color surfaceElevated = Color(0xFFFFFDF8);
+  static const Color textDark = Color(0xFF2A3027);
+  static const Color textMuted = Color(0xFF6F7568);
+  static const Color border = Color(0xFFE4DDCE);
+
+  static const Color weather = Color(0xFF327D85);
+  static const Color weatherPale = Color(0xFFE7F3F1);
+  static const Color warning = Color(0xFFB97820);
+  static const Color warningPale = Color(0xFFFFF1D8);
+  static const Color danger = Color(0xFFB64A3D);
+  static const Color dangerPale = Color(0xFFFBE9E5);
+  static const Color monitoring = Color(0xFF76558F);
+  static const Color monitoringPale = Color(0xFFF1EAF6);
+  static const Color success = Color(0xFF547E46);
+  static const Color successPale = Color(0xFFEAF2E6);
+  static const Color error = danger;
 
   static const double radiusSmall = 12;
   static const double radiusMedium = 18;
@@ -23,16 +39,16 @@ class AppTheme {
     colorScheme: ColorScheme.fromSeed(
       seedColor: green,
       primary: green,
-      secondary: greenLight,
-      tertiary: gold,
-      surface: Colors.white,
+      secondary: earth,
+      tertiary: weather,
+      surface: surfaceElevated,
       onPrimary: Colors.white,
       onSurface: textDark,
       error: error,
     ),
     scaffoldBackgroundColor: surface,
-    cardColor: Colors.white,
-    dividerColor: const Color(0xFFE4E9E0),
+    cardColor: surfaceElevated,
+    dividerColor: border,
     appBarTheme: const AppBarTheme(
       backgroundColor: surface,
       foregroundColor: greenDark,
@@ -53,12 +69,12 @@ class AppTheme {
         (states) => const IconThemeData(size: 22),
       ),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      backgroundColor: Colors.white,
+      backgroundColor: surfaceElevated,
       indicatorColor: greenPale,
       surfaceTintColor: Colors.transparent,
     ),
     navigationRailTheme: const NavigationRailThemeData(
-      backgroundColor: Colors.white,
+      backgroundColor: surfaceElevated,
       useIndicator: true,
       indicatorShape: StadiumBorder(),
       labelType: NavigationRailLabelType.all,
@@ -94,11 +110,11 @@ class AppTheme {
     ),
     cardTheme: CardThemeData(
       elevation: 0,
-      color: Colors.white,
+      color: surfaceElevated,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
-        side: const BorderSide(color: Color(0xFFE5ECE2)),
+        side: const BorderSide(color: border),
       ),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
@@ -122,14 +138,14 @@ class AppTheme {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: surfaceElevated,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
-        borderSide: const BorderSide(color: Color(0xFFD9E0D6)),
+        borderSide: const BorderSide(color: border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
-        borderSide: const BorderSide(color: Color(0xFFD9E0D6)),
+        borderSide: const BorderSide(color: border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(radiusMedium),
@@ -140,7 +156,7 @@ class AppTheme {
       labelStyle: const TextStyle(color: textMuted, fontSize: 14),
       floatingLabelStyle: const TextStyle(color: green),
     ),
-    dividerTheme: const DividerThemeData(color: Color(0xFFE2E7DC)),
+    dividerTheme: const DividerThemeData(color: border),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: greenDark,
       behavior: SnackBarBehavior.floating,
@@ -164,20 +180,22 @@ class AppTheme {
         color: Colors.white,
         fontWeight: FontWeight.w600,
       ),
-      side: const BorderSide(color: Color(0xFFD9E8D6)),
+      side: const BorderSide(color: Color(0xFFD5DDC8)),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radiusSmall),
       ),
       showCheckmark: false,
     ),
     menuTheme: const MenuThemeData(
-      style: MenuStyle(backgroundColor: WidgetStatePropertyAll(Colors.white)),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(surfaceElevated),
+      ),
     ),
     dialogTheme: DialogThemeData(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radiusLarge),
       ),
-      backgroundColor: Colors.white,
+      backgroundColor: surfaceElevated,
     ),
     textTheme: const TextTheme(
       headlineLarge: TextStyle(
