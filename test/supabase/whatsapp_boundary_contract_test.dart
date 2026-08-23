@@ -40,7 +40,10 @@ void main() {
       expect(screen, contains('FarmerFarmSummary.fromJson'));
       expect(screen, contains('_riskCircles'));
       expect(screen, contains('Farm details'));
-      expect(screen, contains('Satellite monitoring is ready'));
-    },
-  );
+    expect(screen, contains('Satellite monitoring is ready'));
+    expect(screen, contains("_setupComplete = data['status'] == 'completed'"));
+    expect(screen, contains('if (_setupComplete && _monitoring != null)'));
+    expect(screen, contains(".timeout(const Duration(seconds: 25))"));
+  },
+);
 }

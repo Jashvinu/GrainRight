@@ -71,6 +71,8 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   LatLng? _currentLocation;
   double _locationAccuracyMeters = 0;
   bool _userMovedMap = false;
+  bool _mapOnline = true;
+  StreamSubscription<Object>? _networkSubscription;
   LatLng? _searchedPlaceCenter;
   String? _searchedPlaceLabel;
   LatLng _center = LatLng(
@@ -85,6 +87,10 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
     _locationService = widget.locationService ?? LocationService();
     _ownsOfflineMapService = widget.mapService == null;
     _offlineMapService = widget.mapService ?? OfflineMapService();
+    unawaited(_refreshMapNetwork());
+    _networkSubscription = _networkStatusService.connectivityChanges.listen(
+      (_) => unawaited(_refreshMapNetwork()),
+    );
     if (widget.initialPolygon != null && widget.initialPolygon!.isNotEmpty) {
       _points.addAll(
         _openRing(PolygonGeometry.fromGeoJsonRing(widget.initialPolygon!)),
@@ -104,8 +110,23 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   void dispose() {
     _searchDebounce?.cancel();
     _searchController.dispose();
+    unawaited(_networkSubscription?.cancel());
     if (_ownsOfflineMapService) _offlineMapService.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshMapNetwork() async {
+    try {
+      final online = await _networkStatusService.isOnline(
+        timeout: const Duration(seconds: 2),
+      );
+      if (mounted && online != _mapOnline) {
+        setState(() => _mapOnline = online);
+      }
+    } catch (error) {
+      debugPrint('[BoundaryPolygonScreen._refreshMapNetwork] $error');
+      if (mounted && _mapOnline) setState(() => _mapOnline = false);
+    }
   }
 
   Future<void> _loadInitialTarget() async {
@@ -421,6 +442,15 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       }
       _userMovedMap = false;
       _applyLocation(location);
+    } catch (error) {
+      debugPrint('[BoundaryPolygonScreen._locateCurrentPosition] $error');
+      if (mounted) {
+        Get.snackbar(
+          UiStrings.t('location_unavailable_title'),
+          UiStrings.t('location_error_body'),
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingLocation = false);
     }
@@ -639,6 +669,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                 OfflineAwareTileLayer(
                   key: const ValueKey('farm-boundary-base-map-layer'),
                   urlTemplate: activeTileUrl,
+                  fallbackUrlTemplate: satelliteMode ? streetMapTileUrl : null,
                   // Only Farm satellite may read the downloaded satellite
                   // region. Street mode must never fall through to it.
                   offlineUrlTemplateOverride: satelliteMode
@@ -1060,6 +1091,54 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 12,
+            left: 12,
+            right: 12,
+            child: SafeArea(
+              bottom: false,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: _mapOnline
+                    ? const SizedBox.shrink(key: ValueKey('map-online'))
+                    : Material(
+                        key: const Key('farm_boundary_network_banner'),
+                        color: Colors.white.withValues(alpha: 0.95),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 9, 6, 9),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.cloud_off_outlined,
+                                color: AppTheme.warning,
+                                size: 19,
+                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'No internet. You can still draw; use a downloaded map for imagery.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                key: const Key('farm_boundary_retry_network'),
+                                tooltip: 'Retry connection',
+                                onPressed: () =>
+                                    unawaited(_refreshMapNetwork()),
+                                icon: const Icon(Icons.refresh_rounded),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
               ),
             ),
           ),

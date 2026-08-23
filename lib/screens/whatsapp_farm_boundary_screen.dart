@@ -57,10 +57,12 @@ class _WhatsappFarmBoundaryScreenState
         'type': 'Polygon',
         'coordinates': [polygon],
       };
-      final response = await Supabase.instance.client.functions.invoke(
-        'whatsapp-onboarding-boundary',
-        body: {'token': _token, 'geometry': geometry},
-      );
+      final response = await Supabase.instance.client.functions
+          .invoke(
+            'whatsapp-onboarding-boundary',
+            body: {'token': _token, 'geometry': geometry},
+          )
+          .timeout(const Duration(seconds: 25));
       final data = response.data is Map
           ? Map<String, dynamic>.from(response.data as Map)
           : const <String, dynamic>{};
@@ -120,10 +122,12 @@ class _WhatsappFarmBoundaryScreenState
       _summaryError = null;
     });
     try {
-      final response = await Supabase.instance.client.functions.invoke(
-        'whatsapp-onboarding-boundary',
-        body: {'token': _token, 'action': 'refresh'},
-      );
+      final response = await Supabase.instance.client.functions
+          .invoke(
+            'whatsapp-onboarding-boundary',
+            body: {'token': _token, 'action': 'refresh'},
+          )
+          .timeout(const Duration(seconds: 20));
       final data = _map(response.data);
       if (data['success'] == false) {
         throw StateError('${data['error'] ?? 'Could not refresh farm data.'}');
@@ -156,7 +160,7 @@ class _WhatsappFarmBoundaryScreenState
     _monitoring = rawSummary is Map
         ? FarmerFarmSummary.fromJson(Map<String, dynamic>.from(rawSummary))
         : null;
-    _setupComplete = data['status'] == 'completed' || _monitoring != null;
+    _setupComplete = data['status'] == 'completed';
   }
 
   @override
@@ -236,7 +240,8 @@ class _WhatsappFarmBoundaryScreenState
               _messageBanner(_summaryError!, isError: true),
             if (!_setupComplete) _setupPendingCard(),
             if (_setupComplete && _monitoring == null) _monitoringEmptyCard(),
-            if (_monitoring != null) _monitoringReport(_monitoring!),
+            if (_setupComplete && _monitoring != null)
+              _monitoringReport(_monitoring!),
             const SizedBox(height: 12),
             _whatsappContinueCard(),
           ],

@@ -226,7 +226,7 @@ void main() {
       );
       expect(fieldImageryTileUrl, isNotEmpty);
       expect(layer.urlTemplate, fieldImageryTileUrl);
-      expect(layer.fallbackUrlTemplate, isNull);
+      expect(layer.fallbackUrlTemplate, streetMapTileUrl);
 
       await tester.tap(find.byKey(const Key('farm_boundary_street_map')));
       await tester.pump();
