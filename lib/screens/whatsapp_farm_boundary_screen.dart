@@ -224,6 +224,19 @@ class _WhatsappFarmBoundaryScreenState
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
           children: [
             _farmHeader(),
+            if (_farmDetailText().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _sectionCard(
+                icon: Icons.agriculture_outlined,
+                color: AppTheme.greenDark,
+                title: _text(
+                  en: 'Farm details',
+                  hi: 'खेत का विवरण',
+                  mr: 'शेताचा तपशील',
+                ),
+                body: _farmDetailText(),
+              ),
+            ],
             const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
@@ -407,6 +420,22 @@ class _WhatsappFarmBoundaryScreenState
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
+        if (summary.lastUpdate == null)
+          _sectionCard(
+            icon: Icons.satellite_alt_outlined,
+            color: AppTheme.monitoring,
+            title: _text(
+              en: 'Satellite monitoring is ready',
+              hi: 'Satellite monitoring तैयार है',
+              mr: 'Satellite monitoring तयार आहे',
+            ),
+            body: _text(
+              en: 'Your farm details are saved. The first satellite scan will add crop health, moisture, risk cells, and more suggestions here.',
+              hi: 'आपके खेत का विवरण सेव है। पहली satellite scan यहां crop health, moisture, risk cells और अधिक सुझाव जोड़ेगी।',
+              mr: 'तुमच्या शेताचा तपशील सेव आहे. पहिल्या satellite scan नंतर येथे crop health, moisture, risk cells आणि अधिक सूचना दिसतील.',
+            ),
+          ),
+        if (summary.lastUpdate == null) const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: metricItems),
         const SizedBox(height: 12),
         if (disease.riskCells.isNotEmpty)
@@ -679,5 +708,38 @@ class _WhatsappFarmBoundaryScreenState
       'mr' => mr,
       _ => en,
     };
+  }
+
+  String _farmDetailText() {
+    final labels = <String, String>{
+      'crop': _text(en: 'Crop', hi: 'फसल', mr: 'पीक'),
+      'variety': _text(en: 'Variety', hi: 'किस्म', mr: 'वाण'),
+      'season': _text(en: 'Season', hi: 'मौसम', mr: 'हंगाम'),
+      'irrigation': _text(en: 'Irrigation', hi: 'सिंचाई', mr: 'सिंचन'),
+      'soil_type': _text(en: 'Soil', hi: 'मिट्टी', mr: 'माती'),
+      'ownership_type': _text(en: 'Ownership', hi: 'स्वामित्व', mr: 'मालकी'),
+      'seed_source': _text(
+        en: 'Seed source',
+        hi: 'बीज स्रोत',
+        mr: 'बियाणे स्रोत',
+      ),
+      'harvest_intent': _text(
+        en: 'Harvest use',
+        hi: 'कटाई उपयोग',
+        mr: 'कापणीचा उपयोग',
+      ),
+      'sowing_date': _text(
+        en: 'Sowing date',
+        hi: 'बुवाई तारीख',
+        mr: 'पेरणी तारीख',
+      ),
+    };
+    return labels.entries
+        .map((entry) {
+          final value = '${_farm[entry.key] ?? ''}'.trim();
+          return value.isEmpty ? '' : '${entry.value}: $value';
+        })
+        .where((line) => line.isNotEmpty)
+        .join('\n');
   }
 }

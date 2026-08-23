@@ -16,6 +16,17 @@ void main() {
     expect(function, contains('farm_data_snapshots'));
     expect(function, contains('disease_scout_zones'));
     expect(function, contains('disease_risk_cells'));
+    expect(function, contains('draftMonitoringSummary'));
+    expect(
+      function,
+      contains('summary: draftMonitoringSummary(updatedDraft.farm)'),
+    );
+    expect(
+      function,
+      contains(
+        'step: onboarding.flow_type === "existing_farmer_farm" ? "boundary_saved" : "review"',
+      ),
+    );
     expect(function, contains('.eq("step", "boundary")'));
     expect(function, contains('coordinates: [[...openRing, openRing[0]]]'));
   });
@@ -28,6 +39,8 @@ void main() {
       expect(screen, contains('whatsapp_saved_farm_map'));
       expect(screen, contains('FarmerFarmSummary.fromJson'));
       expect(screen, contains('_riskCircles'));
+      expect(screen, contains('Farm details'));
+      expect(screen, contains('Satellite monitoring is ready'));
     },
   );
 }

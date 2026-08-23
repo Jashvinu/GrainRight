@@ -372,6 +372,39 @@ function recommendationFromSnapshot(snapshot: Row): Row | null {
     : null;
 }
 
+function draftMonitoringSummary(farm: Row): Row {
+  const disease = {
+    scan_date: "",
+    crop: text(farm.crop),
+    season: text(farm.season),
+    images_analyzed: 0,
+    risk_cells_count: 0,
+    high_risk_cells: 0,
+    max_risk: 0,
+    top_disease_risks: {},
+    scout_zones: [],
+    risk_cells: [],
+  };
+  return {
+    farm,
+    satellite_metrics: {
+      water_level: null,
+      crop_health: null,
+      canopy: null,
+      last_update: "",
+    },
+    weather_context: {
+      weather_data_status: "missing",
+      weather_risk: null,
+      scan_date: "",
+      source: "onboarding",
+    },
+    disease,
+    advice: null,
+    monitoring_status: "not_available",
+  };
+}
+
 async function monitoringSummary(
   supabase: ReturnType<typeof serviceClient>,
   farmId: string,
@@ -486,7 +519,11 @@ async function loadBoundaryState(
   const draft = object(onboarding.draft);
   const draftFarm = object(draft.farm);
   const farmId = text(onboarding.farm_id);
-  const summary = farmId ? await monitoringSummary(supabase, farmId) : null;
+  const summary = farmId
+    ? await monitoringSummary(supabase, farmId)
+    : Object.keys(draftFarm).length > 0
+    ? draftMonitoringSummary(draftFarm)
+    : null;
   return {
     onboardingId: onboarding.id,
     status: text(onboarding.status),
@@ -569,7 +606,7 @@ Deno.serve(async (req) => {
       .from("whatsapp_farmer_onboardings")
       .update({
         draft: updatedDraft,
-        step: onboarding.flow_type === "existing_farmer_farm" ? "boundary_saved" : "crop",
+        step: onboarding.flow_type === "existing_farmer_farm" ? "boundary_saved" : "review",
         updated_at: new Date().toISOString(),
       })
       .eq("id", onboarding.id)
@@ -587,7 +624,7 @@ Deno.serve(async (req) => {
       geocodeStatus: geocode.status,
       status: "boundary_saved",
       farm: updatedDraft.farm,
-      summary: null,
+      summary: draftMonitoringSummary(updatedDraft.farm),
       returnToWhatsappUrl: whatsappReturnUrl(),
     }, 200, "whatsapp_boundary_saved");
   } catch (error) {
