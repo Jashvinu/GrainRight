@@ -42,6 +42,8 @@ class BoundaryPolygonScreen extends StatefulWidget {
 
 enum _BoundaryMapMode { browse, draw }
 
+enum _BoundaryBaseMap { street, farmSatellite }
+
 class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
@@ -64,6 +66,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   String? _searchError;
   int _searchGeneration = 0;
   _BoundaryMapMode _mode = _BoundaryMapMode.browse;
+  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.farmSatellite;
   OfflineMapRegionRecord? _selectedOfflineRegion;
   LatLng? _currentLocation;
   double _locationAccuracyMeters = 0;
@@ -428,6 +431,27 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
     setState(() => _mode = mode);
   }
 
+  void _selectBaseMap(_BoundaryBaseMap baseMap) {
+    if (_baseMap == baseMap) return;
+    setState(() => _baseMap = baseMap);
+  }
+
+  String _baseMapLabel(_BoundaryBaseMap baseMap) {
+    final language = LocaleText.languageCode();
+    if (baseMap == _BoundaryBaseMap.street) {
+      return switch (language) {
+        'hi' => 'सड़क',
+        'mr' => 'रस्ते',
+        _ => 'Street',
+      };
+    }
+    return switch (language) {
+      'hi' => 'खेत सैटेलाइट',
+      'mr' => 'शेत उपग्रह',
+      _ => 'Farm satellite',
+    };
+  }
+
   void _addPoint(TapPosition _, LatLng point) {
     if (_mode != _BoundaryMapMode.draw) return;
     _userMovedMap = true;
@@ -546,6 +570,10 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final satelliteMode = _baseMap == _BoundaryBaseMap.farmSatellite;
+    final activeTileUrl = satelliteMode
+        ? fieldImageryTileUrl
+        : streetMapTileUrl;
     final areaHectares = PolygonGeometry.areaHectares(_points);
     final boundaryIssue = PolygonGeometry.boundaryIssue(_points);
     final instruction = _mode == _BoundaryMapMode.browse
@@ -610,10 +638,19 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               if (widget.loadMapTiles)
                 OfflineAwareTileLayer(
                   key: const ValueKey('farm-boundary-base-map-layer'),
-                  urlTemplate: fieldImageryTileUrl,
-                  offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
-                  maxNativeZoom: fieldImageryMaxNativeZoom,
-                  maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
+                  urlTemplate: activeTileUrl,
+                  // Only Farm satellite may read the downloaded satellite
+                  // region. Street mode must never fall through to it.
+                  offlineUrlTemplateOverride: satelliteMode
+                      ? _selectedOfflineRegion?.sourceId
+                      : null,
+                  preferOfflineTemplateWhenOffline: satelliteMode,
+                  maxNativeZoom: satelliteMode
+                      ? fieldImageryMaxNativeZoom
+                      : mapTileMaxNativeZoom,
+                  maxOfflineNativeZoom: satelliteMode
+                      ? _selectedOfflineRegion?.maxZoom
+                      : null,
                   keepBuffer: 3,
                   panBuffer: 1,
                   tileDisplay: const TileDisplay.fadeIn(
@@ -858,6 +895,32 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                         children: [
                           LayoutBuilder(
                             builder: (context, constraints) {
+                              final mapView = _BoundaryControlGroup(
+                                key: const Key('farm_boundary_map_view_group'),
+                                semanticLabel: UiStrings.t('choose_map_view'),
+                                icon: Icons.layers_outlined,
+                                first: _BoundaryModeButton(
+                                  key: const Key('farm_boundary_street_map'),
+                                  selected: _baseMap == _BoundaryBaseMap.street,
+                                  label: _baseMapLabel(_BoundaryBaseMap.street),
+                                  semanticLabel:
+                                      '${_baseMapLabel(_BoundaryBaseMap.street)} map',
+                                  onTap: () =>
+                                      _selectBaseMap(_BoundaryBaseMap.street),
+                                ),
+                                second: _BoundaryModeButton(
+                                  key: const Key('farm_boundary_satellite_map'),
+                                  selected: satelliteMode,
+                                  label: _baseMapLabel(
+                                    _BoundaryBaseMap.farmSatellite,
+                                  ),
+                                  semanticLabel:
+                                      '${_baseMapLabel(_BoundaryBaseMap.farmSatellite)} map',
+                                  onTap: () => _selectBaseMap(
+                                    _BoundaryBaseMap.farmSatellite,
+                                  ),
+                                ),
+                              );
                               final mapAction = _BoundaryControlGroup(
                                 key: const Key(
                                   'farm_boundary_map_action_group',
@@ -887,7 +950,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                               if (constraints.maxWidth < 260) {
                                 return Column(
                                   children: [
-                                    const _SatelliteOnlyBadge(),
+                                    mapView,
                                     const SizedBox(height: 4),
                                     mapAction,
                                   ],
@@ -895,7 +958,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                               }
                               return Row(
                                 children: [
-                                  const Expanded(child: _SatelliteOnlyBadge()),
+                                  Expanded(child: mapView),
                                   const SizedBox(width: 6),
                                   Expanded(child: mapAction),
                                 ],
@@ -1059,10 +1122,14 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               ),
             ),
           ),
-          const Positioned(
+          Positioned(
             left: 12,
             bottom: 142,
-            child: _MapAttributionButton(),
+            child: _MapAttributionButton(
+              activeLabel: satelliteMode
+                  ? mapTileProviderLabel(fieldImageryTileUrl)
+                  : mapTileProviderLabel(streetMapTileUrl),
+            ),
           ),
           Positioned(
             left: 16,
@@ -1281,61 +1348,6 @@ class _BoundaryModeButton extends StatelessWidget {
   }
 }
 
-class _SatelliteOnlyBadge extends StatelessWidget {
-  const _SatelliteOnlyBadge();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      container: true,
-      label: UiStrings.t('farm_view'),
-      child: DecoratedBox(
-        key: const Key('farm_boundary_satellite_only'),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.97),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: const Color(0xFFD9E4D8)),
-          boxShadow: const [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.satellite_alt_rounded,
-                size: 17,
-                color: AppTheme.greenDark,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  UiStrings.t('farm_view'),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppTheme.greenDark,
-                    fontSize: 11,
-                    height: 1.05,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BoundaryControlGroup extends StatelessWidget {
   final String semanticLabel;
   final IconData icon;
@@ -1396,7 +1408,9 @@ class _BoundaryControlGroup extends StatelessWidget {
 }
 
 class _MapAttributionButton extends StatelessWidget {
-  const _MapAttributionButton();
+  final String activeLabel;
+
+  const _MapAttributionButton({required this.activeLabel});
 
   static final _sources = <({String label, Uri url})>[
     (label: 'MapTiler', url: Uri.parse('https://www.maptiler.com/copyright/')),
@@ -1428,11 +1442,11 @@ class _MapAttributionButton extends StatelessWidget {
               child: Text('© ${source.label}'),
             ),
         ],
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           child: Text(
-            '©',
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
+            '© $activeLabel',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
           ),
         ),
       ),

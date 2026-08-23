@@ -4,15 +4,19 @@ import 'runtime_local_config.dart';
 
 class RuntimeConfig {
   static const _defaultOfflineTileSourceLabel = 'Configured field imagery';
-  static const _defaultOnlineFieldTileUrlTemplate =
+  static const defaultOnlineStreetTileUrlTemplate =
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+  static const defaultOnlineSatelliteTileUrlTemplate =
       'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  static const _defaultOnlineFieldTileUrlTemplate =
+      defaultOnlineSatelliteTileUrlTemplate;
   static const _channel = MethodChannel('grainright.wrkfarm/config');
   static const _mapTilerApiKeyFallback = String.fromEnvironment(
     'MAPTILER_API_KEY',
   );
   static const onlineBaseTileUrlTemplate = String.fromEnvironment(
     'ONLINE_BASE_TILE_URL_TEMPLATE',
-    defaultValue: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    defaultValue: defaultOnlineStreetTileUrlTemplate,
   );
   static const _onlineSatelliteTileUrlTemplate = String.fromEnvironment(
     'ONLINE_SATELLITE_TILE_URL_TEMPLATE',

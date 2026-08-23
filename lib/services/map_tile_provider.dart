@@ -14,15 +14,27 @@ import 'network_status_service.dart';
 
 String get fieldImageryTileUrl {
   final satellite = RuntimeConfig.onlineSatelliteTileUrlTemplate.trim();
-  return satellite.isNotEmpty ? satellite : openStreetMapTileUrl;
+  return satellite.isNotEmpty
+      ? satellite
+      : RuntimeConfig.defaultOnlineSatelliteTileUrlTemplate;
 }
 
-const String _defaultOpenStreetMapTileUrl =
-    'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-final String openStreetMapTileUrl =
+final String streetMapTileUrl =
     RuntimeConfig.onlineBaseTileUrlTemplate.trim().isNotEmpty
     ? RuntimeConfig.onlineBaseTileUrlTemplate
-    : _defaultOpenStreetMapTileUrl;
+    : RuntimeConfig.defaultOnlineStreetTileUrlTemplate;
+// Kept for callers outside the boundary screen; this now points to the
+// CORS-compatible Esri street map rather than the old OSM endpoint.
+final String openStreetMapTileUrl = streetMapTileUrl;
+String mapTileProviderLabel(String template) {
+  final lower = template.toLowerCase();
+  if (lower.contains('maptiler.com')) return 'MapTiler';
+  if (lower.contains('arcgisonline.com') || lower.contains('esri.com')) {
+    return 'Esri';
+  }
+  return 'Map provider';
+}
+
 const String fieldRoadsTileUrl =
     'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}';
 const String fieldPlacesTileUrl =
@@ -53,7 +65,7 @@ List<Widget> fieldImageryTileLayers({
       offlineUrlTemplateOverride: offlineUrlTemplateOverride,
       maxNativeZoom: fieldImageryMaxNativeZoom,
       maxOfflineNativeZoom: maxOfflineNativeZoom,
-      fallbackUrlTemplate: allowRoadFallback ? openStreetMapTileUrl : null,
+      fallbackUrlTemplate: allowRoadFallback ? streetMapTileUrl : null,
       keepBuffer: keepBuffer,
       panBuffer: panBuffer,
       tileDisplay: tileDisplay,
@@ -100,6 +112,14 @@ bool shouldShowFieldReferenceLabels(String template) {
   return !lower.contains('openstreetmap.org') &&
       !lower.contains('/maps/hybrid/') &&
       !lower.contains('maptiler.com/maps/hybrid');
+}
+
+Map<String, String> mapTileRequestHeaders({
+  required bool isWeb,
+  String userAgentPackageName = 'grainright.wrkfarm',
+}) {
+  if (isWeb) return const <String, String>{};
+  return {'User-Agent': userAgentPackageName};
 }
 
 class OfflineAwareTileLayer extends StatefulWidget {
@@ -369,7 +389,12 @@ class _CachedMapTileProvider extends TileProvider {
   bool _writeNetworkTiles = false;
 
   _CachedMapTileProvider({required String userAgentPackageName})
-    : super(headers: {'User-Agent': userAgentPackageName});
+    : super(
+        headers: mapTileRequestHeaders(
+          isWeb: kIsWeb,
+          userAgentPackageName: userAgentPackageName,
+        ),
+      );
 
   void configure({
     required String sourceId,
