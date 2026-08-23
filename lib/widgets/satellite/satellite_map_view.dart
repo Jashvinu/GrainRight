@@ -20,6 +20,7 @@ class SatelliteMapView extends StatelessWidget {
   final bool showZoomControls;
   final bool autoFitContent;
   final bool showReferenceLabels;
+  final bool satelliteOnly;
 
   /// Fallback center when there is no polygon (e.g. a point-only farm). Used
   /// before [SatelliteConfig.defaultCenter] so the map opens on the farm.
@@ -40,6 +41,7 @@ class SatelliteMapView extends StatelessWidget {
     this.showZoomControls = false,
     this.autoFitContent = true,
     this.showReferenceLabels = true,
+    this.satelliteOnly = false,
     this.center,
   });
 
@@ -59,6 +61,7 @@ class SatelliteMapView extends StatelessWidget {
       showZoomControls: showZoomControls,
       autoFitContent: autoFitContent,
       showReferenceLabels: showReferenceLabels,
+      satelliteOnly: satelliteOnly,
       center: center,
       key: key,
     );
@@ -79,6 +82,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final bool showZoomControls;
   final bool autoFitContent;
   final bool showReferenceLabels;
+  final bool satelliteOnly;
   final LatLng? center;
 
   const _SatelliteMapViewInternal({
@@ -96,6 +100,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.showZoomControls = false,
     this.autoFitContent = true,
     this.showReferenceLabels = true,
+    this.satelliteOnly = false,
     this.center,
   });
 
@@ -215,7 +220,11 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 OfflineMapBackground(
                   message: UiStrings.t('offline_map_saved_boundary'),
                 ),
-                ...fieldImageryTileLayers(includeReferenceLabels: false),
+                ...fieldImageryTileLayers(
+                  includeReferenceLabels:
+                      widget.showReferenceLabels && !widget.satelliteOnly,
+                  allowRoadFallback: !widget.satelliteOnly,
+                ),
                 if (widget.tileUrl != null && widget.tileUrl!.isNotEmpty)
                   OfflineAwareTileLayer(
                     urlTemplate: widget.tileUrl!,
@@ -233,7 +242,8 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                       ),
                     ],
                   ),
-                if (widget.showReferenceLabels &&
+                if (!widget.satelliteOnly &&
+                    widget.showReferenceLabels &&
                     shouldShowFieldReferenceLabels(fieldImageryTileUrl))
                   ...fieldReferenceTileLayers(),
                 if (widget.farmPolygon != null &&

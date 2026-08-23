@@ -79,6 +79,7 @@ class _ZoomRange {
 
 class OfflineMapService {
   static const mapTilerProvider = 'maptiler';
+  static const nominatimProvider = 'nominatim';
   static const defaultRadiusKm = 2.0;
   static const defaultMaxRadiusKm = 20.0;
   static const defaultMinZoom = 15;
@@ -141,18 +142,56 @@ class OfflineMapService {
     if (query.length < 2) return const [];
 
     final mapTilerKey = (await _mapTilerApiKeyProvider()).trim();
-    if (mapTilerKey.isEmpty) {
-      throw StateError(
-        'MapTiler search is not configured. Set MAPTILER_API_KEY.',
+    if (mapTilerKey.isNotEmpty) {
+      try {
+        final mapTilerResults = await _searchMapTilerPlaces(
+          query,
+          mapTilerKey,
+          languageCode: languageCode,
+          proximityLatitude: proximityLatitude,
+          proximityLongitude: proximityLongitude,
+        );
+        if (mapTilerResults.isNotEmpty) return mapTilerResults;
+      } catch (error) {
+        debugPrint('[OfflineMapService.searchPlaces.mapTiler] $error');
+      }
+    }
+
+    return _searchNominatimPlaces(query, languageCode: languageCode);
+  }
+
+  Future<List<OfflinePlacePrediction>> _searchNominatimPlaces(
+    String query, {
+    required String languageCode,
+  }) async {
+    final language = languageCode == 'hi' || languageCode == 'mr'
+        ? '$languageCode,en'
+        : 'en,hi,mr';
+    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+      'q': query,
+      'format': 'jsonv2',
+      'addressdetails': '1',
+      'limit': '8',
+      'countrycodes': 'in',
+      'accept-language': language,
+    });
+    final response = await _client.get(
+      uri,
+      headers: {'Accept': 'application/json', 'Accept-Language': language},
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw http.ClientException(
+        'Nominatim place search failed with ${response.statusCode}',
+        uri,
       );
     }
-    return _searchMapTilerPlaces(
-      query,
-      mapTilerKey,
-      languageCode: languageCode,
-      proximityLatitude: proximityLatitude,
-      proximityLongitude: proximityLongitude,
-    );
+    final decoded = jsonDecode(response.body);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map>()
+        .map(_nominatimToPrediction)
+        .whereType<OfflinePlacePrediction>()
+        .toList(growable: false);
   }
 
   Future<List<OfflinePlacePrediction>> _searchMapTilerPlaces(
@@ -203,9 +242,7 @@ class OfflineMapService {
   Future<OfflinePlaceResult?> resolvePrediction(
     OfflinePlacePrediction prediction,
   ) async {
-    if (prediction.provider == mapTilerProvider &&
-        prediction.latitude != null &&
-        prediction.longitude != null) {
+    if (prediction.latitude != null && prediction.longitude != null) {
       return OfflinePlaceResult(
         placeId: prediction.placeId,
         title: prediction.title,
@@ -215,6 +252,49 @@ class OfflineMapService {
       );
     }
     return null;
+  }
+
+  OfflinePlacePrediction? _nominatimToPrediction(Map raw) {
+    final latitude = double.tryParse('${raw['lat'] ?? ''}');
+    final longitude = double.tryParse('${raw['lon'] ?? ''}');
+    if (latitude == null || longitude == null) return null;
+
+    final displayName = '${raw['display_name'] ?? ''}'.trim();
+    final address = raw['address'];
+    final addressMap = address is Map ? address : const <String, dynamic>{};
+    final title = _nominatimTitle(raw, addressMap, displayName);
+    final subtitle = displayName.isEmpty || displayName == title
+        ? ''
+        : displayName;
+    final placeId =
+        '${raw['osm_type'] ?? 'place'}:${raw['osm_id'] ?? displayName}';
+    return OfflinePlacePrediction(
+      placeId: placeId,
+      title: title,
+      subtitle: subtitle,
+      provider: nominatimProvider,
+      address: displayName,
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
+
+  String _nominatimTitle(Map raw, Map address, String displayName) {
+    final title =
+        [
+              address['village'],
+              address['town'],
+              address['city'],
+              address['municipality'],
+              address['suburb'],
+              raw['name'],
+            ]
+            .map((value) => '$value'.trim())
+            .firstWhere(
+              (value) => value.isNotEmpty && value != 'null',
+              orElse: () => displayName,
+            );
+    return title;
   }
 
   Stream<OfflineMapDownloadProgress> downloadRegion({

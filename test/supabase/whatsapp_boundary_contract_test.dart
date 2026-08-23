@@ -17,6 +17,7 @@ void main() {
     expect(function, contains('disease_scout_zones'));
     expect(function, contains('disease_risk_cells'));
     expect(function, contains('.eq("step", "boundary")'));
+    expect(function, contains('coordinates: [[...openRing, openRing[0]]]'));
   });
 
   test(

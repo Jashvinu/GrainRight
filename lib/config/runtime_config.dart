@@ -49,7 +49,7 @@ class RuntimeConfig {
     final override = _offlineTileUrlTemplateFallback.trim();
     if (_isUsable(override)) return override;
     final apiKey = mapTilerApiKey;
-    if (apiKey.isNotEmpty) return mapTilerHybridTileUrlTemplate(apiKey);
+    if (apiKey.isNotEmpty) return mapTilerSatelliteTileUrlTemplate(apiKey);
     return '';
   }
 
@@ -57,7 +57,7 @@ class RuntimeConfig {
     final label = _offlineTileSourceLabelFallback.trim();
     if (_isUsable(label)) return label;
     if (_isMapTilerTemplate(offlineTileUrlTemplate)) {
-      return 'MapTiler Hybrid tiles';
+      return 'MapTiler satellite tiles';
     }
     return _defaultOfflineTileSourceLabel;
   }
@@ -71,13 +71,17 @@ class RuntimeConfig {
     if (localOverride.isNotEmpty) return localOverride;
     final apiKey = mapTilerApiKey;
     if (apiKey.isNotEmpty) {
-      return mapTilerHybridTileUrlTemplate(apiKey);
+      return mapTilerSatelliteTileUrlTemplate(apiKey);
     }
     return _defaultOnlineFieldTileUrlTemplate;
   }
 
   static String mapTilerHybridTileUrlTemplate(String apiKey) {
     return 'https://api.maptiler.com/maps/hybrid/256/{z}/{x}/{y}@2x.jpg?key=$apiKey';
+  }
+
+  static String mapTilerSatelliteTileUrlTemplate(String apiKey) {
+    return 'https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}@2x.jpg?key=$apiKey';
   }
 
   static String get publicTraceBaseUrl {
@@ -126,7 +130,7 @@ class RuntimeConfig {
     if (template.isNotEmpty) return template;
 
     final apiKey = await mapTilerApiKeyRuntime();
-    if (apiKey.isNotEmpty) return mapTilerHybridTileUrlTemplate(apiKey);
+    if (apiKey.isNotEmpty) return mapTilerSatelliteTileUrlTemplate(apiKey);
     return '';
   }
 
@@ -139,7 +143,7 @@ class RuntimeConfig {
     if (label.isNotEmpty) return label;
 
     final template = await offlineTileUrlTemplateRuntime();
-    if (_isMapTilerTemplate(template)) return 'MapTiler Hybrid tiles';
+    if (_isMapTilerTemplate(template)) return 'MapTiler satellite tiles';
     return _defaultOfflineTileSourceLabel;
   }
 

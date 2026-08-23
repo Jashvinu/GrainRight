@@ -236,7 +236,8 @@ class _WhatsappFarmBoundaryScreenState
                     ? null
                     : _riskCircles(_monitoring!),
                 showZoomControls: true,
-                showReferenceLabels: true,
+                showReferenceLabels: false,
+                satelliteOnly: true,
               ),
             ),
             const SizedBox(height: 14),

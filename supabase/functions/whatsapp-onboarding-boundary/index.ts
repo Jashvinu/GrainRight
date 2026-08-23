@@ -67,7 +67,10 @@ function validateGeometry(raw: unknown): Row {
   if (hasSelfIntersection(openRing)) {
     throw new Error("The farm boundary cannot cross itself.");
   }
-  return geometry;
+  return {
+    type: "Polygon",
+    coordinates: [[...openRing, openRing[0]]],
+  };
 }
 
 function orientation(a: [number, number], b: [number, number], c: [number, number]): number {

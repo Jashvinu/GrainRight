@@ -41,6 +41,7 @@ List<Widget> fieldImageryTileLayers({
   int keepBuffer = 2,
   int panBuffer = 1,
   TileDisplay tileDisplay = const TileDisplay.fadeIn(),
+  bool allowRoadFallback = true,
 }) {
   final imageryTemplate = (urlTemplate?.trim().isNotEmpty ?? false)
       ? urlTemplate!.trim()
@@ -52,7 +53,7 @@ List<Widget> fieldImageryTileLayers({
       offlineUrlTemplateOverride: offlineUrlTemplateOverride,
       maxNativeZoom: fieldImageryMaxNativeZoom,
       maxOfflineNativeZoom: maxOfflineNativeZoom,
-      fallbackUrlTemplate: openStreetMapTileUrl,
+      fallbackUrlTemplate: allowRoadFallback ? openStreetMapTileUrl : null,
       keepBuffer: keepBuffer,
       panBuffer: panBuffer,
       tileDisplay: tileDisplay,

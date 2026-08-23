@@ -42,8 +42,6 @@ class BoundaryPolygonScreen extends StatefulWidget {
 
 enum _BoundaryMapMode { browse, draw }
 
-enum _BoundaryBaseMap { roads, satellite }
-
 class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
@@ -66,7 +64,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
   String? _searchError;
   int _searchGeneration = 0;
   _BoundaryMapMode _mode = _BoundaryMapMode.browse;
-  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.satellite;
   OfflineMapRegionRecord? _selectedOfflineRegion;
   LatLng? _currentLocation;
   double _locationAccuracyMeters = 0;
@@ -267,7 +264,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       _center = center;
       _zoom = zoom;
       _selectedOfflineRegion = region;
-      _baseMap = _BoundaryBaseMap.satellite;
       _mode = _BoundaryMapMode.browse;
       _searchResults = const [];
       _searchError = null;
@@ -301,39 +297,51 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       _searching = true;
       _searchError = null;
     });
-    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
-      try {
-        final proximity = _mapReady ? _mapController.camera.center : _center;
-        final results = await _offlineMapService.searchPlaces(
-          query,
-          languageCode: LocaleText.languageCode(),
-          proximityLatitude: proximity.latitude,
-          proximityLongitude: proximity.longitude,
-        );
-        if (!mounted || generation != _searchGeneration) return;
-        setState(() {
-          _searchResults = results;
-          _searchError = results.isEmpty
-              ? UiStrings.t('no_map_places_found')
-              : null;
-        });
-      } catch (error) {
-        if (!mounted || generation != _searchGeneration) return;
-        final missingKey =
-            error is StateError &&
-            error.toString().contains('MAPTILER_API_KEY');
-        setState(() {
-          _searchResults = const [];
-          _searchError = UiStrings.t(
-            missingKey ? 'map_search_not_configured' : 'map_search_failed',
-          );
-        });
-      } finally {
-        if (mounted && generation == _searchGeneration) {
-          setState(() => _searching = false);
-        }
-      }
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () {
+      unawaited(_runSearch(query, generation));
     });
+  }
+
+  void _searchNow() {
+    _searchDebounce?.cancel();
+    _searchGeneration += 1;
+    final generation = _searchGeneration;
+    final query = _searchController.text.trim();
+    if (query.length < 2) return;
+    setState(() {
+      _searching = true;
+      _searchError = null;
+    });
+    unawaited(_runSearch(query, generation));
+  }
+
+  Future<void> _runSearch(String query, int generation) async {
+    try {
+      final proximity = _mapReady ? _mapController.camera.center : _center;
+      final results = await _offlineMapService.searchPlaces(
+        query,
+        languageCode: LocaleText.languageCode(),
+        proximityLatitude: proximity.latitude,
+        proximityLongitude: proximity.longitude,
+      );
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searchResults = results;
+        _searchError = results.isEmpty
+            ? UiStrings.t('no_map_places_found')
+            : null;
+      });
+    } catch (_) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searchResults = const [];
+        _searchError = UiStrings.t('map_search_failed');
+      });
+    } finally {
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _searching = false);
+      }
+    }
   }
 
   Future<void> _selectSearchResult(OfflinePlacePrediction prediction) async {
@@ -363,7 +371,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
         _searchedPlaceLabel = place.address.trim().isEmpty
             ? place.title
             : place.address;
-        _baseMap = _BoundaryBaseMap.satellite;
         _mode = _BoundaryMapMode.draw;
       });
       _moveMap(center, 18);
@@ -393,11 +400,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       _searchError = null;
       _searching = false;
     });
-  }
-
-  void _selectBaseMap(_BoundaryBaseMap baseMap) {
-    if (_baseMap == baseMap) return;
-    setState(() => _baseMap = baseMap);
   }
 
   Future<void> _locateCurrentPosition() async {
@@ -608,34 +610,10 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               if (widget.loadMapTiles)
                 OfflineAwareTileLayer(
                   key: const ValueKey('farm-boundary-base-map-layer'),
-                  urlTemplate: _baseMap == _BoundaryBaseMap.roads
-                      ? openStreetMapTileUrl
-                      : fieldImageryTileUrl,
-                  fallbackUrlTemplate: _baseMap == _BoundaryBaseMap.satellite
-                      ? openStreetMapTileUrl
-                      : null,
-                  offlineUrlTemplateOverride:
-                      _baseMap == _BoundaryBaseMap.satellite
-                      ? _selectedOfflineRegion?.sourceId
-                      : null,
-                  maxNativeZoom: _baseMap == _BoundaryBaseMap.roads
-                      ? mapTileMaxNativeZoom
-                      : fieldImageryMaxNativeZoom,
-                  maxOfflineNativeZoom: _baseMap == _BoundaryBaseMap.satellite
-                      ? _selectedOfflineRegion?.maxZoom
-                      : null,
-                  keepBuffer: 3,
-                  panBuffer: 1,
-                  tileDisplay: const TileDisplay.fadeIn(
-                    duration: Duration(milliseconds: 80),
-                    startOpacity: 0.35,
-                    reloadStartOpacity: 0.35,
-                  ),
-                ),
-              if (widget.loadMapTiles &&
-                  _baseMap == _BoundaryBaseMap.satellite &&
-                  shouldShowFieldReferenceLabels(fieldImageryTileUrl))
-                ...fieldReferenceTileLayers(
+                  urlTemplate: fieldImageryTileUrl,
+                  offlineUrlTemplateOverride: _selectedOfflineRegion?.sourceId,
+                  maxNativeZoom: fieldImageryMaxNativeZoom,
+                  maxOfflineNativeZoom: _selectedOfflineRegion?.maxZoom,
                   keepBuffer: 3,
                   panBuffer: 1,
                   tileDisplay: const TileDisplay.fadeIn(
@@ -780,6 +758,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                       controller: _searchController,
                       textInputAction: TextInputAction.search,
                       onChanged: _onSearchChanged,
+                      onSubmitted: (_) => _searchNow(),
                       decoration: InputDecoration(
                         hintText: UiStrings.t('search_village_field_area'),
                         prefixIcon: const Icon(Icons.search_rounded),
@@ -879,29 +858,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                         children: [
                           LayoutBuilder(
                             builder: (context, constraints) {
-                              final mapView = _BoundaryControlGroup(
-                                key: const Key('farm_boundary_map_view_group'),
-                                semanticLabel: UiStrings.t('choose_map_view'),
-                                icon: Icons.layers_outlined,
-                                first: _BoundaryModeButton(
-                                  key: const Key('farm_boundary_road_map'),
-                                  selected: _baseMap == _BoundaryBaseMap.roads,
-                                  label: UiStrings.t('roads_view_short'),
-                                  semanticLabel: UiStrings.t('roads_view'),
-                                  onTap: () =>
-                                      _selectBaseMap(_BoundaryBaseMap.roads),
-                                ),
-                                second: _BoundaryModeButton(
-                                  key: const Key('farm_boundary_satellite_map'),
-                                  selected:
-                                      _baseMap == _BoundaryBaseMap.satellite,
-                                  label: UiStrings.t('farm_view_short'),
-                                  semanticLabel: UiStrings.t('farm_view'),
-                                  onTap: () => _selectBaseMap(
-                                    _BoundaryBaseMap.satellite,
-                                  ),
-                                ),
-                              );
                               final mapAction = _BoundaryControlGroup(
                                 key: const Key(
                                   'farm_boundary_map_action_group',
@@ -931,7 +887,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                               if (constraints.maxWidth < 260) {
                                 return Column(
                                   children: [
-                                    mapView,
+                                    const _SatelliteOnlyBadge(),
                                     const SizedBox(height: 4),
                                     mapAction,
                                   ],
@@ -939,7 +895,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                               }
                               return Row(
                                 children: [
-                                  Expanded(child: mapView),
+                                  const Expanded(child: _SatelliteOnlyBadge()),
                                   const SizedBox(width: 6),
                                   Expanded(child: mapAction),
                                 ],
@@ -947,8 +903,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                             },
                           ),
                           if (_searchedPlaceLabel != null ||
-                              (_baseMap == _BoundaryBaseMap.satellite &&
-                                  _selectedOfflineRegion != null)) ...[
+                              _selectedOfflineRegion != null) ...[
                             const SizedBox(height: 6),
                             DecoratedBox(
                               key: const Key('farm_boundary_map_status'),
@@ -1007,13 +962,9 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                                         ],
                                       ),
                                     if (_searchedPlaceLabel != null &&
-                                        _baseMap ==
-                                            _BoundaryBaseMap.satellite &&
                                         _selectedOfflineRegion != null)
                                       const SizedBox(height: 5),
-                                    if (_baseMap ==
-                                            _BoundaryBaseMap.satellite &&
-                                        _selectedOfflineRegion != null)
+                                    if (_selectedOfflineRegion != null)
                                       Row(
                                         children: [
                                           const Icon(
@@ -1323,6 +1274,61 @@ class _BoundaryModeButton extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SatelliteOnlyBadge extends StatelessWidget {
+  const _SatelliteOnlyBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: UiStrings.t('farm_view'),
+      child: DecoratedBox(
+        key: const Key('farm_boundary_satellite_only'),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.97),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: const Color(0xFFD9E4D8)),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.satellite_alt_rounded,
+                size: 17,
+                color: AppTheme.greenDark,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  UiStrings.t('farm_view'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.greenDark,
+                    fontSize: 11,
+                    height: 1.05,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

@@ -4959,9 +4959,13 @@ class UiStrings {
           '{region} नकाशावर दाखवले आहे. शेत सीमा काढण्यासाठी कोपऱ्यांवर टॅप करा.',
     },
     'roads_view': {'en': 'Roads view', 'hi': 'सड़क नक्शा', 'mr': 'रस्ते नकाशा'},
-    'farm_view': {'en': 'Farm view', 'hi': 'खेत दृश्य', 'mr': 'शेत दृश्य'},
+    'farm_view': {
+      'en': 'Satellite view',
+      'hi': 'सैटेलाइट दृश्य',
+      'mr': 'उपग्रह दृश्य',
+    },
     'roads_view_short': {'en': 'Roads', 'hi': 'सड़क', 'mr': 'रस्ते'},
-    'farm_view_short': {'en': 'Farm', 'hi': 'खेत', 'mr': 'शेत'},
+    'farm_view_short': {'en': 'Satellite', 'hi': 'सैटेलाइट', 'mr': 'उपग्रह'},
     'choose_map_view': {
       'en': '1. Choose map view',
       'hi': '1. नक्शा दृश्य चुनें',

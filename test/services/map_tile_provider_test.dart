@@ -20,6 +20,13 @@ void main() {
     expect(imageryLayer.panBuffer, 1);
     expect(imageryLayer.tileDisplay, same(tileDisplay));
 
+    final satelliteOnlyLayers = fieldImageryTileLayers(
+      allowRoadFallback: false,
+    );
+    final satelliteOnlyLayer =
+        satelliteOnlyLayers.first as OfflineAwareTileLayer;
+    expect(satelliteOnlyLayer.fallbackUrlTemplate, isNull);
+
     final referenceLayers = fieldReferenceTileLayers(
       keepBuffer: 3,
       panBuffer: 1,

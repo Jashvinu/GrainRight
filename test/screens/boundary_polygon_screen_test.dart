@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -46,8 +45,11 @@ void main() {
 
     final map = find.byKey(const Key('farm_boundary_map'));
     expect(map, findsOneWidget);
-    expect(find.text('Roads'), findsOneWidget);
-    expect(find.text('Farm'), findsOneWidget);
+    expect(find.text('Satellite view'), findsOneWidget);
+    expect(
+      find.byKey(const Key('farm_boundary_satellite_only')),
+      findsOneWidget,
+    );
     expect(find.text('Move'), findsOneWidget);
     expect(find.text('Mark'), findsOneWidget);
     expect(find.text('Map view'), findsNothing);
@@ -65,43 +67,22 @@ void main() {
     expect(find.byTooltip('Save farm boundary'), findsOneWidget);
     expect(find.text('1. Choose map view'), findsNothing);
     expect(find.text('2. Move map or mark farm'), findsNothing);
-    final roadControl = find.byKey(const Key('farm_boundary_road_map'));
-    final farmControl = find.byKey(const Key('farm_boundary_satellite_map'));
     final semantics = tester.ensureSemantics();
-    expect(
-      tester.getSemantics(farmControl).flagsCollection.isSelected,
-      Tristate.isTrue,
-    );
     final moveControl = find.byKey(const Key('farm_boundary_browse_mode'));
     final markControl = find.byKey(const Key('farm_boundary_draw_mode'));
-    expect(
-      tester.getCenter(roadControl).dy,
-      closeTo(tester.getCenter(farmControl).dy, 0.1),
-    );
     expect(
       tester.getCenter(moveControl).dy,
       closeTo(tester.getCenter(markControl).dy, 0.1),
     );
-    expect(
-      tester.getCenter(roadControl).dy,
-      closeTo(tester.getCenter(markControl).dy, 0.1),
-    );
-    final mapViewGroup = find.byKey(const Key('farm_boundary_map_view_group'));
     final mapActionGroup = find.byKey(
       const Key('farm_boundary_map_action_group'),
     );
     final compactControls = find.byKey(
       const Key('farm_boundary_compact_controls'),
     );
-    expect(
-      tester.getTopRight(mapViewGroup).dx,
-      lessThan(tester.getTopLeft(mapActionGroup).dx),
-    );
-    expect(tester.getSize(mapViewGroup).height, lessThanOrEqualTo(50));
     expect(tester.getSize(compactControls).width, lessThanOrEqualTo(284));
     expect(tester.getCenter(compactControls).dx, greaterThan(180));
-    expect(tester.getSize(roadControl).height, greaterThanOrEqualTo(48));
-    expect(tester.getSize(roadControl).height, lessThanOrEqualTo(52));
+    expect(tester.getSize(mapActionGroup).height, greaterThanOrEqualTo(48));
     final downloadControl = find.byKey(
       const Key('farm_boundary_download_maps_fab'),
     );
@@ -152,13 +133,6 @@ void main() {
     );
     tester.widget<FlutterMap>(map).options.onTap!(tapPosition, farmPoint);
     await tester.pump();
-    expect(_summaryText(tester), contains('2'));
-
-    await tester.tap(find.byKey(const Key('farm_boundary_satellite_map')));
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(_summaryText(tester), contains('2'));
-    await tester.tap(find.byKey(const Key('farm_boundary_road_map')));
-    await tester.pump(const Duration(milliseconds: 100));
     expect(_summaryText(tester), contains('2'));
 
     await tester.pumpWidget(const SizedBox.shrink());
@@ -232,7 +206,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('satellite map falls back to readable road tiles', (
+  testWidgets('boundary map stays satellite-only without a road fallback', (
     tester,
   ) async {
     final mapService = OfflineMapService(
@@ -248,8 +222,9 @@ void main() {
     final layer = tester.widget<OfflineAwareTileLayer>(
       find.byKey(const ValueKey('farm-boundary-base-map-layer')),
     );
-    expect(openStreetMapTileUrl, isNotEmpty);
-    expect(layer.fallbackUrlTemplate, openStreetMapTileUrl);
+    expect(fieldImageryTileUrl, isNotEmpty);
+    expect(layer.urlTemplate, fieldImageryTileUrl);
+    expect(layer.fallbackUrlTemplate, isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -288,7 +263,7 @@ void main() {
       find.byKey(const Key('farm_boundary_search')),
       'Akole',
     );
-    await tester.pump(const Duration(milliseconds: 360));
+    await tester.pump(const Duration(milliseconds: 460));
     await tester.pump();
 
     final resultTile = find.widgetWithText(ListTile, 'Akole');
@@ -305,9 +280,8 @@ void main() {
       find.byKey(const Key('farm_boundary_searched_place_label')),
       findsOneWidget,
     );
-    expect(find.byKey(const Key('farm_boundary_road_map')), findsOneWidget);
     expect(
-      find.byKey(const Key('farm_boundary_satellite_map')),
+      find.byKey(const Key('farm_boundary_satellite_only')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('farm_boundary_draw_mode')), findsOneWidget);
@@ -397,8 +371,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('सड़क'), findsOneWidget);
-    expect(find.text('खेत'), findsOneWidget);
+    expect(find.text('सैटेलाइट दृश्य'), findsOneWidget);
     expect(find.text('चलाएं'), findsOneWidget);
     expect(find.text('चिन्हित'), findsOneWidget);
     expect(find.text('सहेजें'), findsOneWidget);
@@ -426,8 +399,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('रस्ते'), findsOneWidget);
-    expect(find.text('शेत'), findsOneWidget);
+    expect(find.text('उपग्रह दृश्य'), findsOneWidget);
     expect(find.text('हलवा'), findsOneWidget);
     expect(find.text('रेखाटा'), findsOneWidget);
     expect(find.text('जतन करा'), findsOneWidget);

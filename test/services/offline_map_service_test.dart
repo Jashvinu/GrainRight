@@ -38,11 +38,11 @@ void main() {
       expect(RuntimeConfig.mapTilerApiKey, 'local-maptiler-key');
       expect(
         RuntimeConfig.offlineTileUrlTemplate,
-        'https://api.maptiler.com/maps/hybrid/256/{z}/{x}/{y}@2x.jpg?key=local-maptiler-key',
+        'https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}@2x.jpg?key=local-maptiler-key',
       );
       expect(
         RuntimeConfig.onlineSatelliteTileUrlTemplate,
-        'https://api.maptiler.com/maps/hybrid/256/{z}/{x}/{y}@2x.jpg?key=local-maptiler-key',
+        'https://api.maptiler.com/maps/satellite/256/{z}/{x}/{y}@2x.jpg?key=local-maptiler-key',
       );
     } finally {
       Directory.current = originalDirectory;
@@ -94,6 +94,46 @@ void main() {
     expect(place?.latitude, 19.541);
     expect(place?.longitude, 74.005);
   });
+
+  test(
+    'searches Indian places with Nominatim when no MapTiler key exists',
+    () async {
+      final requests = <Uri>[];
+      final service = OfflineMapService(
+        client: _FakeClient((request) async {
+          requests.add(request.url);
+          return http.Response(
+            jsonEncode([
+              {
+                'osm_type': 'node',
+                'osm_id': 123,
+                'name': 'Akole',
+                'display_name': 'Akole, Maharashtra, India',
+                'lat': '19.5419344',
+                'lon': '74.0092582',
+                'address': {'village': 'Akole', 'state': 'Maharashtra'},
+              },
+            ]),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }),
+        mapTilerApiKeyProvider: () => '',
+      );
+      addTearDown(service.dispose);
+
+      final predictions = await service.searchPlaces('Akole');
+      final place = await service.resolvePrediction(predictions.single);
+
+      expect(requests.single.host, 'nominatim.openstreetmap.org');
+      expect(requests.single.path, '/search');
+      expect(requests.single.queryParameters['countrycodes'], 'in');
+      expect(predictions.single.provider, OfflineMapService.nominatimProvider);
+      expect(predictions.single.title, 'Akole');
+      expect(place?.latitude, closeTo(19.5419344, 0.0000001));
+      expect(place?.longitude, closeTo(74.0092582, 0.0000001));
+    },
+  );
 
   test(
     'pauses downloads on tile server rate limit without storing secrets',
