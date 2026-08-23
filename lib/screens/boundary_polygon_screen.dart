@@ -1415,10 +1415,6 @@ class _MapAttributionButton extends StatelessWidget {
   static final _sources = <({String label, Uri url})>[
     (label: 'MapTiler', url: Uri.parse('https://www.maptiler.com/copyright/')),
     (
-      label: 'OpenStreetMap contributors',
-      url: Uri.parse('https://www.openstreetmap.org/copyright'),
-    ),
-    (
       label: 'Esri',
       url: Uri.parse(
         'https://www.esri.com/en-us/legal/terms/full-master-agreement',
