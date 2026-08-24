@@ -6,8 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:kalsubai_farms/screens/boundary_polygon_screen.dart';
-import 'package:kalsubai_farms/screens/offline_maps_screen.dart';
-import 'package:kalsubai_farms/services/local_app_database.dart';
 import 'package:kalsubai_farms/services/location_service.dart';
 import 'package:kalsubai_farms/services/map_tile_provider.dart';
 import 'package:kalsubai_farms/services/offline_map_service.dart';
@@ -85,27 +83,22 @@ void main() {
     expect(tester.getSize(compactControls).width, lessThanOrEqualTo(284));
     expect(tester.getCenter(compactControls).dx, greaterThan(180));
     expect(tester.getSize(mapActionGroup).height, greaterThanOrEqualTo(48));
-    final downloadControl = find.byKey(
-      const Key('farm_boundary_download_maps_fab'),
-    );
     final recenterControl = find.byKey(const Key('farm_boundary_recenter_fab'));
     final undoControl = find.byKey(const Key('farm_boundary_undo_button'));
     final clearControl = find.byKey(const Key('farm_boundary_clear_button'));
     expect(undoControl, findsOneWidget);
     expect(clearControl, findsOneWidget);
-    expect(downloadControl, findsOneWidget);
     expect(recenterControl, findsOneWidget);
     expect(tester.getCenter(undoControl).dx, greaterThan(180));
     expect(tester.getCenter(clearControl).dx, greaterThan(180));
     expect(
       tester.getCenter(undoControl).dy,
-      lessThan(tester.getCenter(downloadControl).dy),
+      lessThan(tester.getCenter(recenterControl).dy),
     );
     expect(
       tester.getCenter(clearControl).dy,
-      lessThan(tester.getCenter(downloadControl).dy),
+      lessThan(tester.getCenter(recenterControl).dy),
     );
-    expect(tester.getCenter(downloadControl).dx, greaterThan(180));
     expect(tester.getCenter(recenterControl).dx, greaterThan(180));
     expect(tester.getCenter(recenterControl).dy, greaterThan(320));
     final bottomPanel = find.byKey(const Key('farm_boundary_bottom_panel'));
@@ -225,8 +218,8 @@ void main() {
         find.byKey(const ValueKey('farm-boundary-base-map-layer')),
       );
       expect(fieldImageryTileUrl, isNotEmpty);
-      expect(layer.urlTemplate, fieldImageryTileUrl);
-      expect(layer.fallbackUrlTemplate, streetMapTileUrl);
+      expect(layer.urlTemplate, streetMapTileUrl);
+      expect(layer.fallbackUrlTemplate, isNull);
 
       await tester.tap(find.byKey(const Key('farm_boundary_street_map')));
       await tester.pump();
@@ -247,51 +240,6 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
-
-  testWidgets('Street mode never uses a cached satellite region', (
-    tester,
-  ) async {
-    final mapService = _CachedOfflineMapService();
-    addTearDown(mapService.dispose);
-
-    await tester.pumpWidget(
-      GetMaterialApp(home: BoundaryPolygonScreen(mapService: mapService)),
-    );
-    await tester.pump();
-
-    await tester.tap(find.byKey(const Key('farm_boundary_download_maps_fab')));
-    await tester.pump();
-    final cachedRegion = find.text('Cached Akole');
-    expect(cachedRegion, findsOneWidget);
-    final cachedTile = find.ancestor(
-      of: cachedRegion,
-      matching: find.byType(ListTile),
-    );
-    tester.widget<ListTile>(cachedTile).onTap!();
-    await tester.pump();
-    await tester.pump();
-
-    final satelliteLayer = tester.widget<OfflineAwareTileLayer>(
-      find.byKey(const ValueKey('farm-boundary-base-map-layer')),
-    );
-    expect(
-      satelliteLayer.offlineUrlTemplateOverride,
-      contains('#region=akole'),
-    );
-
-    await tester.tap(find.byKey(const Key('farm_boundary_street_map')));
-    await tester.pump();
-    final streetLayer = tester.widget<OfflineAwareTileLayer>(
-      find.byKey(const ValueKey('farm-boundary-base-map-layer')),
-    );
-    expect(streetLayer.urlTemplate, streetMapTileUrl);
-    expect(streetLayer.offlineUrlTemplateOverride, isNull);
-    expect(streetLayer.preferOfflineTemplateWhenOffline, isFalse);
-
-    Get.closeAllSnackbars();
-    await tester.pumpAndSettle();
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
 
   testWidgets('search result pins the place and enables boundary drawing', (
     tester,
@@ -361,62 +309,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const SizedBox.shrink());
   });
-
-  testWidgets(
-    'empty downloaded maps opens downloads and back restores drawing state',
-    (tester) async {
-      tester.view.physicalSize = const Size(1080, 1920);
-      tester.view.devicePixelRatio = 3;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      final service = _EmptyOfflineMapService();
-      addTearDown(service.dispose);
-
-      await tester.pumpWidget(
-        GetMaterialApp(
-          home: BoundaryPolygonScreen(mapService: service, loadMapTiles: false),
-          getPages: [
-            GetPage(
-              name: '/offline-maps',
-              page: () => const OfflineMapsScreen(),
-            ),
-          ],
-        ),
-      );
-      await tester.pump();
-
-      await tester.tap(find.byKey(const Key('farm_boundary_draw_mode')));
-      await tester.pump();
-      const tapPosition = TapPosition(Offset.zero, Offset.zero);
-      const farmPoint = LatLng(19.54, 74.01);
-      final map = find.byKey(const Key('farm_boundary_map'));
-      tester.widget<FlutterMap>(map).options.onTap!(tapPosition, farmPoint);
-      await tester.pump();
-      expect(_summaryText(tester), contains('2'));
-
-      await tester.tap(
-        find.byKey(const Key('farm_boundary_download_maps_fab')),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(OfflineMapsScreen), findsOneWidget);
-
-      await tester.pageBack();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(find.byType(BoundaryPolygonScreen), findsOneWidget);
-      expect(_summaryText(tester), contains('2'));
-      tester.widget<FlutterMap>(map).options.onTap!(
-        tapPosition,
-        const LatLng(19.541, 74.011),
-      );
-      await tester.pump();
-      expect(_summaryText(tester), contains('1'));
-
-      await tester.pumpWidget(const SizedBox.shrink());
-    },
-  );
 
   testWidgets('map controls follow Hindi app language', (tester) async {
     tester.view.physicalSize = const Size(1080, 1920);
@@ -496,37 +388,6 @@ class _FakeClient extends http.BaseClient {
       headers: response.headers,
     );
   }
-}
-
-class _EmptyOfflineMapService extends OfflineMapService {
-  _EmptyOfflineMapService() : super(mapTilerApiKeyProvider: () => 'test-key');
-
-  @override
-  Future<List<OfflineMapRegionRecord>> listRegions() async => const [];
-}
-
-class _CachedOfflineMapService extends OfflineMapService {
-  _CachedOfflineMapService() : super(mapTilerApiKeyProvider: () => 'test-key');
-
-  @override
-  Future<List<OfflineMapRegionRecord>> listRegions() async => const [
-    OfflineMapRegionRecord(
-      regionId: 'akole',
-      label: 'Cached Akole',
-      centerLat: 19.5406,
-      centerLng: 74.0054,
-      radiusKm: 2,
-      minZoom: 15,
-      maxZoom: 18,
-      status: 'ready',
-      tileCount: 10,
-      downloadedTileCount: 10,
-      sizeBytes: 1024,
-      sourceId:
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}#region=akole',
-      updatedAt: '2026-08-24T00:00:00Z',
-    ),
-  ];
 }
 
 class _FakeLocationService extends LocationService {

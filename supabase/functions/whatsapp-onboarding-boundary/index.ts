@@ -1,5 +1,4 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { Resvg } from "npm:@resvg/resvg-js@2.6.2";
 import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
 
@@ -489,6 +488,10 @@ async function createFarmCard(
   geometry: Row,
   summary: Row,
 ): Promise<string | null> {
+  // Load the renderer only for a successful save. Keeping this optional
+  // dependency out of module initialization prevents every validation/load
+  // request from failing if the image runtime is temporarily unavailable.
+  const { Resvg } = await import("npm:@resvg/resvg-js@2.6.2");
   try {
     await supabase.storage.createBucket("whatsapp-farm-cards", {
       public: false,
@@ -746,6 +749,17 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (lookupError) throw lookupError;
     if (!onboarding) return errorResponse("This boundary link has expired or was already used.", 410);
+    // A browser can lose the response after the database update has already
+    // committed. Treat a repeat save as a successful read of the saved state
+    // instead of returning an empty UPDATE result or a misleading bad-state
+    // error.
+    if (text(onboarding.step) !== "boundary") {
+      return successResponse(
+        await loadBoundaryState(supabase, onboarding),
+        200,
+        "whatsapp_boundary_already_saved",
+      );
+    }
 
     const { data: hectares, error: areaError } = await supabase.rpc(
       "whatsapp_polygon_area",
@@ -795,8 +809,19 @@ Deno.serve(async (req) => {
       .eq("status", "active")
       .eq("step", "boundary")
       .select("id,step,expires_at")
-      .single();
+      .maybeSingle();
     if (updateError) throw updateError;
+    if (!updated) {
+      const current = await loadOnboarding(supabase, token);
+      if (current && text(current.step) !== "boundary") {
+        return successResponse(
+          await loadBoundaryState(supabase, current),
+          200,
+          "whatsapp_boundary_already_saved",
+        );
+      }
+      throw new Error("The farm boundary could not be synchronized. Please try again.");
+    }
     return successResponse({
       onboardingId: updated.id,
       step: updated.step,

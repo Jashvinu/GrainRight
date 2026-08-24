@@ -37,13 +37,15 @@ void main() {
       expect(screen, contains('whatsapp_farm_refresh'));
       expect(screen, contains("'action': 'refresh'"));
       expect(screen, contains('whatsapp_saved_farm_map'));
-      expect(screen, contains('FarmerFarmSummary.fromJson'));
-      expect(screen, contains('_riskCircles'));
-      expect(screen, contains('Farm details'));
-    expect(screen, contains('Satellite monitoring is ready'));
-    expect(screen, contains("_setupComplete = data['status'] == 'completed'"));
-    expect(screen, contains('if (_setupComplete && _monitoring != null)'));
-    expect(screen, contains(".timeout(const Duration(seconds: 25))"));
-  },
-);
+      expect(screen, contains('_boundarySyncCard'));
+      expect(screen, contains('heatCircles: null'));
+      expect(screen, contains('Farm boundary map'));
+      expect(
+        screen,
+        contains("_setupComplete = data['status'] == 'completed'"),
+      );
+      expect(screen, contains("body: {'token': _token, 'action': 'load'}"));
+      expect(screen, contains(".timeout(const Duration(seconds: 25))"));
+    },
+  );
 }

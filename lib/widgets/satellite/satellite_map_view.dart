@@ -21,6 +21,7 @@ class SatelliteMapView extends StatelessWidget {
   final bool autoFitContent;
   final bool showReferenceLabels;
   final bool satelliteOnly;
+  final bool showOfflineBackground;
 
   /// Fallback center when there is no polygon (e.g. a point-only farm). Used
   /// before [SatelliteConfig.defaultCenter] so the map opens on the farm.
@@ -42,6 +43,7 @@ class SatelliteMapView extends StatelessWidget {
     this.autoFitContent = true,
     this.showReferenceLabels = true,
     this.satelliteOnly = false,
+    this.showOfflineBackground = true,
     this.center,
   });
 
@@ -62,6 +64,7 @@ class SatelliteMapView extends StatelessWidget {
       autoFitContent: autoFitContent,
       showReferenceLabels: showReferenceLabels,
       satelliteOnly: satelliteOnly,
+      showOfflineBackground: showOfflineBackground,
       center: center,
       key: key,
     );
@@ -83,6 +86,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final bool autoFitContent;
   final bool showReferenceLabels;
   final bool satelliteOnly;
+  final bool showOfflineBackground;
   final LatLng? center;
 
   const _SatelliteMapViewInternal({
@@ -101,6 +105,7 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.autoFitContent = true,
     this.showReferenceLabels = true,
     this.satelliteOnly = false,
+    this.showOfflineBackground = true,
     this.center,
   });
 
@@ -217,9 +222,10 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                 },
               ),
               children: [
-                OfflineMapBackground(
-                  message: UiStrings.t('offline_map_saved_boundary'),
-                ),
+                if (widget.showOfflineBackground)
+                  OfflineMapBackground(
+                    message: UiStrings.t('offline_map_saved_boundary'),
+                  ),
                 ...fieldImageryTileLayers(
                   includeReferenceLabels:
                       widget.showReferenceLabels && !widget.satelliteOnly,

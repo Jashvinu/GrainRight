@@ -5,14 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:kalsubai_farms/core/localization/locale_text.dart';
 import '../config/satellite_config.dart';
 import 'package:kalsubai_farms/core/theme/app_theme.dart';
 import 'package:kalsubai_farms/core/localization/ui_strings.dart';
-import '../services/local_app_database.dart';
 import '../services/location_service.dart';
 import '../services/map_tile_provider.dart';
 import '../services/network_status_service.dart';
@@ -45,7 +43,6 @@ enum _BoundaryMapMode { browse, draw }
 enum _BoundaryBaseMap { street, farmSatellite }
 
 class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
-  static const _preferredRegionKey = 'preferred_offline_field_region_id';
   final _mapKey = GlobalKey();
   final _mapController = MapController();
   late final LocationService _locationService;
@@ -60,14 +57,12 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
 
   bool _mapReady = false;
   bool _loadingLocation = false;
-  bool _loadingDownloadedMaps = false;
   bool _confirming = false;
   bool _searching = false;
   String? _searchError;
   int _searchGeneration = 0;
   _BoundaryMapMode _mode = _BoundaryMapMode.browse;
-  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.farmSatellite;
-  OfflineMapRegionRecord? _selectedOfflineRegion;
+  _BoundaryBaseMap _baseMap = _BoundaryBaseMap.street;
   LatLng? _currentLocation;
   double _locationAccuracyMeters = 0;
   bool _userMovedMap = false;
@@ -120,17 +115,18 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       final online = await _networkStatusService.isOnline(
         timeout: const Duration(seconds: 2),
       );
-      if (mounted && online != _mapOnline) {
+      // A failed reachability probe is not proof that map tiles are offline;
+      // browser tile requests are the source of truth for this page.
+      if (mounted && online && !_mapOnline) {
         setState(() => _mapOnline = online);
       }
     } catch (error) {
       debugPrint('[BoundaryPolygonScreen._refreshMapNetwork] $error');
-      if (mounted && _mapOnline) setState(() => _mapOnline = false);
+      // Keep the boundary surface usable while the provider retries.
     }
   }
 
   Future<void> _loadInitialTarget() async {
-    final regionsFuture = _refreshDownloadedRegions();
     try {
       final quickLocation = await _locationService.getLastKnownLocation();
       if (!mounted) return;
@@ -150,155 +146,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       if (mounted) {
         setState(() => _loadingLocation = false);
       }
-    }
-
-    try {
-      final regions = await regionsFuture;
-      final hasNetwork = await _networkStatusService.hasNetworkInterface();
-      if (!mounted || hasNetwork) return;
-      final preferred = await _preferredOfflineRegion(regions);
-      if (!mounted || preferred == null) return;
-      _focusOfflineRegion(preferred, showSnack: false);
-    } catch (e) {
-      debugPrint('[BoundaryPolygonScreen._loadInitialTarget.offline] $e');
-    }
-  }
-
-  Future<List<OfflineMapRegionRecord>> _refreshDownloadedRegions() async {
-    try {
-      final regions = await _offlineMapService.listRegions();
-      final readyRegions = regions.where(_canUseOfflineRegion).toList();
-      return readyRegions;
-    } catch (e) {
-      debugPrint('[BoundaryPolygonScreen._refreshDownloadedRegions] $e');
-      return const [];
-    }
-  }
-
-  bool _canUseOfflineRegion(OfflineMapRegionRecord region) {
-    if (region.tileCount <= 0 || region.downloadedTileCount <= 0) {
-      return false;
-    }
-    return region.status == 'ready' ||
-        region.downloadedTileCount >= region.tileCount;
-  }
-
-  Future<OfflineMapRegionRecord?> _preferredOfflineRegion(
-    List<OfflineMapRegionRecord> regions,
-  ) async {
-    if (regions.isEmpty) return null;
-    final prefs = await SharedPreferences.getInstance();
-    final preferredId = prefs.getString(_preferredRegionKey);
-    if (preferredId == null || preferredId.isEmpty) return regions.first;
-    for (final region in regions) {
-      if (region.regionId == preferredId) return region;
-    }
-    return regions.first;
-  }
-
-  Future<void> _savePreferredOfflineRegion(String regionId) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_preferredRegionKey, regionId);
-  }
-
-  Future<void> _selectDownloadedMap() async {
-    if (_loadingDownloadedMaps) return;
-    setState(() => _loadingDownloadedMaps = true);
-    final regions = await _refreshDownloadedRegions();
-    if (mounted) setState(() => _loadingDownloadedMaps = false);
-    if (!mounted) return;
-
-    if (regions.isEmpty) {
-      await Get.toNamed<void>('/offline-maps');
-      return;
-    }
-
-    final selected = await showModalBottomSheet<OfflineMapRegionRecord>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: ListView.separated(
-            shrinkWrap: true,
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    UiStrings.t('select_downloaded_field_map'),
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                );
-              }
-
-              final region = regions[index - 1];
-              final isSelected =
-                  _selectedOfflineRegion?.regionId == region.regionId;
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  isSelected ? Icons.offline_pin_rounded : Icons.map_outlined,
-                  color: isSelected ? AppTheme.green : AppTheme.textMuted,
-                ),
-                title: Text(
-                  region.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: Text(
-                  UiStrings.f('downloaded_region_summary', {
-                    'radius': region.radiusKm,
-                    'minZoom': region.minZoom,
-                    'maxZoom': region.maxZoom,
-                    'downloaded': region.downloadedTileCount,
-                    'total': region.tileCount,
-                  }),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: isSelected
-                    ? const Icon(Icons.check_circle, color: AppTheme.green)
-                    : const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).pop(region),
-              );
-            },
-            separatorBuilder: (_, index) =>
-                index == 0 ? const SizedBox(height: 6) : const Divider(),
-            itemCount: regions.length + 1,
-          ),
-        );
-      },
-    );
-
-    if (selected != null) _focusOfflineRegion(selected);
-  }
-
-  void _focusOfflineRegion(
-    OfflineMapRegionRecord region, {
-    bool showSnack = true,
-  }) {
-    final center = LatLng(region.centerLat, region.centerLng);
-    final zoom = region.maxZoom.clamp(10, mapTileMaxZoom.toInt()).toDouble();
-    setState(() {
-      _center = center;
-      _zoom = zoom;
-      _selectedOfflineRegion = region;
-      _mode = _BoundaryMapMode.browse;
-      _searchResults = const [];
-      _searchError = null;
-    });
-    unawaited(_savePreferredOfflineRegion(region.regionId));
-    _moveMap(center, zoom);
-    if (showSnack) {
-      Get.snackbar(
-        UiStrings.t('downloaded_map_selected'),
-        UiStrings.f('loaded_offline_boundary_map', {'region': region.label}),
-      );
     }
   }
 
@@ -390,7 +237,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
       setState(() {
         _center = center;
         _zoom = 18;
-        _selectedOfflineRegion = null;
         _searchedPlaceCenter = center;
         _searchedPlaceLabel = place.address.trim().isEmpty
             ? place.title
@@ -662,26 +508,18 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
               },
             ),
             children: [
-              OfflineMapBackground(
-                message: UiStrings.t('offline_map_tap_boundary'),
-              ),
+              const ColoredBox(color: Color(0xFFEAF2EA)),
               if (widget.loadMapTiles)
                 OfflineAwareTileLayer(
                   key: const ValueKey('farm-boundary-base-map-layer'),
                   urlTemplate: activeTileUrl,
-                  fallbackUrlTemplate: satelliteMode ? streetMapTileUrl : null,
-                  // Only Farm satellite may read the downloaded satellite
-                  // region. Street mode must never fall through to it.
-                  offlineUrlTemplateOverride: satelliteMode
-                      ? _selectedOfflineRegion?.sourceId
-                      : null,
-                  preferOfflineTemplateWhenOffline: satelliteMode,
+                  // Keep Street and Farm Satellite as separate map sources.
+                  // Never reveal one provider underneath the other.
+                  fallbackUrlTemplate: null,
+                  preferOfflineTemplateWhenOffline: false,
                   maxNativeZoom: satelliteMode
                       ? fieldImageryMaxNativeZoom
                       : mapTileMaxNativeZoom,
-                  maxOfflineNativeZoom: satelliteMode
-                      ? _selectedOfflineRegion?.maxZoom
-                      : null,
                   keepBuffer: 3,
                   panBuffer: 1,
                   tileDisplay: const TileDisplay.fadeIn(
@@ -996,8 +834,7 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                               );
                             },
                           ),
-                          if (_searchedPlaceLabel != null ||
-                              _selectedOfflineRegion != null) ...[
+                          if (_searchedPlaceLabel != null) ...[
                             const SizedBox(height: 6),
                             DecoratedBox(
                               key: const Key('farm_boundary_map_status'),
@@ -1044,32 +881,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                                               key: const Key(
                                                 'farm_boundary_searched_place_label',
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: const TextStyle(
-                                                color: AppTheme.greenDark,
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w800,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    if (_searchedPlaceLabel != null &&
-                                        _selectedOfflineRegion != null)
-                                      const SizedBox(height: 5),
-                                    if (_selectedOfflineRegion != null)
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.offline_pin_rounded,
-                                            color: AppTheme.greenDark,
-                                            size: 17,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              _selectedOfflineRegion!.label,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
@@ -1168,24 +979,6 @@ class _BoundaryPolygonScreenState extends State<BoundaryPolygonScreen> {
                     backgroundColor: Colors.white,
                     foregroundColor: AppTheme.error,
                     child: const Icon(Icons.delete_outline_rounded),
-                  ),
-                  const SizedBox(height: 10),
-                  FloatingActionButton.small(
-                    key: const Key('farm_boundary_download_maps_fab'),
-                    heroTag: 'farm-boundary-download-maps',
-                    tooltip: UiStrings.t('downloaded_maps'),
-                    onPressed: _loadingDownloadedMaps
-                        ? null
-                        : _selectDownloadedMap,
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppTheme.greenDark,
-                    child: _loadingDownloadedMaps
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.download_for_offline_outlined),
                   ),
                   const SizedBox(height: 10),
                   FloatingActionButton.small(

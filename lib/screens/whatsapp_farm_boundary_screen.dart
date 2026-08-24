@@ -31,7 +31,6 @@ class _WhatsappFarmBoundaryScreenState
   bool _refreshingSummary = false;
   bool _setupComplete = false;
   Map<String, dynamic> _farm = const {};
-  FarmerFarmSummary? _monitoring;
   String? _summaryError;
   Uri? _returnToWhatsapp;
   String _alertFilter = 'all';
@@ -84,6 +83,11 @@ class _WhatsappFarmBoundaryScreenState
     } catch (error, stack) {
       debugPrint('[WhatsappFarmBoundaryScreen._saveBoundary] $error');
       debugPrintStack(stackTrace: stack);
+      // The Edge Function may have committed the boundary before a browser
+      // timeout or connection reset dropped the response. Read the token state
+      // before showing a retry/error message so the farmer never sees a false
+      // failure after a successful save.
+      if (await _recoverSavedBoundary()) return;
       final raw = '$error'.toLowerCase();
       if (raw.contains('expired') || raw.contains('already used')) {
         throw StateError(
@@ -103,6 +107,36 @@ class _WhatsappFarmBoundaryScreenState
       );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<bool> _recoverSavedBoundary() async {
+    try {
+      final response = await Supabase.instance.client.functions
+          .invoke(
+            'whatsapp-onboarding-boundary',
+            body: {'token': _token, 'action': 'load'},
+          )
+          .timeout(const Duration(seconds: 12));
+      final data = _map(response.data);
+      if (data['success'] == false || data['farm'] is! Map) return false;
+      if (!mounted) return true;
+      final returnToWhatsapp = whatsappBoundaryHandoffUri(
+        data['returnToWhatsappUrl']?.toString(),
+      );
+      setState(() {
+        _saved = true;
+        _applySummaryData(data);
+        _returnToWhatsapp = returnToWhatsapp;
+      });
+      if (returnToWhatsapp != null) await _openWhatsApp(returnToWhatsapp);
+      return true;
+    } catch (recoveryError, recoveryStack) {
+      debugPrint(
+        '[WhatsappFarmBoundaryScreen._recoverSavedBoundary] $recoveryError',
+      );
+      debugPrintStack(stackTrace: recoveryStack);
+      return false;
     }
   }
 
@@ -156,10 +190,6 @@ class _WhatsappFarmBoundaryScreenState
     if (rawFarm is Map) {
       _farm = Map<String, dynamic>.from(rawFarm);
     }
-    final rawSummary = data['summary'];
-    _monitoring = rawSummary is Map
-        ? FarmerFarmSummary.fromJson(Map<String, dynamic>.from(rawSummary))
-        : null;
     _setupComplete = data['status'] == 'completed';
   }
 
@@ -238,10 +268,8 @@ class _WhatsappFarmBoundaryScreenState
             _satelliteHero(polygon, center),
             if (_summaryError != null)
               _messageBanner(_summaryError!, isError: true),
-            if (!_setupComplete) _setupPendingCard(),
-            if (_setupComplete && _monitoring == null) _monitoringEmptyCard(),
-            if (_setupComplete && _monitoring != null)
-              _monitoringReport(_monitoring!),
+            const SizedBox(height: 12),
+            _boundarySyncCard(),
             const SizedBox(height: 12),
             _whatsappContinueCard(),
           ],
@@ -285,11 +313,7 @@ class _WhatsappFarmBoundaryScreenState
                   ),
                 ),
               ),
-              _statusPill(
-                _monitoring?.monitoringStatus == 'available'
-                    ? 'SCANNED'
-                    : 'READY',
-              ),
+              _statusPill('SAVED'),
             ],
           ),
           if (location.isNotEmpty) ...[
@@ -326,12 +350,7 @@ class _WhatsappFarmBoundaryScreenState
                     : '${acres.toStringAsFixed(2)} acres',
                 Icons.square_foot,
               ),
-              _heroMeta(
-                _monitoring?.lastUpdate == null
-                    ? 'First scan pending'
-                    : 'Scan ready',
-                Icons.satellite_alt_outlined,
-              ),
+              _heroMeta('Boundary ready', Icons.check_circle_outline),
             ],
           ),
         ],
@@ -385,12 +404,13 @@ class _WhatsappFarmBoundaryScreenState
                 height: 300,
                 farmPolygon: polygon,
                 center: center,
-                heatCircles: _monitoring == null
-                    ? null
-                    : _riskCircles(_monitoring!),
+                // Monitoring overlays are intentionally excluded from the
+                // WhatsApp boundary handoff page.
+                heatCircles: null,
                 showZoomControls: true,
                 showReferenceLabels: false,
                 satelliteOnly: true,
+                showOfflineBackground: false,
               ),
               Positioned(
                 left: 12,
@@ -404,12 +424,16 @@ class _WhatsappFarmBoundaryScreenState
                     color: Colors.black.withValues(alpha: .64),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(Icons.satellite_alt, color: Colors.white, size: 16),
                       SizedBox(width: 6),
                       Text(
-                        'Farm satellite',
+                        _text(
+                          en: 'Farm boundary map',
+                          hi: 'खेत की सीमा का नक्शा',
+                          mr: 'शेत सीमा नकाशा',
+                        ),
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -430,7 +454,7 @@ class _WhatsappFarmBoundaryScreenState
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                'Esri World Imagery · Early-warning signals, not a diagnosis',
+                'Use the map to review the saved farm boundary.',
                 style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
               ),
             ),
@@ -875,6 +899,29 @@ class _WhatsappFarmBoundaryScreenState
         hi: 'आपकी खेत सीमा सेव है। WhatsApp में बाकी खेत के सवाल पूरे करें, फिर satellite monitoring लोड करने के लिए यहां Refresh दबाएं।',
         mr: 'तुमची शेत सीमा सेव झाली आहे. WhatsApp मध्ये उरलेले शेत प्रश्न पूर्ण करा आणि satellite monitoring साठी येथे Refresh दाबा.',
       ),
+    );
+  }
+
+  Widget _boundarySyncCard() {
+    return _sectionCard(
+      icon: Icons.check_circle_outline,
+      color: AppTheme.success,
+      title: _text(
+        en: 'Boundary saved successfully',
+        hi: 'खेत की सीमा सफलतापूर्वक सेव हो गई',
+        mr: 'शेताची सीमा यशस्वीपणे सेव झाली',
+      ),
+      body: _setupComplete
+          ? _text(
+              en: 'Your farm boundary and setup are saved for this farmer. Continue in WhatsApp for the next step.',
+              hi: 'आपके किसान खाते के लिए खेत की सीमा और सेटअप सेव हो गए हैं। अगले चरण के लिए WhatsApp में जारी रखें।',
+              mr: 'या शेतकऱ्याच्या खात्यासाठी शेताची सीमा आणि सेटअप सेव झाले आहे. पुढील टप्प्यासाठी WhatsApp मध्ये पुढे जा.',
+            )
+          : _text(
+              en: 'Your farm boundary and area are saved for this farmer. Continue in WhatsApp for the remaining setup.',
+              hi: 'आपके किसान खाते के लिए खेत की सीमा और क्षेत्रफल सेव हो गए हैं। बाकी सेटअप के लिए WhatsApp में जारी रखें।',
+              mr: 'या शेतकऱ्याच्या खात्यासाठी शेताची सीमा आणि क्षेत्रफळ सेव झाले आहे. उरलेल्या सेटअपसाठी WhatsApp मध्ये पुढे जा.',
+            ),
     );
   }
 
