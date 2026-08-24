@@ -54,6 +54,11 @@ void main() {
         contains("_setupComplete = data['status'] == 'completed'"),
       );
       expect(screen, contains("body: {'token': _token, 'action': 'load'}"));
+      expect(screen, contains('void initState()'));
+      expect(screen, contains('_loadSavedFarm();'));
+      expect(screen, contains('final hasBoundary'));
+      expect(screen, contains('_friendlyLoadError(error)'));
+      expect(screen, contains('Your farm monitor'));
       expect(screen, contains(".timeout(const Duration(seconds: 25))"));
       expect(map, contains('fitToFarmPolygonOnly'));
       expect(map, contains('final points = _cameraPoints()'));

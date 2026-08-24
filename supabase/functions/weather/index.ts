@@ -1,11 +1,40 @@
 import { handleCors } from "../_shared/cors.ts";
 import { errorResponse, successResponse } from "../_shared/response.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
 const ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
 
 type WeatherSeries = Record<string, unknown[]>;
 type Language = "en" | "hi" | "mr";
+
+function serviceClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) throw new Error("Missing Supabase service credentials");
+  return createClient(url, key);
+}
+
+async function isAuthorizedRequest(req: Request): Promise<boolean> {
+  const supabase = serviceClient();
+  const schedulerToken = text(req.headers.get("x-farm-monitoring-token"));
+  if (schedulerToken) {
+    const { data, error } = await supabase
+      .from("farmer_push_dispatch_control")
+      .select("cron_token")
+      .eq("id", true)
+      .maybeSingle();
+    if (error) throw error;
+    if (schedulerToken === text(data?.cron_token)) return true;
+  }
+
+  const bearer = text(req.headers.get("authorization"));
+  if (!bearer.toLowerCase().startsWith("bearer ")) return false;
+  const token = bearer.slice(7).trim();
+  if (!token) return false;
+  const { data, error } = await supabase.auth.getUser(token);
+  return !error && data.user != null;
+}
 
 function text(value: unknown): string {
   return String(value ?? "").trim();
@@ -221,12 +250,18 @@ Deno.serve(async (req) => {
   }
 
   try {
+    if (!await isAuthorizedRequest(req)) {
+      return errorResponse("Unauthorized weather request", 401, undefined, "unauthorized");
+    }
     const input = new URL(req.url);
     const params = input.searchParams;
     const latitude = numberParam(params, "latitude");
     const longitude = numberParam(params, "longitude");
     if (latitude == null || longitude == null) {
       return errorResponse("latitude and longitude are required", 400, undefined, "missing_coordinates");
+    }
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return errorResponse("latitude or longitude is out of range", 400, undefined, "invalid_coordinates");
     }
 
     const startDate = text(params.get("start_date"));

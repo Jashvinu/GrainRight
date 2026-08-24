@@ -28,6 +28,7 @@ class _WhatsappFarmBoundaryScreenState
     extends State<WhatsappFarmBoundaryScreen> {
   bool _saving = false;
   bool _saved = false;
+  bool _loadingSavedFarm = true;
   bool _refreshingSummary = false;
   bool _setupComplete = false;
   Map<String, dynamic> _farm = const {};
@@ -39,6 +40,46 @@ class _WhatsappFarmBoundaryScreenState
 
   String get _token =>
       widget.token?.trim() ?? Get.parameters['token']?.trim() ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedFarm();
+  }
+
+  Future<void> _loadSavedFarm() async {
+    if (_token.length < 32) {
+      if (mounted) setState(() => _loadingSavedFarm = false);
+      return;
+    }
+    try {
+      final response = await Supabase.instance.client.functions
+          .invoke(
+            'whatsapp-onboarding-boundary',
+            body: {'token': _token, 'action': 'load'},
+          )
+          .timeout(const Duration(seconds: 15));
+      final data = _map(response.data);
+      if (data['success'] == false) {
+        throw StateError('${data['error'] ?? 'Could not load saved farm.'}');
+      }
+      final farm = _map(data['farm']);
+      final hasBoundary = _polygonFromGeometry(farm['geometry']).length >= 3;
+      if (!mounted) return;
+      setState(() {
+        _applySummaryData(data);
+        _saved = hasBoundary;
+      });
+    } catch (error, stack) {
+      debugPrint('[WhatsappFarmBoundaryScreen._loadSavedFarm] $error');
+      debugPrintStack(stackTrace: stack);
+      if (mounted) {
+        setState(() => _summaryError = _friendlyLoadError(error));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSavedFarm = false);
+    }
+  }
 
   Future<void> _saveBoundary(List<List<double>> polygon) async {
     if (_saving || _saved) return;
@@ -174,11 +215,7 @@ class _WhatsappFarmBoundaryScreenState
       debugPrintStack(stackTrace: stack);
       if (mounted) {
         setState(() {
-          _summaryError = _text(
-            en: 'Farm data could not be refreshed. Complete setup in WhatsApp and try again.',
-            hi: 'खेत का डेटा रीफ्रेश नहीं हो सका। WhatsApp में सेटअप पूरा करके फिर कोशिश करें।',
-            mr: 'शेताचा डेटा रिफ्रेश होऊ शकला नाही. WhatsApp मध्ये सेटअप पूर्ण करून पुन्हा प्रयत्न करा.',
-          );
+          _summaryError = _friendlyLoadError(error);
         });
       }
     } finally {
@@ -187,23 +224,70 @@ class _WhatsappFarmBoundaryScreenState
   }
 
   void _applySummaryData(Map<String, dynamic> data) {
-    final rawFarm = data['farm'];
+    final rawSummary = data['summary'];
+    final summaryFarm = rawSummary is Map ? rawSummary['farm'] : null;
+    final rawFarm = data['farm'] is Map ? data['farm'] : summaryFarm;
     if (rawFarm is Map) {
       _farm = Map<String, dynamic>.from(rawFarm);
     }
-    final rawSummary = data['summary'];
     _monitoring = rawSummary is Map
         ? FarmerFarmSummary.fromJson(Map<String, dynamic>.from(rawSummary))
         : null;
     _setupComplete = data['status'] == 'completed';
   }
 
+  String _friendlyLoadError(Object error) {
+    final message = '$error'.toLowerCase();
+    if (message.contains('expired') || message.contains('already used')) {
+      return _text(
+        en: 'This secure link has expired. Return to WhatsApp and send CONTINUE for a fresh farm link.',
+        hi: 'यह सुरक्षित लिंक समाप्त हो गई है। नया farm link पाने के लिए WhatsApp पर CONTINUE भेजें।',
+        mr: 'ही सुरक्षित लिंक कालबाह्य झाली आहे. नवीन farm link साठी WhatsApp वर CONTINUE पाठवा.',
+      );
+    }
+    if (message.contains('timeout') ||
+        message.contains('socket') ||
+        message.contains('network')) {
+      return _text(
+        en: 'Farm data could not be refreshed because of a network problem. Your saved boundary is still safe; try again when the connection returns.',
+        hi: 'नेटवर्क समस्या के कारण खेत डेटा रिफ्रेश नहीं हुआ। आपकी सेव सीमा सुरक्षित है; कनेक्शन आने पर फिर कोशिश करें।',
+        mr: 'नेटवर्क समस्येमुळे शेताचा डेटा रिफ्रेश झाला नाही. तुमची सेव सीमा सुरक्षित आहे; कनेक्शन आल्यावर पुन्हा प्रयत्न करा.',
+      );
+    }
+    return _text(
+      en: 'Farm monitoring is not ready yet. Your saved boundary is safe; refresh after the next verified monitoring update.',
+      hi: 'खेत मॉनिटरिंग अभी तैयार नहीं है। आपकी सेव सीमा सुरक्षित है; अगले सत्यापित मॉनिटरिंग अपडेट के बाद Refresh करें।',
+      mr: 'शेत मॉनिटरिंग अजून तयार नाही. तुमची सेव सीमा सुरक्षित आहे; पुढील सत्यापित मॉनिटरिंग अपडेटनंतर Refresh करा.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_loadingSavedFarm) return _loadingFarm();
     if (_saved) return _farmSummary();
     if (_token.length < 32) return _invalidLink();
     return BoundaryPolygonScreen(onBoundaryConfirmed: _saveBoundary);
   }
+
+  Widget _loadingFarm() => Scaffold(
+    body: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 14),
+          Text(
+            _text(
+              en: 'Loading your saved farm…',
+              hi: 'आपका सेव खेत लोड हो रहा है…',
+              mr: 'तुमचे सेव शेत लोड होत आहे…',
+            ),
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _invalidLink() {
     return Scaffold(
@@ -239,7 +323,13 @@ class _WhatsappFarmBoundaryScreenState
     final center = _centerForFarm(polygon);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_text(en: 'Your farm', hi: 'आपका खेत', mr: 'तुमचे शेत')),
+        title: Text(
+          _text(
+            en: 'Your farm monitor',
+            hi: 'आपका खेत मॉनिटर',
+            mr: 'तुमचे शेत मॉनिटर',
+          ),
+        ),
         centerTitle: false,
         actions: [
           Tooltip(
@@ -370,7 +460,9 @@ class _WhatsappFarmBoundaryScreenState
                 Icons.square_foot,
               ),
               _heroMeta(
-                _monitoring == null ? 'Monitoring pending' : 'Monitoring ready',
+                _monitoring == null
+                    ? 'Verified scan pending'
+                    : 'Verified monitoring',
                 _monitoring == null
                     ? Icons.hourglass_empty_rounded
                     : Icons.satellite_alt_rounded,
