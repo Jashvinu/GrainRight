@@ -31,6 +31,7 @@ class _WhatsappFarmBoundaryScreenState
   bool _refreshingSummary = false;
   bool _setupComplete = false;
   Map<String, dynamic> _farm = const {};
+  FarmerFarmSummary? _monitoring;
   String? _summaryError;
   Uri? _returnToWhatsapp;
   String _alertFilter = 'all';
@@ -190,6 +191,10 @@ class _WhatsappFarmBoundaryScreenState
     if (rawFarm is Map) {
       _farm = Map<String, dynamic>.from(rawFarm);
     }
+    final rawSummary = data['summary'];
+    _monitoring = rawSummary is Map
+        ? FarmerFarmSummary.fromJson(Map<String, dynamic>.from(rawSummary))
+        : null;
     _setupComplete = data['status'] == 'completed';
   }
 
@@ -271,6 +276,11 @@ class _WhatsappFarmBoundaryScreenState
             const SizedBox(height: 12),
             _boundarySyncCard(),
             const SizedBox(height: 12),
+            if (_monitoring != null)
+              _monitoringReport(_monitoring!)
+            else if (_setupComplete)
+              _monitoringEmptyCard(),
+            const SizedBox(height: 12),
             _whatsappContinueCard(),
           ],
         ),
@@ -350,7 +360,12 @@ class _WhatsappFarmBoundaryScreenState
                     : '${acres.toStringAsFixed(2)} acres',
                 Icons.square_foot,
               ),
-              _heroMeta('Boundary ready', Icons.check_circle_outline),
+              _heroMeta(
+                _monitoring == null ? 'Monitoring pending' : 'Monitoring ready',
+                _monitoring == null
+                    ? Icons.hourglass_empty_rounded
+                    : Icons.satellite_alt_rounded,
+              ),
             ],
           ),
         ],
@@ -404,9 +419,11 @@ class _WhatsappFarmBoundaryScreenState
                 height: 300,
                 farmPolygon: polygon,
                 center: center,
-                // Monitoring overlays are intentionally excluded from the
-                // WhatsApp boundary handoff page.
-                heatCircles: null,
+                // Show risk hotspots only after the shared monitoring summary
+                // is available. The boundary-marking page remains separate.
+                heatCircles: _monitoring == null
+                    ? null
+                    : _riskCircles(_monitoring!),
                 showZoomControls: true,
                 showReferenceLabels: false,
                 satelliteOnly: true,
@@ -430,9 +447,15 @@ class _WhatsappFarmBoundaryScreenState
                       SizedBox(width: 6),
                       Text(
                         _text(
-                          en: 'Farm boundary map',
-                          hi: 'खेत की सीमा का नक्शा',
-                          mr: 'शेत सीमा नकाशा',
+                          en: _monitoring == null
+                              ? 'Farm boundary map'
+                              : 'Farm satellite monitoring',
+                          hi: _monitoring == null
+                              ? 'खेत की सीमा का नक्शा'
+                              : 'खेत satellite monitoring',
+                          mr: _monitoring == null
+                              ? 'शेत सीमा नकाशा'
+                              : 'शेत satellite monitoring',
                         ),
                         style: TextStyle(
                           color: Colors.white,
@@ -524,6 +547,8 @@ class _WhatsappFarmBoundaryScreenState
           ],
         ),
         const SizedBox(height: 16),
+        _monitoringHotspotCard(summary),
+        const SizedBox(height: 16),
         _nextSteps(summary),
         const SizedBox(height: 16),
         Row(
@@ -610,6 +635,35 @@ class _WhatsappFarmBoundaryScreenState
       ),
     );
     return filtered;
+  }
+
+  Widget _monitoringHotspotCard(FarmerFarmSummary summary) {
+    final disease = summary.diseaseScreen;
+    final highRisk = disease.highRiskCells;
+    final total = disease.riskCells.length;
+    final body = total == 0
+        ? _text(
+            en: 'No hotspot was found in the latest saved scan. Continue regular field checks and refresh after the next scan.',
+            hi: 'नवीनतम saved scan में कोई hotspot नहीं मिला। नियमित खेत जांच जारी रखें और अगली scan के बाद Refresh करें।',
+            mr: 'नवीनतम saved scan मध्ये hotspot आढळला नाही. नियमित शेत तपासणी सुरू ठेवा आणि पुढील scan नंतर Refresh करा.',
+          )
+        : _text(
+            en: '$highRisk high-risk hotspot(s) and $total highlighted field area(s) are shown on the map. Inspect those points before taking action.',
+            hi: 'map पर $highRisk high-risk hotspot और कुल $total highlighted क्षेत्र दिखाए गए हैं। कार्रवाई से पहले इन जगहों की जांच करें।',
+            mr: 'map वर $highRisk high-risk hotspot आणि एकूण $total highlighted क्षेत्र दाखवले आहेत. कृती करण्यापूर्वी या ठिकाणी तपासणी करा.',
+          );
+    return _sectionCard(
+      icon: total == 0
+          ? Icons.check_circle_outline
+          : Icons.warning_amber_rounded,
+      color: total == 0 ? AppTheme.success : AppTheme.warning,
+      title: _text(
+        en: 'Hotspots and field condition',
+        hi: 'Hotspot और खेत की स्थिति',
+        mr: 'Hotspot आणि शेताची स्थिती',
+      ),
+      body: body,
+    );
   }
 
   Widget _nextSteps(FarmerFarmSummary summary) {

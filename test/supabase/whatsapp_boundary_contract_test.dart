@@ -38,7 +38,9 @@ void main() {
       expect(screen, contains("'action': 'refresh'"));
       expect(screen, contains('whatsapp_saved_farm_map'));
       expect(screen, contains('_boundarySyncCard'));
-      expect(screen, contains('heatCircles: null'));
+      expect(screen, contains('FarmerFarmSummary.fromJson'));
+      expect(screen, contains('_monitoringHotspotCard'));
+      expect(screen, contains('_riskCircles(_monitoring!)'));
       expect(screen, contains('Farm boundary map'));
       expect(
         screen,
