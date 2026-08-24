@@ -54,6 +54,7 @@ List<Widget> fieldImageryTileLayers({
   int panBuffer = 1,
   TileDisplay tileDisplay = const TileDisplay.fadeIn(),
   bool allowRoadFallback = true,
+  bool forceOnline = false,
 }) {
   final imageryTemplate = (urlTemplate?.trim().isNotEmpty ?? false)
       ? urlTemplate!.trim()
@@ -66,6 +67,7 @@ List<Widget> fieldImageryTileLayers({
       maxNativeZoom: fieldImageryMaxNativeZoom,
       maxOfflineNativeZoom: maxOfflineNativeZoom,
       fallbackUrlTemplate: allowRoadFallback ? streetMapTileUrl : null,
+      forceOnline: forceOnline,
       keepBuffer: keepBuffer,
       panBuffer: panBuffer,
       tileDisplay: tileDisplay,
@@ -131,6 +133,7 @@ class OfflineAwareTileLayer extends StatefulWidget {
   final String userAgentPackageName;
   final bool preferOfflineTemplateWhenOffline;
   final bool forceOfflineTemplateOverride;
+  final bool forceOnline;
   final int keepBuffer;
   final int panBuffer;
   final TileDisplay tileDisplay;
@@ -145,6 +148,7 @@ class OfflineAwareTileLayer extends StatefulWidget {
     this.userAgentPackageName = 'grainright.wrkfarm',
     this.preferOfflineTemplateWhenOffline = true,
     this.forceOfflineTemplateOverride = false,
+    this.forceOnline = false,
     this.keepBuffer = 2,
     this.panBuffer = 1,
     this.tileDisplay = const TileDisplay.fadeIn(),
@@ -222,9 +226,11 @@ class _OfflineAwareTileLayerState extends State<OfflineAwareTileLayer> {
     final offlineTemplate = _effectiveOfflineTemplate();
     final forceOfflineSource =
         widget.offlineUrlTemplateOverride?.trim().isNotEmpty ?? false;
-    final canTryLiveTiles = _online || _hasNetworkInterface;
+    final canTryLiveTiles =
+        widget.forceOnline || _online || _hasNetworkInterface;
     final usingOfflineTemplate =
         offlineTemplate.isNotEmpty &&
+        !widget.forceOnline &&
         ((forceOfflineSource && widget.forceOfflineTemplateOverride) ||
             (!canTryLiveTiles && widget.preferOfflineTemplateWhenOffline));
     final activeTemplate = usingOfflineTemplate

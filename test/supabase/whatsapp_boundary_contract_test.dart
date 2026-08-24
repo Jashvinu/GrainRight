@@ -9,6 +9,10 @@ void main() {
   final screen = File(
     'lib/screens/whatsapp_farm_boundary_screen.dart',
   ).readAsStringSync();
+  final map = File(
+    'lib/widgets/satellite/satellite_map_view.dart',
+  ).readAsStringSync();
+  final tiles = File('lib/services/map_tile_provider.dart').readAsStringSync();
 
   test('boundary state reads the latest saved monitoring data', () {
     expect(function, contains('action === "load" || action === "refresh"'));
@@ -41,6 +45,9 @@ void main() {
       expect(screen, contains('FarmerFarmSummary.fromJson'));
       expect(screen, contains('_monitoringHotspotCard'));
       expect(screen, contains('_riskCircles(_monitoring!)'));
+      expect(screen, contains('fitToFarmPolygonOnly: true'));
+      expect(screen, contains('forceOnlineTiles: true'));
+      expect(screen, contains('_farmCenterMarker(center)'));
       expect(screen, contains('Farm boundary map'));
       expect(
         screen,
@@ -48,6 +55,10 @@ void main() {
       );
       expect(screen, contains("body: {'token': _token, 'action': 'load'}"));
       expect(screen, contains(".timeout(const Duration(seconds: 25))"));
+      expect(map, contains('fitToFarmPolygonOnly'));
+      expect(map, contains('final points = _cameraPoints()'));
+      expect(tiles, contains('final bool forceOnline'));
+      expect(tiles, contains('widget.forceOnline || _online'));
     },
   );
 }

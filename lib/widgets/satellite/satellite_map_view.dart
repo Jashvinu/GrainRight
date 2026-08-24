@@ -22,6 +22,8 @@ class SatelliteMapView extends StatelessWidget {
   final bool showReferenceLabels;
   final bool satelliteOnly;
   final bool showOfflineBackground;
+  final bool forceOnlineTiles;
+  final bool fitToFarmPolygonOnly;
 
   /// Fallback center when there is no polygon (e.g. a point-only farm). Used
   /// before [SatelliteConfig.defaultCenter] so the map opens on the farm.
@@ -44,6 +46,8 @@ class SatelliteMapView extends StatelessWidget {
     this.showReferenceLabels = true,
     this.satelliteOnly = false,
     this.showOfflineBackground = true,
+    this.forceOnlineTiles = false,
+    this.fitToFarmPolygonOnly = false,
     this.center,
   });
 
@@ -65,6 +69,8 @@ class SatelliteMapView extends StatelessWidget {
       showReferenceLabels: showReferenceLabels,
       satelliteOnly: satelliteOnly,
       showOfflineBackground: showOfflineBackground,
+      forceOnlineTiles: forceOnlineTiles,
+      fitToFarmPolygonOnly: fitToFarmPolygonOnly,
       center: center,
       key: key,
     );
@@ -87,6 +93,8 @@ class _SatelliteMapViewInternal extends StatefulWidget {
   final bool showReferenceLabels;
   final bool satelliteOnly;
   final bool showOfflineBackground;
+  final bool forceOnlineTiles;
+  final bool fitToFarmPolygonOnly;
   final LatLng? center;
 
   const _SatelliteMapViewInternal({
@@ -106,6 +114,8 @@ class _SatelliteMapViewInternal extends StatefulWidget {
     this.showReferenceLabels = true,
     this.satelliteOnly = false,
     this.showOfflineBackground = true,
+    this.forceOnlineTiles = false,
+    this.fitToFarmPolygonOnly = false,
     this.center,
   });
 
@@ -160,10 +170,10 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
     ];
   }
 
-  /// After the map is ready, frame all content so markers placed away from the
-  /// farm centroid (or a point-only farm) are brought into view.
+  /// After the map is ready, frame the farm first when requested. This keeps a
+  /// saved farm boundary readable even if a stale hotspot is far away.
   void _fitToContent() {
-    final points = _contentPoints();
+    final points = _cameraPoints();
     if (points.isEmpty) return;
     if (points.length == 1) {
       try {
@@ -176,10 +186,66 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
         CameraFit.bounds(
           bounds: LatLngBounds.fromPoints(points),
           padding: const EdgeInsets.all(32),
-          maxZoom: 17,
+          maxZoom: widget.fitToFarmPolygonOnly ? 18.5 : 17.0,
         ),
       );
     } catch (_) {}
+  }
+
+  List<LatLng> _cameraPoints() {
+    final farmPolygon = widget.farmPolygon;
+    if (widget.fitToFarmPolygonOnly &&
+        farmPolygon != null &&
+        farmPolygon.length >= 3) {
+      return farmPolygon;
+    }
+    return _contentPoints();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SatelliteMapViewInternal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_mapReady || !_cameraInputChanged(oldWidget)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _fitToContent();
+    });
+  }
+
+  bool _cameraInputChanged(_SatelliteMapViewInternal oldWidget) {
+    return oldWidget.fitToFarmPolygonOnly != widget.fitToFarmPolygonOnly ||
+        !_samePoints(oldWidget.farmPolygon, widget.farmPolygon) ||
+        !_samePoint(oldWidget.center, widget.center) ||
+        (!widget.fitToFarmPolygonOnly &&
+            !_sameCircles(oldWidget.heatCircles, widget.heatCircles));
+  }
+
+  bool _samePoints(List<LatLng>? first, List<LatLng>? second) {
+    if (identical(first, second)) return true;
+    if (first == null || second == null || first.length != second.length) {
+      return false;
+    }
+    for (var index = 0; index < first.length; index++) {
+      if (!_samePoint(first[index], second[index])) return false;
+    }
+    return true;
+  }
+
+  bool _sameCircles(List<CircleMarker>? first, List<CircleMarker>? second) {
+    if (identical(first, second)) return true;
+    if (first == null || second == null || first.length != second.length) {
+      return false;
+    }
+    for (var index = 0; index < first.length; index++) {
+      if (!_samePoint(first[index].point, second[index].point)) return false;
+    }
+    return true;
+  }
+
+  bool _samePoint(LatLng? first, LatLng? second) {
+    if (identical(first, second)) return true;
+    if (first == null || second == null) return false;
+    return first.latitude == second.latitude &&
+        first.longitude == second.longitude;
   }
 
   void _zoomBy(double delta) {
@@ -230,6 +296,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                   includeReferenceLabels:
                       widget.showReferenceLabels && !widget.satelliteOnly,
                   allowRoadFallback: !widget.satelliteOnly,
+                  forceOnline: widget.forceOnlineTiles,
                 ),
                 if (widget.tileUrl != null && widget.tileUrl!.isNotEmpty)
                   OfflineAwareTileLayer(
@@ -260,7 +327,7 @@ class _SatelliteMapViewInternalState extends State<_SatelliteMapViewInternal> {
                         points: widget.farmPolygon!,
                         color: AppTheme.green.withValues(alpha: 0.15),
                         borderColor: AppTheme.green,
-                        borderStrokeWidth: 2.0,
+                        borderStrokeWidth: 3.2,
                       ),
                     ],
                   ),

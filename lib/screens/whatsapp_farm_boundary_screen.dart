@@ -266,21 +266,30 @@ class _WhatsappFarmBoundaryScreenState
         onRefresh: _refreshSummary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 32),
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 22),
           children: [
             _compactFarmHeader(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _satelliteHero(polygon, center),
+            if (polygon.length < 3)
+              _messageBanner(
+                _text(
+                  en: 'The saved boundary could not be shown. Return to WhatsApp and request a fresh farm-marking link.',
+                  hi: 'सेव की गई खेत सीमा दिखाई नहीं जा सकी। WhatsApp पर वापस जाकर नया farm-marking लिंक लें।',
+                  mr: 'सेव केलेली शेत सीमा दाखवता आली नाही. WhatsApp वर परत जाऊन नवीन farm-marking लिंक घ्या.',
+                ),
+                isError: true,
+              ),
             if (_summaryError != null)
               _messageBanner(_summaryError!, isError: true),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _boundarySyncCard(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (_monitoring != null)
               _monitoringReport(_monitoring!)
             else if (_setupComplete)
               _monitoringEmptyCard(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _whatsappContinueCard(),
           ],
         ),
@@ -295,7 +304,7 @@ class _WhatsappFarmBoundaryScreenState
     final acres = _number(_farm['area_acres']);
     final crop = '${_farm['crop'] ?? ''}'.trim();
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: AppTheme.greenDark,
         borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
@@ -305,8 +314,8 @@ class _WhatsappFarmBoundaryScreenState
         children: [
           Row(
             children: [
-              const Icon(Icons.eco_rounded, color: Colors.white, size: 24),
-              const SizedBox(width: 10),
+              const Icon(Icons.eco_rounded, color: Colors.white, size: 22),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   name.isEmpty
@@ -318,7 +327,7 @@ class _WhatsappFarmBoundaryScreenState
                       : name,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 20,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -345,7 +354,7 @@ class _WhatsappFarmBoundaryScreenState
               ],
             ),
           ],
-          const SizedBox(height: 13),
+          const SizedBox(height: 9),
           Wrap(
             spacing: 7,
             runSpacing: 7,
@@ -416,7 +425,7 @@ class _WhatsappFarmBoundaryScreenState
             children: [
               SatelliteMapView(
                 key: const Key('whatsapp_saved_farm_map'),
-                height: 300,
+                height: 248,
                 farmPolygon: polygon,
                 center: center,
                 // Show risk hotspots only after the shared monitoring summary
@@ -424,10 +433,13 @@ class _WhatsappFarmBoundaryScreenState
                 heatCircles: _monitoring == null
                     ? null
                     : _riskCircles(_monitoring!),
+                markers: center == null ? null : [_farmCenterMarker(center)],
                 showZoomControls: true,
                 showReferenceLabels: false,
                 satelliteOnly: true,
                 showOfflineBackground: false,
+                forceOnlineTiles: true,
+                fitToFarmPolygonOnly: true,
               ),
               Positioned(
                 left: 12,
@@ -470,26 +482,14 @@ class _WhatsappFarmBoundaryScreenState
             ],
           ),
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            const Icon(Icons.info_outline, size: 13, color: AppTheme.textMuted),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                'Use the map to review the saved farm boundary.',
-                style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
-              ),
-            ),
-            const Text(
-              'Terms',
-              style: TextStyle(
-                fontSize: 11,
-                color: AppTheme.greenDark,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
+        const SizedBox(height: 5),
+        Text(
+          _text(
+            en: 'Green outline: saved boundary • colored circles: areas to inspect',
+            hi: 'हरी सीमा: सेव खेत • रंगीन गोले: जांचने वाले क्षेत्र',
+            mr: 'हिरवी सीमा: सेव शेत • रंगीत वर्तुळे: तपासायची ठिकाणे',
+          ),
+          style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
         ),
       ],
     );
@@ -500,7 +500,7 @@ class _WhatsappFarmBoundaryScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 15),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
@@ -546,11 +546,11 @@ class _WhatsappFarmBoundaryScreenState
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _monitoringHotspotCard(summary),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         _nextSteps(summary),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -1098,8 +1098,8 @@ class _WhatsappFarmBoundaryScreenState
         ? '${(value * 100).toStringAsFixed(0)}%'
         : value.toStringAsFixed(0);
     return Container(
-      constraints: const BoxConstraints(minWidth: 126),
-      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(minWidth: 112),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.09),
         borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
@@ -1116,7 +1116,7 @@ class _WhatsappFarmBoundaryScreenState
           Text(
             display,
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.w800,
               color: color,
             ),
@@ -1253,6 +1253,25 @@ class _WhatsappFarmBoundaryScreenState
         .toList(growable: false);
   }
 
+  Marker _farmCenterMarker(LatLng center) {
+    return Marker(
+      point: center,
+      width: 40,
+      height: 40,
+      alignment: Alignment.center,
+      child: const Tooltip(
+        message: 'Saved farm location',
+        child: Icon(
+          Icons.location_pin,
+          key: Key('whatsapp_saved_farm_center_marker'),
+          color: AppTheme.greenDark,
+          size: 36,
+          shadows: [Shadow(color: Colors.white, blurRadius: 6)],
+        ),
+      ),
+    );
+  }
+
   Widget _messageBanner(String message, {required bool isError}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1280,7 +1299,7 @@ class _WhatsappFarmBoundaryScreenState
       return const [];
     }
     final ring = coordinates.first as List;
-    return ring
+    final points = ring
         .whereType<List>()
         .where((point) => point.length >= 2)
         .map((point) {
@@ -1288,6 +1307,15 @@ class _WhatsappFarmBoundaryScreenState
         })
         .where((point) => point.latitude != 0 || point.longitude != 0)
         .toList(growable: false);
+    if (points.length > 1 && _sameLatLng(points.first, points.last)) {
+      return points.sublist(0, points.length - 1);
+    }
+    return points;
+  }
+
+  bool _sameLatLng(LatLng first, LatLng second) {
+    return first.latitude == second.latitude &&
+        first.longitude == second.longitude;
   }
 
   LatLng? _centerForFarm(List<LatLng> polygon) {
